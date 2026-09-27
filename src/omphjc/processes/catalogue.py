@@ -1,10 +1,13 @@
-"""The JetClass-I process catalogue.
+"""The process catalogue.
 
-Ten processes are defined as data in ``config/jetclass.yaml``. Each entry
-records the MadGraph model, the process definitions, the run-card settings that
-pin the physics, whether MadSpin decays the tops, whether the sample is
-MLM-matched and the per-process seed offset. The official gridpack cards under
-``config/cards/jetclass`` are the reference these values are tested against.
+Processes are defined as data in a YAML file, ``config/jetclass.yaml`` for the
+ten JetClass classes. Each entry records the MadGraph model, the process
+definitions, the run-card settings that pin the physics, the MadSpin card when
+the heavy resonances are decayed, whether the sample is MLM-matched, the
+per-process seed offset and, when official cards exist, the directory holding
+them as the reference the entry is checked against. Paths are relative to the
+catalogue file, and a model whose directory exists under the catalogue's
+models directory is imported from there.
 """
 
 from collections.abc import Mapping
@@ -23,18 +26,22 @@ RunCardValue = bool | int | float | str | dict[int, float]
 _REQUIRED_KEYS = frozenset(
     {"label", "description", "model", "processes", "run_card", "seed_offset"}
 )
+_OPTIONAL_KEYS = frozenset(
+    {"definitions", "matching", "madspin_card", "reference_cards"}
+)
+_DEFAULT_MODELS_DIR = "models"
 
 
 @dataclass(frozen=True)
 class ProcessSpec:
-    """Everything needed to generate one JetClass process.
+    """Everything needed to generate one process.
 
     Parameters
     ----------
     name : str
         Catalogue name, for example ``"HToBB"``.
     label : str
-        JetClass class name, the suffix of the ``label_*`` column.
+        Class name of the sample, the suffix of the ``label_*`` column.
     description : str
         Human-readable description of the physics.
     model : str
@@ -48,13 +55,19 @@ class ProcessSpec:
         ``add process``.
     run_card : Mapping[str, RunCardValue]
         Run-card settings applied at launch, common settings included.
-    madspin : bool
-        Whether the packaged MadSpin card decays the heavy resonances.
     matching : bool
         Whether the sample is MLM-matched (``ickkw = 1``).
     seed_offset : int
         Offset added to the job seed so that samples never share a random
         sequence, as in the official production.
+    model_path : Path or None
+        Directory of the model when it ships with the catalogue; ``None``
+        leaves the model to MadGraph.
+    madspin_card : Path or None
+        MadSpin card decaying the heavy resonances; ``None`` for no MadSpin.
+    reference_cards : Path or None
+        Directory of the reference (official) MadGraph cards the entry is
+        checked against; ``None`` when there is nothing to check against.
     """
 
     name: str
@@ -64,9 +77,11 @@ class ProcessSpec:
     definitions: tuple[str, ...]
     processes: tuple[str, ...]
     run_card: Mapping[str, RunCardValue]
-    madspin: bool
     matching: bool
     seed_offset: int
+    model_path: Path | None
+    madspin_card: Path | None
+    reference_cards: Path | None
 
     @property
     def model_base(self) -> str:
@@ -77,6 +92,11 @@ class ProcessSpec:
     def model_restriction(self) -> str:
         """Restriction suffix of the model, empty when the default applies."""
         return self.model.partition("-")[2]
+
+    @property
+    def madspin(self) -> bool:
+        """Whether MadSpin decays the heavy resonances."""
+        return self.madspin_card is not None
 
 
 def process_names() -> tuple[str, ...]:
@@ -111,7 +131,10 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     Parameters
     ----------
     path : Path
-        YAML file with a ``common`` block and a ``processes`` mapping.
+        YAML file with an optional ``common`` block (``run_card`` settings
+        shared by every process and ``models_dir``, by default ``models``)
+        and a ``processes`` mapping. Paths inside are resolved relative to
+        the file's directory.
 
     Returns
     -------
@@ -122,38 +145,72 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     Raises
     ------
     ValueError
-        If an entry lacks a required key or holds a value of the wrong type.
+        If an entry lacks a required key, holds an unknown key or a value of
+        the wrong type, names a file that does not exist, or shares its
+        label with another entry.
     """
     with path.open(encoding="utf-8") as stream:
         document = yaml.safe_load(stream)
-    common_run_card = _read_run_card(document.get("common", {}).get("run_card", {}))
+    base = path.parent
+    common = document.get("common", {})
+    common_run_card = _read_run_card(common.get("run_card", {}))
+    models_dir = base / common.get("models_dir", _DEFAULT_MODELS_DIR)
     specs = {
-        name: _build_spec(name, entry, common_run_card)
+        name: _build_spec(
+            name, entry, common_run_card, base=base, models_dir=models_dir
+        )
         for name, entry in document["processes"].items()
     }
+    labels = [spec.label for spec in specs.values()]
+    duplicates = sorted({label for label in labels if labels.count(label) > 1})
+    if duplicates:
+        raise ValueError(f"Class labels used by more than one process: {duplicates}")
     return specs
 
 
 def _build_spec(
-    name: str, entry: Mapping[str, Any], common_run_card: Mapping[str, RunCardValue]
+    name: str,
+    entry: Mapping[str, Any],
+    common_run_card: Mapping[str, RunCardValue],
+    *,
+    base: Path,
+    models_dir: Path,
 ) -> ProcessSpec:
     missing = _REQUIRED_KEYS - entry.keys()
     if missing:
         raise ValueError(f"Process {name!r} lacks required keys: {sorted(missing)}")
+    unknown = entry.keys() - _REQUIRED_KEYS - _OPTIONAL_KEYS
+    if unknown:
+        raise ValueError(f"Process {name!r} has unknown keys: {sorted(unknown)}")
     run_card = dict(common_run_card)
     run_card.update(_read_run_card(entry["run_card"]))
+    model = str(entry["model"])
+    model_dir = models_dir / model.partition("-")[0]
     return ProcessSpec(
         name=name,
         label=str(entry["label"]),
         description=str(entry["description"]),
-        model=str(entry["model"]),
+        model=model,
         definitions=tuple(entry.get("definitions", ())),
         processes=tuple(entry["processes"]),
         run_card=run_card,
-        madspin=bool(entry.get("madspin", False)),
         matching=bool(entry.get("matching", False)),
         seed_offset=int(entry["seed_offset"]),
+        model_path=model_dir if model_dir.is_dir() else None,
+        madspin_card=_existing(name, entry, "madspin_card", base, directory=False),
+        reference_cards=_existing(name, entry, "reference_cards", base, directory=True),
     )
+
+
+def _existing(
+    name: str, entry: Mapping[str, Any], key: str, base: Path, *, directory: bool
+) -> Path | None:
+    if entry.get(key) is None:
+        return None
+    path = base / str(entry[key])
+    if directory and not path.is_dir() or not directory and not path.is_file():
+        raise ValueError(f"Process {name!r}: {key} {str(entry[key])!r} does not exist")
+    return path
 
 
 def _read_run_card(raw: Mapping[str, Any]) -> dict[str, RunCardValue]:
