@@ -12,3 +12,6 @@
 - Delphes cards are read as configuration and compared by keys and values
   (`omphjc delphes show`, `omphjc delphes compare`); MadSpin cards are compared
   the same way.
+- `omphjc config path` and `omphjc config export DIR` locate and copy the
+  shipped configuration; `--catalogue PATH` (or `OMPHJC_CATALOGUE`) runs every
+  command on another catalogue.

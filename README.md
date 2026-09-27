@@ -33,7 +33,15 @@ Everything a user may want to read, cite or adapt lives in `config/`:
 - `models/`: the vendored MadGraph UFO models;
 - `PROVENANCE.md`: where each file comes from, with hashes.
 
-An installed package carries a copy of this directory.
+An installed package carries a copy of this directory. To work from a modified
+catalogue, export the configuration and point the command line at it:
+
+```
+omphjc config path                        # where the shipped copy lives
+omphjc config export ./my_config          # copy it for editing
+omphjc --catalogue ./my_config/jetclass.yaml processes
+export OMPHJC_CATALOGUE=./my_config/jetclass.yaml   # same, for every command
+```
 
 ## Processes
 

@@ -7,11 +7,14 @@ so an installed package finds its copy next to its own modules. Every accessor
 returns a real filesystem path that external tools such as MadGraph can use.
 """
 
+import shutil
 from importlib.resources import files
 from pathlib import Path
 
 VENDORED_MODELS: frozenset[str] = frozenset({"heft", "heft_c_mass_jetclass"})
 """UFO models shipped in ``config/models``; other model names are left to MadGraph."""
+
+_IGNORED_ON_EXPORT = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 
 def config_root() -> Path:
@@ -51,3 +54,27 @@ def models_dir() -> Path:
 def delphes_reference_card_path() -> Path:
     """Return the path of the official JetClass Delphes card."""
     return config_root() / "cards" / "delphes" / "delphes_card_JetClass.tcl"
+
+
+def export_config(destination: Path) -> Path:
+    """Copy the shipped configuration to `destination` for editing.
+
+    Parameters
+    ----------
+    destination : Path
+        Directory to create. It must not exist yet.
+
+    Returns
+    -------
+    Path
+        The created directory.
+
+    Raises
+    ------
+    FileExistsError
+        If `destination` already exists.
+    """
+    if destination.exists():
+        raise FileExistsError(f"{destination} already exists")
+    shutil.copytree(config_root(), destination, ignore=_IGNORED_ON_EXPORT)
+    return destination
