@@ -57,6 +57,47 @@ omphjc check-cards            # compare the catalogue with the official cards
 applies equals the one in the official cards and that no tracked official
 setting is missing.
 
+## Pythia settings
+
+Events are showered inside `DelphesPythia8`, which takes a Pythia command file
+rather than MadGraph's run card. `omphjc pythia show` prints the file the
+package writes for a process:
+
+```
+$ omphjc pythia show ZJetsToNuNu --events 1000 --seed 1
+! Pythia 8 settings for DelphesPythia8: ZJetsToNuNu
+!
+Beams:frameType = 4
+Beams:LHEF = events.lhe
+Main:numberOfEvents = 1000
+Check:epTolErr = 0.01
+JetMatching:setMad = off
+JetMatching:etaJetMax = 1000.0
+Beams:setProductionScalesFromLHEF = on
+JetMatching:merge = on
+JetMatching:scheme = 1
+JetMatching:qCut = 45
+JetMatching:nJetMax = 2
+JetMatching:nQmatch = 5
+JetMatching:coneRadius = 1.0
+JetMatching:doShowerKt = off
+Random:setSeed = on
+Random:seed = 1
+```
+
+- `Beams:frameType`, `Check:epTolErr`, `JetMatching:setMad` and
+  `JetMatching:etaJetMax` are the settings MadGraph's own Pythia interface adds
+  to every run; they are written for every process.
+- `Beams:LHEF`, `Main:numberOfEvents` and `Random:*` describe the run:
+  `--lhe`, `--events` and `--seed`. Without `--seed` the shower is seeded from
+  the clock (`Random:seed = 0`).
+- The `JetMatching:*` block and `Beams:setProductionScalesFromLHEF` implement
+  MLM matching and appear only for a process with `matching: true` in the
+  catalogue (ZJetsToNuNu). `JetMatching:qCut` is 1.5 × the run card's `xqcut`,
+  `JetMatching:nQmatch` its `maxjetflavor`, `JetMatching:nJetMax` the largest
+  number of jets in the process lines; the remaining values are MadGraph's
+  fixed choices.
+
 ## Delphes cards
 
 The official JetClass Delphes card is packaged and used by default; any card

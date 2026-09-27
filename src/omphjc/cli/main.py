@@ -15,6 +15,7 @@ from omphjc.madgraph import (
     proc_card_commands,
 )
 from omphjc.processes import ProcessSpec, catalogue, load_catalogue
+from omphjc.pythia import render_cmnd, shower_settings
 
 Catalogue = Mapping[str, ProcessSpec]
 
@@ -108,6 +109,41 @@ def config_export(destination: Path) -> None:
     except FileExistsError as error:
         raise click.ClickException(str(error)) from error
     click.echo(f"Configuration copied to {destination}")
+
+
+@cli.group()
+def pythia() -> None:
+    """Pythia 8 settings for DelphesPythia8."""
+
+
+@pythia.command("show")
+@click.argument("name")
+@click.option(
+    "--events",
+    "n_events",
+    type=int,
+    default=1000,
+    show_default=True,
+    help="Upper bound on the showered events (Main:numberOfEvents).",
+)
+@click.option(
+    "--seed", type=int, default=None, help="Random:seed (default: from the clock)."
+)
+@click.option(
+    "--lhe",
+    type=click.Path(path_type=Path),
+    default=Path("events.lhe"),
+    show_default=True,
+    help="Uncompressed LHE file Pythia reads.",
+)
+@click.pass_obj
+def pythia_show(
+    specs: Catalogue, name: str, n_events: int, seed: int | None, lhe: Path
+) -> None:
+    """Print the Pythia command file written for one process."""
+    spec = _lookup(specs, name)
+    settings = shower_settings(spec, lhe_path=lhe, n_events=n_events, seed=seed)
+    click.echo(render_cmnd(settings, title=spec.name), nl=False)
 
 
 @cli.group()

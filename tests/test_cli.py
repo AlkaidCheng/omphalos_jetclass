@@ -80,3 +80,14 @@ def test_config_path_and_export(tmp_path: Path) -> None:
     again = CliRunner().invoke(cli, ["config", "export", str(destination)])
     assert again.exit_code != 0
     assert "already exists" in again.output
+
+
+def test_pythia_show_prints_a_command_file() -> None:
+    result = CliRunner().invoke(
+        cli, ["pythia", "show", "ZJetsToNuNu", "--events", "50", "--seed", "3"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Beams:LHEF = events.lhe" in result.output
+    assert "Main:numberOfEvents = 50" in result.output
+    assert "JetMatching:qCut = 45" in result.output
+    assert "Random:seed = 3" in result.output
