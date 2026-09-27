@@ -8,6 +8,7 @@ from omphjc.pythia import (
     MADGRAPH_INTERFACE_PREFIXES,
     PYTHIA_SEED_LIMIT,
     compare_settings,
+    format_setting,
     matching_scale,
     max_matched_jets,
     parse_cmnd,
@@ -78,6 +79,39 @@ def test_matching_scale_needs_a_matched_process() -> None:
     with pytest.raises(ValueError, match="not MLM-matched"):
         matching_scale(get_process("HToBB"))
     assert max_matched_jets(get_process("HToBB")) == 0
+
+
+def test_shared_settings_come_from_the_catalogue_and_overrides_win(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    spec = specs["HToBB"]
+    assert spec.pythia == {
+        "Beams:frameType": 4,
+        "Check:epTolErr": 0.01,
+        "JetMatching:setMad": False,
+        "JetMatching:etaJetMax": 1000.0,
+    }
+    assert spec.pythia_matching["JetMatching:scheme"] == 1
+    settings = shower_settings(
+        spec,
+        lhe_path=LHE,
+        n_events=10,
+        seed=None,
+        overrides={"Check:epTolErr": 0.1, "Main:timesAllowErrors": 100},
+    )
+    assert settings["Check:epTolErr"] == "0.1"
+    assert settings["Main:timesAllowErrors"] == "100"
+
+
+def test_settings_are_written_as_pythia_reads_them() -> None:
+    assert [format_setting(v) for v in (True, False, 4, 1000.0, 0.01, "x")] == [
+        "on",
+        "off",
+        "4",
+        "1000",
+        "0.01",
+        "x",
+    ]
 
 
 def test_seed_policy() -> None:

@@ -138,13 +138,28 @@ def pythia() -> None:
     show_default=True,
     help="Uncompressed LHE file Pythia reads.",
 )
+@click.option(
+    "--set",
+    "assignments",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Override one Pythia setting; may be repeated.",
+)
 @click.pass_obj
 def pythia_show(
-    specs: Catalogue, name: str, n_events: int, seed: int | None, lhe: Path
+    specs: Catalogue,
+    name: str,
+    n_events: int,
+    seed: int | None,
+    lhe: Path,
+    assignments: tuple[str, ...],
 ) -> None:
     """Print the Pythia command file written for one process."""
     spec = _lookup(specs, name)
-    settings = shower_settings(spec, lhe_path=lhe, n_events=n_events, seed=seed)
+    overrides = dict(_assignment(item) for item in assignments)
+    settings = shower_settings(
+        spec, lhe_path=lhe, n_events=n_events, seed=seed, overrides=overrides
+    )
     click.echo(render_cmnd(settings, title=spec.name), nl=False)
 
 
@@ -200,6 +215,15 @@ def _lookup(specs: Catalogue, name: str) -> ProcessSpec:
         raise click.BadParameter(
             f"unknown process {name!r}; choose from {known}"
         ) from None
+
+
+def _assignment(text: str) -> tuple[str, str]:
+    key, separator, value = text.partition("=")
+    if not separator or not key.strip() or not value.strip():
+        raise click.BadParameter(
+            f"expected KEY=VALUE, got {text!r}", param_hint="--set"
+        )
+    return key.strip(), value.strip()
 
 
 def _render(value: tuple[str, ...], limit: int = 8) -> str:

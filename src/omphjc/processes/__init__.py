@@ -3,6 +3,7 @@
 from omphjc.processes.catalogue import (
     ProcessSpec,
     RunCardValue,
+    SettingValue,
     catalogue,
     get_process,
     load_catalogue,
@@ -12,6 +13,7 @@ from omphjc.processes.catalogue import (
 __all__ = [
     "ProcessSpec",
     "RunCardValue",
+    "SettingValue",
     "catalogue",
     "get_process",
     "load_catalogue",

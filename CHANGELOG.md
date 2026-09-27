@@ -16,7 +16,9 @@
   shipped configuration; `--catalogue PATH` (or `OMPHJC_CATALOGUE`) runs every
   command on another catalogue.
 - Pythia settings for `DelphesPythia8` mirrored from MadGraph's interface, with
-  the MLM matching block for matched processes (`omphjc pythia show`).
+  the MLM matching block for matched processes (`omphjc pythia show`); the
+  shared settings live in the catalogue (`common.pythia`, `common.pythia_matching`)
+  and a process or a run may override them (`pythia:` block, `--set KEY=VALUE`).
 - MadGraph banner reader: version, event count, cross section and error, and
   the run card as used.
 - Job seeds derived from the process offsets of the official production
