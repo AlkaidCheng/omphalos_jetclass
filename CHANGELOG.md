@@ -19,3 +19,5 @@
   the MLM matching block for matched processes (`omphjc pythia show`).
 - MadGraph banner reader: version, event count, cross section and error, and
   the run card as used.
+- Job seeds derived from the process offsets of the official production
+  (`derive_seeds`), with unseeded runs as the default.
