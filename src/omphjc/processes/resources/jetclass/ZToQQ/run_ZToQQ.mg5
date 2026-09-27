@@ -1,0 +1,9 @@
+launch ZToQQ
+
+set use_syst False
+set misset 450
+set drjj 0.01
+set ptj 0.1
+
+set nevents _NEVENTS_ 
+set iseed _ISEED_

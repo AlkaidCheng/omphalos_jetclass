@@ -1,0 +1,186 @@
+# JetClass-I process catalogue.
+#
+# Values follow the official gridpacks of jet-universe/jetclass_generation
+# (commit ae722ea). The vendored copies of those cards live in
+# resources/jetclass/<process>/ and the test suite keeps the two in step:
+# every run-card value here must equal the official one, and every tracked
+# official value must appear here.
+#
+# Model names: "heft" and "heft_c_mass_jetclass" are vendored UFO models under
+# resources/models/; "sm" and "sm-ckm" ship with MadGraph. A "-suffix" selects
+# a restriction card of the model.
+
+common:
+  run_card:
+    lpp1: 1
+    lpp2: 1
+    ebeam1: 6500.0
+    ebeam2: 6500.0
+    pdlabel: nn23lo1
+    lhaid: 230000
+    fixed_ren_scale: false
+    fixed_fac_scale: false
+    dynamical_scale_choice: -1
+    scalefact: 1.0
+    bwcutoff: 15.0
+    maxjetflavor: 5
+    use_syst: false
+
+processes:
+  HToBB:
+    label: Hbb
+    description: "H → bb̄ recoiling against Z → νν̄"
+    model: heft
+    processes:
+      - "p p > ve ve~ h, h > b b~"
+    run_card:
+      cut_decays: false
+      ptj: 0.1
+      etaj: 5.0
+      drjj: 0.01
+      misset: 450.0
+      pt_min_pdg: {25: 450.0}
+      eta_max_pdg: {25: 2.5}
+    seed_offset: 10000000
+
+  HToCC:
+    label: Hcc
+    description: "H → cc̄ recoiling against Z → νν̄ (massive charm, c̄cH vertex)"
+    model: heft_c_mass_jetclass
+    processes:
+      - "p p > ve ve~ h, h > c c~"
+    run_card:
+      cut_decays: false
+      ptj: 0.1
+      etaj: 5.0
+      drjj: 0.01
+      misset: 450.0
+      pt_min_pdg: {25: 450.0}
+      eta_max_pdg: {25: 2.5}
+    seed_offset: 20000000
+
+  HToGG:
+    label: Hgg
+    description: "H → gg recoiling against Z → νν̄"
+    model: heft
+    processes:
+      - "p p > ve ve~ h, h > g g"
+    run_card:
+      cut_decays: false
+      misset: 450.0
+      pt_min_pdg: {25: 450.0}
+      eta_max_pdg: {25: 2.5}
+    seed_offset: 30000000
+
+  HToWW4Q:
+    label: H4q
+    description: "H → WW* → 4 quarks recoiling against Z → νν̄"
+    model: heft-ckm
+    processes:
+      - "p p > ve ve~ h, h > w+ w- > j j j j"
+    run_card:
+      cut_decays: false
+      ptj: 0.1
+      etaj: 5.0
+      drjj: 0.01
+      misset: 450.0
+      pt_min_pdg: {25: 450.0}
+      eta_max_pdg: {25: 2.5}
+    seed_offset: 40000000
+
+  HToWW2Q1L:
+    label: Hqql
+    description: "H → WW* → 2 quarks + charged lepton + neutrino, recoiling against Z → νν̄"
+    model: heft-ckm
+    definitions:
+      - "lep = l+ l-"
+      - "nu = vl vl~"
+    processes:
+      - "p p > ve ve~ h, h > w+ w- > j j lep nu"
+    run_card:
+      cut_decays: false
+      ptj: 0.1
+      ptl: 0.1
+      etaj: 5.0
+      etal: 5.0
+      drjj: 0.01
+      drjl: 0.01
+      drll: 0.01
+      misset: 450.0
+      pt_min_pdg: {25: 450.0}
+      eta_max_pdg: {25: 2.5}
+    seed_offset: 50000000
+
+  TTBar:
+    label: Tbqq
+    description: "tt̄, both tops decaying hadronically (MadSpin)"
+    model: sm-ckm
+    processes:
+      - "p p > t t~"
+    run_card:
+      pt_min_pdg: {6: 450.0}
+      eta_max_pdg: {6: 2.5}
+    madspin: true
+    seed_offset: 0
+
+  TTBarLep:
+    label: Tbl
+    description: "tt̄, both tops decaying to e/μ + ν + b (MadSpin, dileptonic)"
+    model: sm-ckm
+    processes:
+      - "p p > t t~"
+    run_card:
+      pt_min_pdg: {6: 450.0}
+      eta_max_pdg: {6: 2.5}
+    madspin: true
+    seed_offset: 0
+
+  WToQQ:
+    label: Wqq
+    description: "W → qq̄' recoiling against Z → νν̄"
+    model: sm-ckm
+    definitions:
+      - "wpm = w+ w-"
+    processes:
+      - "p p > ve ve~ wpm, wpm > j j"
+    run_card:
+      cut_decays: false
+      ptj: 0.1
+      etaj: 5.0
+      drjj: 0.01
+      misset: 450.0
+    seed_offset: 0
+
+  ZToQQ:
+    label: Zqq
+    description: "Z → qq̄ recoiling against Z → νν̄"
+    model: sm-ckm
+    processes:
+      - "p p > ve ve~ z, z > j j"
+    run_card:
+      cut_decays: false
+      ptj: 0.1
+      etaj: 5.0
+      drjj: 0.01
+      misset: 450.0
+    seed_offset: 0
+
+  ZJetsToNuNu:
+    label: QCD
+    description: "Z → νν̄ + 1 or 2 jets, MLM-matched; the QCD jet class"
+    model: sm
+    processes:
+      - "p p > ve ve~ j @0"
+      - "p p > ve ve~ j j @1"
+    run_card:
+      ickkw: 1
+      xqcut: 30.0
+      auto_ptj_mjj: true
+      alpsfact: 1.0
+      asrwgtflavor: 5
+      ptj: 0.1
+      etaj: 5.0
+      drjj: 0.0
+      misset: 450.0
+    matching: true
+    seed_offset: 0

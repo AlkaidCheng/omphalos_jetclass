@@ -1,0 +1,8 @@
+launch TTBarLep
+
+set use_syst False
+set pt_min_pdg {6: 450.0}
+set eta_max_pdg {6: 2.5}
+
+set nevents _NEVENTS_ 
+set iseed _ISEED_

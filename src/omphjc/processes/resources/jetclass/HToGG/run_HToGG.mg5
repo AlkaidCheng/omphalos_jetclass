@@ -1,0 +1,8 @@
+launch HToGG
+
+set use_syst False
+set pt_min_pdg {25: 450.0}
+set eta_max_pdg {25: 2.5}
+
+set nevents _NEVENTS_ 
+set iseed _ISEED_
