@@ -7,6 +7,12 @@ from omphjc.madgraph.cards import (
     model_import_target,
     proc_card_commands,
 )
+from omphjc.madgraph.madspin import (
+    MadSpinCard,
+    MadSpinDifference,
+    compare_madspin_cards,
+    parse_madspin_card,
+)
 from omphjc.madgraph.runcard import (
     format_value,
     parse_launch_overrides,
@@ -28,7 +34,11 @@ __all__ = [
     "DISABLED_DEFAULTS",
     "STANDARD_DEFINITIONS",
     "TRACKED_PARAMETERS",
+    "MadSpinCard",
+    "MadSpinDifference",
     "Mismatch",
+    "compare_madspin_cards",
+    "parse_madspin_card",
     "compare_all",
     "compare_process",
     "format_value",

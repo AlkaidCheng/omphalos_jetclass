@@ -12,7 +12,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from omphjc.madgraph.cards import proc_card_commands
+from omphjc.madgraph.cards import madspin_card_text, proc_card_commands
+from omphjc.madgraph.madspin import compare_madspin_cards, parse_madspin_card
 from omphjc.madgraph.runcard import (
     format_value,
     parse_launch_overrides,
@@ -201,10 +202,21 @@ def _compare_proc_card(spec: ProcessSpec) -> list[Mismatch]:
 
 
 def _compare_madspin(spec: ProcessSpec) -> list[Mismatch]:
-    has_card = (reference_dir(spec.name) / "madspin_card.dat").is_file()
-    if has_card == spec.madspin:
+    reference_card = reference_dir(spec.name) / "madspin_card.dat"
+    if reference_card.is_file() != spec.madspin:
+        return [
+            Mismatch(
+                spec.name, "madspin", str(reference_card.is_file()), str(spec.madspin)
+            )
+        ]
+    if not spec.madspin:
         return []
-    return [Mismatch(spec.name, "madspin", str(has_card), str(spec.madspin))]
+    reference = parse_madspin_card(reference_card.read_text("utf-8"))
+    card = parse_madspin_card(madspin_card_text(spec))
+    return [
+        Mismatch(spec.name, f"madspin {d.item}", d.expected, d.actual)
+        for d in compare_madspin_cards(card, reference)
+    ]
 
 
 def _canonical_import(line: str) -> str:

@@ -36,6 +36,19 @@ omphjc check-cards            # compare the catalogue with the official cards
 applies equals the one in the official cards and that no tracked official
 setting is missing.
 
+## Delphes cards
+
+The official JetClass Delphes card is packaged and used by default; any card
+can be used instead. Cards are compared as configuration, the way Delphes reads
+them, so layout, comments and definition order never count as differences:
+
+```
+omphjc delphes show                    # execution path, modules and parameters
+omphjc delphes compare my_card.tcl     # differences from the official card
+```
+
+Reading a card uses the Tcl interpreter that ships with Python (`tkinter`).
+
 ## Layout of a job
 
 Each job produces, in its own directory, the MadGraph event file, the Delphes

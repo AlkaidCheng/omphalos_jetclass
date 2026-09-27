@@ -1,5 +1,29 @@
 """Delphes cards and drivers."""
 
-from omphjc.delphes.card import JETCLASS_CARD_SHA256, jetclass_card_text
+from omphjc.delphes.card import (
+    OFFICIAL_CARD_SHA256,
+    CardDifference,
+    DelphesCard,
+    ModuleConfig,
+    ParameterValue,
+    compare_cards,
+    load_card,
+    official_card,
+    official_card_text,
+    parse_card,
+    with_random_seed,
+)
 
-__all__ = ["JETCLASS_CARD_SHA256", "jetclass_card_text"]
+__all__ = [
+    "OFFICIAL_CARD_SHA256",
+    "CardDifference",
+    "DelphesCard",
+    "ModuleConfig",
+    "ParameterValue",
+    "compare_cards",
+    "load_card",
+    "official_card",
+    "official_card_text",
+    "parse_card",
+    "with_random_seed",
+]

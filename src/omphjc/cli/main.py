@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 
 from omphjc import __version__
+from omphjc.delphes import DelphesCard, compare_cards, load_card, official_card
 from omphjc.madgraph import (
     compare_all,
     format_value,
@@ -68,6 +69,56 @@ def check_cards() -> None:
     for mismatch in mismatches:
         click.echo(str(mismatch), err=True)
     raise SystemExit(1)
+
+
+@cli.group()
+def delphes() -> None:
+    """Inspect Delphes cards as configuration keys and values."""
+
+
+@delphes.command("show")
+@click.argument(
+    "card", type=click.Path(exists=True, dir_okay=False, path_type=Path), required=False
+)
+def delphes_show(card: Path | None) -> None:
+    """Print the evaluated configuration of a card (default: the official one)."""
+    config = official_card() if card is None else load_card(card)
+    click.echo("ExecutionPath:")
+    for name in config.execution_path:
+        click.echo(f"  {name}")
+    for key, value in config.settings.items():
+        click.echo(f"{key} = {' '.join(value)}")
+    for name, module in config.modules.items():
+        click.echo(f"\nmodule {module.type} {name}")
+        for key, value in module.parameters.items():
+            click.echo(f"  {key} = {_render(value)}")
+
+
+@delphes.command("compare")
+@click.argument("card", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--reference",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Card to compare against (default: the official JetClass card).",
+)
+def delphes_compare(card: Path, reference: Path | None) -> None:
+    """Report configuration differences between a card and a reference."""
+    reference_config: DelphesCard = (
+        official_card() if reference is None else load_card(reference)
+    )
+    differences = compare_cards(load_card(card), reference_config)
+    if not differences:
+        click.echo("The cards configure Delphes identically.")
+        return
+    for difference in differences:
+        click.echo(str(difference), err=True)
+    raise SystemExit(1)
+
+
+def _render(value: tuple[str, ...], limit: int = 8) -> str:
+    if len(value) <= limit:
+        return " ".join(value)
+    return f"{' '.join(value[: limit // 2])} … {' '.join(value[-(limit // 2) :])}  ({len(value)} elements)"
 
 
 def _yes_no(flag: bool) -> str:
