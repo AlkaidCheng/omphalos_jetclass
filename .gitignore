@@ -1,0 +1,54 @@
+# ---- Python bytecode and caches ------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ---- Packaging / distribution --------------------------------------------
+build/
+dist/
+wheels/
+*.egg-info/
+*.egg
+src/omphjc/_version.py
+
+# ---- Virtual environments ------------------------------------------------
+.venv/
+venv/
+env/
+.env
+
+# ---- Test artifacts ------------------------------------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# ---- Static analysis caches ----------------------------------------------
+.mypy_cache/
+.ruff_cache/
+
+# ---- Editors and OS ------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+
+# ---- Generated physics outputs -------------------------------------------
+runs/
+*.lhe
+*.lhe.gz
+*.hepmc
+*.hepmc3
+*.root
+
+# ---- Claude Code ---------------------------------------------------------
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+
+# ---- Codex ---------------------------------------------------------------
+.codex/
+.agents/
+AGENTS.md
+AGENTS.local.md
