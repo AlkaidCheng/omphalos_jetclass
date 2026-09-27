@@ -58,9 +58,10 @@ manifest recording versions, seeds and cross sections.
 ## Acknowledgements
 
 The process definitions, cards and Delphes configuration follow the JetClass
-production by the [jet-universe](https://github.com/jet-universe/jetclass_generation)
-project (MIT). The vendored `heft` model is the MadGraph5_aMC@NLO Higgs
-effective-field-theory model. Developed with the assistance of Claude Code.
+production by the jet-universe project (MIT),
+[jetclass_generation at commit ae722ea](https://github.com/jet-universe/jetclass_generation/tree/ae722ea560efa01c6ed814c72d15b7cdafdf3449).
+The vendored `heft` model is the MadGraph5_aMC@NLO Higgs effective-field-theory
+model. Developed with the assistance of Claude Code.
 
 ## License
 

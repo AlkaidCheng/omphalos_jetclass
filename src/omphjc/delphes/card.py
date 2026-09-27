@@ -24,10 +24,11 @@ from omphjc.processes.resources_access import delphes_card_path
 OFFICIAL_CARD_SHA256 = (
     "bf205dd95fe9fe0031847d76edf70a6a8e125ed65141ea9c479aef453588ed1c"
 )
-"""SHA-256 of ``delphes_card.tcl`` in jet-universe/jetclass_generation @ ae722ea.
+"""SHA-256 of the packaged reference card.
 
-Informational: the packaged reference is checked against it, cards used for
-runs are compared by configuration, never by hash.
+The reference is ``delphes_card.tcl`` of jet-universe/jetclass_generation at
+commit ae722ea:
+https://github.com/jet-universe/jetclass_generation/blob/ae722ea560efa01c6ed814c72d15b7cdafdf3449/delphes_card.tcl
 """
 
 ParameterValue = tuple[str, ...]
@@ -117,8 +118,9 @@ def parse_card(text: str) -> DelphesCard:
         raise ValueError(f"Delphes card does not evaluate: {error}") from error
 
     def elements(variable: str) -> ParameterValue:
-        # Join in Tcl so every element, nested lists included, comes back in
-        # Tcl's canonical string form rather than as a converted Python object.
+        # tkinter converts numbers and lists to Python objects; joining inside
+        # Tcl keeps every element, nested lists included, in its canonical
+        # string form.
         joined = str(interpreter.eval(f'join [set {variable}] "\\x1f"'))
         return tuple(joined.split("\x1f")) if joined else ()
 

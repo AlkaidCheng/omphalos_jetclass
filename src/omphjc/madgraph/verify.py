@@ -1,11 +1,10 @@
 """Check the catalogue against the official JetClass gridpack cards.
 
-The official production launched pre-built MadGraph 3.1.1 gridpacks, so its
-run cards are 3.1.1 templates with the values filled in and a launch script
-with a few overrides. This package generates the process afresh and applies
-the physics settings at launch, so the comparison is made value by value:
-every setting the catalogue applies must equal the official one, and every
-tracked official setting must be applied by the catalogue.
+The official run cards are MadGraph 3.1.1 templates with the values filled
+in, plus a launch script with a few overrides, while this package applies its
+settings at launch. The comparison is therefore made value by value: every
+setting the catalogue applies must equal the official one, and every tracked
+official setting must be applied by the catalogue.
 """
 
 from collections.abc import Iterable
