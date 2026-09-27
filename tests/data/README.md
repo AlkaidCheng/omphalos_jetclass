@@ -11,3 +11,11 @@ by replaying that routine of MadGraph 3.1.1 on the official cards, and the
 result was checked against the file sizes printed in the production logs.
 HToBB stands for the nine unmatched processes, whose cards are identical
 except for the input file name; ZJetsToNuNu is the MLM-matched one.
+
+## madgraph/
+
+`TTBar_banner.txt` is the banner of one MadGraph5_aMC@NLO 3.5.7 run of the
+official TTBar cards (10 000 events, `iseed = 42`) after MadSpin, reduced to
+the blocks the banner reader consumes: the version, the run card as used, the
+generation summary, the MadSpin commands and the `<init>` block that MadGraph
+copies into the event file. The process and parameter cards are omitted.

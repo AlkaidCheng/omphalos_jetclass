@@ -1,5 +1,6 @@
-"""MadGraph5_aMC@NLO cards, launch scripts and reference checks."""
+"""MadGraph5_aMC@NLO cards, launch scripts, banners and reference checks."""
 
+from omphjc.madgraph.banner import Banner
 from omphjc.madgraph.cards import (
     STANDARD_DEFINITIONS,
     launch_commands,
@@ -33,6 +34,7 @@ __all__ = [
     "DISABLED_DEFAULTS",
     "STANDARD_DEFINITIONS",
     "TRACKED_PARAMETERS",
+    "Banner",
     "MadSpinCard",
     "Mismatch",
     "compare_madspin_cards",

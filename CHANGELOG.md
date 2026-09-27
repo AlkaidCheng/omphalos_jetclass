@@ -17,3 +17,5 @@
   command on another catalogue.
 - Pythia settings for `DelphesPythia8` mirrored from MadGraph's interface, with
   the MLM matching block for matched processes (`omphjc pythia show`).
+- MadGraph banner reader: version, event count, cross section and error, and
+  the run card as used.
