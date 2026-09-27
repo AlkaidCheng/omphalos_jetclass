@@ -41,6 +41,6 @@ def models_dir() -> Path:
     return resource_root() / "models"
 
 
-def delphes_card_path() -> Path:
+def delphes_reference_card_path() -> Path:
     """Return the path of the official JetClass Delphes card."""
     return resource_root() / "delphes" / "delphes_card_JetClass.tcl"

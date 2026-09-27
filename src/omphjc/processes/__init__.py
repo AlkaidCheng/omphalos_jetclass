@@ -10,7 +10,7 @@ from omphjc.processes.catalogue import (
 )
 from omphjc.processes.resources_access import (
     VENDORED_MODELS,
-    delphes_card_path,
+    delphes_reference_card_path,
     models_dir,
     reference_dir,
     resource_root,
@@ -21,7 +21,7 @@ __all__ = [
     "ProcessSpec",
     "RunCardValue",
     "catalogue",
-    "delphes_card_path",
+    "delphes_reference_card_path",
     "get_process",
     "load_catalogue",
     "models_dir",

@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 
 from omphjc import __version__
-from omphjc.delphes import DelphesCard, compare_cards, load_card, official_card
+from omphjc.delphes import DelphesCard, compare_cards, load_card, reference_card
 from omphjc.madgraph import (
     compare_all,
     format_value,
@@ -82,7 +82,7 @@ def delphes() -> None:
 )
 def delphes_show(card: Path | None) -> None:
     """Print the evaluated configuration of a card (default: the official one)."""
-    config = official_card() if card is None else load_card(card)
+    config = reference_card() if card is None else load_card(card)
     click.echo("ExecutionPath:")
     for name in config.execution_path:
         click.echo(f"  {name}")
@@ -104,7 +104,7 @@ def delphes_show(card: Path | None) -> None:
 def delphes_compare(card: Path, reference: Path | None) -> None:
     """Report configuration differences between a card and a reference."""
     reference_config: DelphesCard = (
-        official_card() if reference is None else load_card(reference)
+        reference_card() if reference is None else load_card(reference)
     )
     differences = compare_cards(load_card(card), reference_config)
     if not differences:

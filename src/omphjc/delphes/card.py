@@ -19,9 +19,10 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
-from omphjc.processes.resources_access import delphes_card_path
+from omphjc.comparison import Difference
+from omphjc.processes.resources_access import delphes_reference_card_path
 
-OFFICIAL_CARD_SHA256 = (
+REFERENCE_CARD_SHA256 = (
     "bf205dd95fe9fe0031847d76edf70a6a8e125ed65141ea9c479aef453588ed1c"
 )
 """SHA-256 of the packaged reference card.
@@ -80,18 +81,6 @@ class DelphesCard:
     execution_path: tuple[str, ...]
     modules: Mapping[str, ModuleConfig]
     settings: Mapping[str, ParameterValue]
-
-
-@dataclass(frozen=True)
-class CardDifference:
-    """One configuration difference between a card and a reference."""
-
-    item: str
-    expected: str
-    actual: str
-
-    def __str__(self) -> str:
-        return f"{self.item}: expected {self.expected}, got {self.actual}"
 
 
 def parse_card(text: str) -> DelphesCard:
@@ -155,15 +144,15 @@ def load_card(path: Path) -> DelphesCard:
     return parse_card(path.read_text(encoding="utf-8"))
 
 
-def official_card_text() -> str:
+def reference_card_text() -> str:
     """Return the packaged official JetClass card as text."""
-    return delphes_card_path().read_text(encoding="utf-8")
+    return delphes_reference_card_path().read_text(encoding="utf-8")
 
 
 @cache
-def official_card() -> DelphesCard:
+def reference_card() -> DelphesCard:
     """Return the evaluated configuration of the official JetClass card."""
-    return parse_card(official_card_text())
+    return parse_card(reference_card_text())
 
 
 def with_random_seed(text: str, seed: int) -> str:
@@ -175,16 +164,16 @@ def with_random_seed(text: str, seed: int) -> str:
     return f"set RandomSeed {seed}\n\n{text}"
 
 
-def compare_cards(card: DelphesCard, reference: DelphesCard) -> list[CardDifference]:
+def compare_cards(card: DelphesCard, reference: DelphesCard) -> list[Difference]:
     """Return every configuration difference between `card` and `reference`.
 
     The execution path is compared in order; modules and their parameters are
     compared by name; numeric values are compared as numbers.
     """
-    differences: list[CardDifference] = []
+    differences: list[Difference] = []
     if card.execution_path != reference.execution_path:
         differences.append(
-            CardDifference(
+            Difference(
                 "ExecutionPath",
                 " ".join(reference.execution_path),
                 " ".join(card.execution_path),
@@ -192,15 +181,13 @@ def compare_cards(card: DelphesCard, reference: DelphesCard) -> list[CardDiffere
         )
     differences.extend(_compare_values("settings", card.settings, reference.settings))
     for name in sorted(reference.modules.keys() - card.modules.keys()):
-        differences.append(CardDifference(f"module {name}", "defined", "absent"))
+        differences.append(Difference(f"module {name}", "defined", "absent"))
     for name in sorted(card.modules.keys() - reference.modules.keys()):
-        differences.append(CardDifference(f"module {name}", "absent", "defined"))
+        differences.append(Difference(f"module {name}", "absent", "defined"))
     for name in sorted(card.modules.keys() & reference.modules.keys()):
         module, expected = card.modules[name], reference.modules[name]
         if module.type != expected.type:
-            differences.append(
-                CardDifference(f"module {name}", expected.type, module.type)
-            )
+            differences.append(Difference(f"module {name}", expected.type, module.type))
         differences.extend(
             _compare_values(name, module.parameters, expected.parameters)
         )
@@ -211,20 +198,20 @@ def _compare_values(
     scope: str,
     actual: Mapping[str, ParameterValue],
     expected: Mapping[str, ParameterValue],
-) -> list[CardDifference]:
+) -> list[Difference]:
     differences = []
     for key in sorted(actual.keys() | expected.keys()):
         if key not in expected:
             differences.append(
-                CardDifference(f"{scope}.{key}", "absent", _render(actual[key]))
+                Difference(f"{scope}.{key}", "absent", _render(actual[key]))
             )
         elif key not in actual:
             differences.append(
-                CardDifference(f"{scope}.{key}", _render(expected[key]), "absent")
+                Difference(f"{scope}.{key}", _render(expected[key]), "absent")
             )
         elif not _values_equal(actual[key], expected[key]):
             differences.append(
-                CardDifference(
+                Difference(
                     f"{scope}.{key}", _render(expected[key]), _render(actual[key])
                 )
             )

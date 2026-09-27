@@ -9,7 +9,6 @@ from omphjc.madgraph.cards import (
 )
 from omphjc.madgraph.madspin import (
     MadSpinCard,
-    MadSpinDifference,
     compare_madspin_cards,
     parse_madspin_card,
 )
@@ -35,7 +34,6 @@ __all__ = [
     "STANDARD_DEFINITIONS",
     "TRACKED_PARAMETERS",
     "MadSpinCard",
-    "MadSpinDifference",
     "Mismatch",
     "compare_madspin_cards",
     "parse_madspin_card",
