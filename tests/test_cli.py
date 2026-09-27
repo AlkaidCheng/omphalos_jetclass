@@ -36,7 +36,11 @@ def test_check_cards_passes_for_the_shipped_catalogue() -> None:
 
 
 def test_a_custom_catalogue_is_used_by_every_command(tmp_path: Path) -> None:
+    shipped = catalogue_path().parent
     text = catalogue_path().read_text(encoding="utf-8")
+    text = text.replace("common:\n", f"common:\n  models_dir: {shipped / 'models'}\n")
+    text = text.replace("_cards: cards/", f"_cards: {shipped}/cards/")
+    text = text.replace("_card: cards/", f"_card: {shipped}/cards/")
     custom = tmp_path / "study.yaml"
     custom.write_text(text.replace("misset: 450.0", "misset: 400.0"), encoding="utf-8")
 

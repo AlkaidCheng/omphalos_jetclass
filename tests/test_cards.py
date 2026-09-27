@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 
-from omphjc.config_paths import models_dir, reference_dir
 from omphjc.madgraph import (
     DISABLED_DEFAULTS,
     TRACKED_PARAMETERS,
@@ -27,7 +26,7 @@ def test_every_tracked_official_setting_is_pinned(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     for name, spec in specs.items():
-        reference = reference_run_settings(name)
+        reference = reference_run_settings(spec)
         expected = {
             key
             for key in TRACKED_PARAMETERS & reference.keys()
@@ -61,9 +60,7 @@ def test_a_missing_tracked_setting_is_reported(
 def test_proc_card_commands_for_a_matched_process(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
-    commands = proc_card_commands(
-        specs["ZJetsToNuNu"], output_dir=Path("out"), models_dir=Path("models")
-    )
+    commands = proc_card_commands(specs["ZJetsToNuNu"], output_dir=Path("out"))
     assert commands == [
         "import model sm",
         "define p = p b b~",
@@ -74,29 +71,29 @@ def test_proc_card_commands_for_a_matched_process(
     ]
 
 
-def test_vendored_models_are_imported_by_path(
+def test_shipped_models_are_imported_by_path(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
-    directory = models_dir()
-    assert (
-        model_import_target(specs["HToWW4Q"], models_dir=directory)
-        == str(directory / "heft") + "-ckm"
-    )
-    assert model_import_target(specs["HToCC"], models_dir=directory) == str(
-        directory / "heft_c_mass_jetclass"
-    )
-    assert model_import_target(specs["TTBar"], models_dir=directory) == "sm-ckm"
+    heft = specs["HToWW4Q"].model_path
+    assert heft is not None
+    assert model_import_target(specs["HToWW4Q"]) == f"{heft}-ckm"
+    assert model_import_target(specs["HToCC"]) == str(specs["HToCC"].model_path)
+    assert model_import_target(specs["TTBar"]) == "sm-ckm"
 
 
-def test_reference_proc_lines_drop_the_madgraph_preamble() -> None:
-    assert reference_proc_lines("HToBB") == [
+def test_reference_proc_lines_drop_the_madgraph_preamble(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    assert reference_proc_lines(specs["HToBB"]) == [
         "import model heft",
         "define p = p b b~",
         "define j = j b b~",
         "generate p p > ve ve~ h, h > b b~",
     ]
-    assert reference_proc_lines("ZJetsToNuNu")[0] == "import model sm"
-    assert reference_proc_lines("HToCC")[0] == "import model heft_c_mass_jetclass"
+    assert reference_proc_lines(specs["ZJetsToNuNu"])[0] == "import model sm"
+    assert (
+        reference_proc_lines(specs["HToCC"])[0] == "import model heft_c_mass_jetclass"
+    )
 
 
 def test_launch_commands_switch_shower_and_detector_off(
@@ -138,7 +135,8 @@ def test_launch_commands_reject_a_non_positive_event_count(
 
 def test_madspin_card_is_the_official_one(specs: Mapping[str, ProcessSpec]) -> None:
     text = madspin_card_text(specs["TTBarLep"])
-    assert text == (reference_dir("TTBarLep") / "madspin_card.dat").read_text("utf-8")
+    card = specs["TTBarLep"].madspin_card
+    assert card is not None and text == card.read_text("utf-8")
     assert "decay t > w+ b, w+ > l+ vl" in text
     with pytest.raises(ValueError, match="does not use MadSpin"):
         madspin_card_text(specs["HToBB"])
@@ -147,7 +145,7 @@ def test_madspin_card_is_the_official_one(specs: Mapping[str, ProcessSpec]) -> N
 def test_a_tracked_cut_at_its_disabled_default_needs_no_entry(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
-    reference = reference_run_settings("WToQQ")
+    reference = reference_run_settings(specs["WToQQ"])
     assert reference["pt_min_pdg"] == {}
     assert "pt_min_pdg" not in specs["WToQQ"].run_card
     assert compare_process(specs["WToQQ"]) == []
