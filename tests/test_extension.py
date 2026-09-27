@@ -36,6 +36,17 @@ common:
     bwcutoff: 15.0
     maxjetflavor: 5
     use_syst: false
+  pythia:
+    Beams:frameType: 4
+    Check:epTolErr: 0.01
+    JetMatching:setMad: off
+    JetMatching:etaJetMax: 1000.0
+  pythia_matching:
+    Beams:setProductionScalesFromLHEF: on
+    JetMatching:merge: on
+    JetMatching:scheme: 1
+    JetMatching:coneRadius: 1.0
+    JetMatching:doShowerKt: off
 
 processes:
   ZPrimeToTT:
@@ -53,6 +64,8 @@ processes:
       pt_min_pdg: {{6: 450.0}}
     madspin_card: decays/zprime_madspin.dat
     matching: true
+    pythia:
+      Main:timesAllowErrors: 50
     seed_offset: 60000000
 
   HToBBStudy:
@@ -114,7 +127,21 @@ def test_new_process_needs_only_a_catalogue_entry(
     settings = shower_settings(spec, lhe_path=Path("e.lhe"), n_events=10, seed=None)
     assert settings["JetMatching:qCut"] == "60"
     assert settings["JetMatching:nJetMax"] == "1"
+    assert settings["JetMatching:scheme"] == "1"
+    assert settings["Main:timesAllowErrors"] == "50"
     assert derive_seeds(spec, 1).madgraph == 60000001
+
+
+def test_matched_process_needs_the_matching_block(tmp_path: Path) -> None:
+    path = tmp_path / "unmatched.yaml"
+    path.write_text(
+        "processes:\n  X:\n    label: X\n    description: d\n    model: sm\n"
+        "    processes: ['p p > z j']\n    run_card: {ickkw: 1, xqcut: 30.0}\n"
+        "    matching: true\n    seed_offset: 1\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="JetMatching:merge"):
+        load_catalogue(path)
 
 
 def test_processes_without_reference_cards_are_not_checked(

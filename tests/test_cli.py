@@ -95,3 +95,12 @@ def test_pythia_show_prints_a_command_file() -> None:
     assert "Main:numberOfEvents = 50" in result.output
     assert "JetMatching:qCut = 45" in result.output
     assert "Random:seed = 3" in result.output
+    overridden = CliRunner().invoke(
+        cli, ["pythia", "show", "HToBB", "--set", "Check:epTolErr=0.1"]
+    )
+    assert overridden.exit_code == 0, overridden.output
+    assert "Check:epTolErr = 0.1" in overridden.output
+    assert (
+        CliRunner().invoke(cli, ["pythia", "show", "HToBB", "--set", "x"]).exit_code
+        != 0
+    )

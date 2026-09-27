@@ -14,6 +14,9 @@
 # A process is decayed by MadSpin when it names a madspin_card.
 
 common:
+  # Run-card values shared by every process, taken from the official run cards
+  # (cards/jetclass/<process>/run_card.dat, identical across the ten processes
+  # for these parameters); the per-process blocks below hold the rest.
   run_card:
     lpp1: 1
     lpp2: 1
@@ -28,6 +31,31 @@ common:
     bwcutoff: 15.0
     maxjetflavor: 5
     use_syst: false
+
+  # Pythia 8 settings written for every process: what MadGraph's Pythia
+  # interface injects into every run (the PY8Card defaults marked
+  # always_write_to_card in madgraph/various/banner.py,
+  # https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/various/banner.py#L2050-L2089;
+  # the official production's MadGraph 3.1.1 wrote the same values, see
+  # tests/data/pythia). A process may add or override entries in its own
+  # pythia block.
+  pythia:
+    Beams:frameType: 4            # events come from a Les Houches event file
+    Check:epTolErr: 0.01          # tolerate the momentum rounding of the LHE file
+    JetMatching:setMad: off       # matching parameters are read from this file, not the LHE banner
+    JetMatching:etaJetMax: 1000.0 # no rapidity limit on the jets that partons are matched to
+
+  # Added for MLM-matched processes (setup_Pythia8RunAndCard in
+  # madgraph/interface/madevent_interface.py,
+  # https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544-L4602).
+  # JetMatching:qCut (1.5 x xqcut), nJetMax (jets in the process lines) and
+  # nQmatch (maxjetflavor) are derived from the run card by the package.
+  pythia_matching:
+    Beams:setProductionScalesFromLHEF: on
+    JetMatching:merge: on
+    JetMatching:scheme: 1         # MLM
+    JetMatching:coneRadius: 1.0
+    JetMatching:doShowerKt: off
 
 processes:
   HToBB:

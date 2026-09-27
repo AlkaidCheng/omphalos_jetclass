@@ -96,19 +96,19 @@ $ omphjc pythia show ZJetsToNuNu --events 1000 --seed 1
 ! Pythia 8 settings for DelphesPythia8: ZJetsToNuNu
 !
 Beams:frameType = 4
-Beams:LHEF = events.lhe
-Main:numberOfEvents = 1000
 Check:epTolErr = 0.01
 JetMatching:setMad = off
-JetMatching:etaJetMax = 1000.0
+JetMatching:etaJetMax = 1000
+Beams:LHEF = events.lhe
+Main:numberOfEvents = 1000
 Beams:setProductionScalesFromLHEF = on
 JetMatching:merge = on
 JetMatching:scheme = 1
+JetMatching:coneRadius = 1
+JetMatching:doShowerKt = off
 JetMatching:qCut = 45
 JetMatching:nJetMax = 2
 JetMatching:nQmatch = 5
-JetMatching:coneRadius = 1.0
-JetMatching:doShowerKt = off
 Random:setSeed = on
 Random:seed = 1
 ```
@@ -125,6 +125,31 @@ Random:seed = 1
   `JetMatching:nQmatch` its `maxjetflavor`, `JetMatching:nJetMax` the largest
   number of jets in the process lines; the remaining values are MadGraph's
   fixed choices.
+
+### Changing the settings
+
+The fixed values live in `config/jetclass.yaml`: `common.pythia` holds the
+settings written for every run, `common.pythia_matching` the fixed part of the
+matching block, each value with a comment naming the MadGraph source it comes
+from. Three places change them, later ones winning:
+
+1. The catalogue blocks themselves, in your own copy
+   (`omphjc config export ./my_config`, then `--catalogue ./my_config/jetclass.yaml`).
+2. A `pythia:` block in one process entry, for that process only:
+
+   ```yaml
+     HToBB:
+       model: heft
+       processes:
+         - "p p > ve ve~ h, h > b b~"
+       pythia:
+         Main:timesAllowErrors: 100
+   ```
+
+3. The command line, for one run: `omphjc pythia show HToBB --set Main:timesAllowErrors=100`.
+
+The derived matching values (`qCut`, `nQmatch`, `nJetMax`) follow the run card
+and the process lines; they can be overridden the same way.
 
 ## Delphes cards
 

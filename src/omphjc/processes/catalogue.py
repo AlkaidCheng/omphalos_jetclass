@@ -23,11 +23,14 @@ from omphjc.config_paths import catalogue_path
 RunCardValue = bool | int | float | str | dict[int, float]
 """A MadGraph run-card value as it appears after ``set name value``."""
 
+SettingValue = bool | int | float | str
+"""A Pythia setting value as written in the catalogue."""
+
 _REQUIRED_KEYS = frozenset(
     {"label", "description", "model", "processes", "run_card", "seed_offset"}
 )
 _OPTIONAL_KEYS = frozenset(
-    {"definitions", "matching", "madspin_card", "reference_cards"}
+    {"definitions", "matching", "madspin_card", "reference_cards", "pythia"}
 )
 _DEFAULT_MODELS_DIR = "models"
 
@@ -55,6 +58,12 @@ class ProcessSpec:
         ``add process``.
     run_card : Mapping[str, RunCardValue]
         Run-card settings applied at launch, common settings included.
+    pythia : Mapping[str, SettingValue]
+        Pythia settings written for every run of the process: the
+        catalogue's common ``pythia`` block with the process's own entries
+        merged in.
+    pythia_matching : Mapping[str, SettingValue]
+        Pythia settings added when the process is MLM-matched.
     matching : bool
         Whether the sample is MLM-matched (``ickkw = 1``).
     seed_offset : int
@@ -77,6 +86,8 @@ class ProcessSpec:
     definitions: tuple[str, ...]
     processes: tuple[str, ...]
     run_card: Mapping[str, RunCardValue]
+    pythia: Mapping[str, SettingValue]
+    pythia_matching: Mapping[str, SettingValue]
     matching: bool
     seed_offset: int
     model_path: Path | None
@@ -131,9 +142,10 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     Parameters
     ----------
     path : Path
-        YAML file with an optional ``common`` block (``run_card`` settings
-        shared by every process and ``models_dir``, by default ``models``)
-        and a ``processes`` mapping. Paths inside are resolved relative to
+        YAML file with an optional ``common`` block (``run_card`` and
+        ``pythia`` settings shared by every process, ``pythia_matching``
+        settings for the matched ones, and ``models_dir``, by default
+        ``models``) and a ``processes`` mapping. Paths inside are resolved relative to
         the file's directory.
 
     Returns
@@ -146,19 +158,22 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     ------
     ValueError
         If an entry lacks a required key, holds an unknown key or a value of
-        the wrong type, names a file that does not exist, or shares its
-        label with another entry.
+        the wrong type, names a file that does not exist, shares its label
+        with another entry, or is matched while the catalogue has no
+        ``pythia_matching`` block switching matching on.
     """
     with path.open(encoding="utf-8") as stream:
         document = yaml.safe_load(stream)
     base = path.parent
     common = document.get("common", {})
-    common_run_card = _read_run_card(common.get("run_card", {}))
-    models_dir = base / common.get("models_dir", _DEFAULT_MODELS_DIR)
+    shared = _Shared(
+        run_card=_read_run_card(common.get("run_card", {})),
+        pythia=_read_settings(common.get("pythia", {})),
+        pythia_matching=_read_settings(common.get("pythia_matching", {})),
+        models_dir=base / common.get("models_dir", _DEFAULT_MODELS_DIR),
+    )
     specs = {
-        name: _build_spec(
-            name, entry, common_run_card, base=base, models_dir=models_dir
-        )
+        name: _build_spec(name, entry, shared, base=base)
         for name, entry in document["processes"].items()
     }
     labels = [spec.label for spec in specs.values()]
@@ -168,13 +183,18 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     return specs
 
 
+@dataclass(frozen=True)
+class _Shared:
+    """The ``common`` block of a catalogue, resolved."""
+
+    run_card: Mapping[str, RunCardValue]
+    pythia: Mapping[str, SettingValue]
+    pythia_matching: Mapping[str, SettingValue]
+    models_dir: Path
+
+
 def _build_spec(
-    name: str,
-    entry: Mapping[str, Any],
-    common_run_card: Mapping[str, RunCardValue],
-    *,
-    base: Path,
-    models_dir: Path,
+    name: str, entry: Mapping[str, Any], shared: _Shared, *, base: Path
 ) -> ProcessSpec:
     missing = _REQUIRED_KEYS - entry.keys()
     if missing:
@@ -182,10 +202,18 @@ def _build_spec(
     unknown = entry.keys() - _REQUIRED_KEYS - _OPTIONAL_KEYS
     if unknown:
         raise ValueError(f"Process {name!r} has unknown keys: {sorted(unknown)}")
-    run_card = dict(common_run_card)
+    run_card = dict(shared.run_card)
     run_card.update(_read_run_card(entry["run_card"]))
+    pythia = dict(shared.pythia)
+    pythia.update(_read_settings(entry.get("pythia", {})))
+    matching = bool(entry.get("matching", False))
+    if matching and "JetMatching:merge" not in shared.pythia_matching:
+        raise ValueError(
+            f"Process {name!r} is matched but the catalogue's common.pythia_matching "
+            "block does not switch JetMatching:merge on"
+        )
     model = str(entry["model"])
-    model_dir = models_dir / model.partition("-")[0]
+    model_dir = shared.models_dir / model.partition("-")[0]
     return ProcessSpec(
         name=name,
         label=str(entry["label"]),
@@ -194,7 +222,9 @@ def _build_spec(
         definitions=tuple(entry.get("definitions", ())),
         processes=tuple(entry["processes"]),
         run_card=run_card,
-        matching=bool(entry.get("matching", False)),
+        pythia=pythia,
+        pythia_matching=dict(shared.pythia_matching),
+        matching=matching,
         seed_offset=int(entry["seed_offset"]),
         model_path=model_dir if model_dir.is_dir() else None,
         madspin_card=_existing(name, entry, "madspin_card", base, directory=False),
@@ -211,6 +241,16 @@ def _existing(
     if directory and not path.is_dir() or not directory and not path.is_file():
         raise ValueError(f"Process {name!r}: {key} {str(entry[key])!r} does not exist")
     return path
+
+
+def _read_settings(raw: Mapping[str, Any]) -> dict[str, SettingValue]:
+    """Validate raw YAML Pythia settings."""
+    settings: dict[str, SettingValue] = {}
+    for key, value in raw.items():
+        if not isinstance(value, bool | int | float | str):
+            raise ValueError(f"Unsupported Pythia setting value for {key!r}: {value!r}")
+        settings[str(key)] = value
+    return settings
 
 
 def _read_run_card(raw: Mapping[str, Any]) -> dict[str, RunCardValue]:
