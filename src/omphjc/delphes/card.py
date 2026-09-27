@@ -9,7 +9,7 @@ ships with Python, and exposes the evaluated configuration as keys and values.
 Two cards that differ only in whitespace, comments, loop spelling or the order
 of definitions therefore compare equal.
 
-The official JetClass card is packaged as a reference to compare against; the
+The official JetClass card is shipped as a reference to compare against; the
 card used for a run may be any file.
 """
 
@@ -20,12 +20,12 @@ from functools import cache
 from pathlib import Path
 
 from omphjc.comparison import Difference
-from omphjc.processes.resources_access import delphes_reference_card_path
+from omphjc.config_paths import delphes_reference_card_path
 
 REFERENCE_CARD_SHA256 = (
     "bf205dd95fe9fe0031847d76edf70a6a8e125ed65141ea9c479aef453588ed1c"
 )
-"""SHA-256 of the packaged reference card.
+"""SHA-256 of the shipped reference card.
 
 The reference is ``delphes_card.tcl`` of jet-universe/jetclass_generation at
 commit ae722ea:
@@ -145,7 +145,7 @@ def load_card(path: Path) -> DelphesCard:
 
 
 def reference_card_text() -> str:
-    """Return the packaged official JetClass card as text."""
+    """Return the shipped official JetClass card as text."""
     return delphes_reference_card_path().read_text(encoding="utf-8")
 
 

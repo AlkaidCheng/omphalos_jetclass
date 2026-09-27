@@ -21,10 +21,23 @@ The package itself needs Python 3.10 or later. Generating events additionally
 needs MadGraph5_aMC@NLO, Pythia 8 and Delphes built with Pythia support; the
 `environment/` directory documents a pinned installation.
 
+## Configuration
+
+Everything a user may want to read, cite or adapt lives in `config/`:
+
+- `jetclass.yaml`: the ten JetClass classes as data (model, process lines,
+  run-card settings, MadSpin, matching, seed offsets);
+- `cards/jetclass/<process>/`: the official gridpack cards of the JetClass
+  production, the reference the catalogue is checked against;
+- `cards/delphes/delphes_card_JetClass.tcl`: the official Delphes card;
+- `models/`: the vendored MadGraph UFO models;
+- `PROVENANCE.md`: where each file comes from, with hashes.
+
+An installed package carries a copy of this directory.
+
 ## Processes
 
-The ten JetClass classes are defined as data, with the official gridpack cards
-of the JetClass production packaged as the reference:
+The catalogue is checked against the official cards:
 
 ```
 omphjc processes              # list the catalogue

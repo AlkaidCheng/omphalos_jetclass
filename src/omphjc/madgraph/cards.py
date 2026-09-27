@@ -8,9 +8,9 @@ values). The MadSpin card is shipped verbatim from the official production.
 
 from pathlib import Path
 
+from omphjc.config_paths import VENDORED_MODELS, reference_dir
 from omphjc.madgraph.runcard import format_value
 from omphjc.processes.catalogue import ProcessSpec
-from omphjc.processes.resources_access import VENDORED_MODELS, reference_dir
 
 STANDARD_DEFINITIONS: tuple[str, ...] = ("p = p b b~", "j = j b b~")
 """Five-flavour proton and jet definitions shared by every JetClass process."""

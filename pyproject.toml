@@ -51,11 +51,12 @@ include-package-data = false
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["omphjc*"]
-# The vendored UFO models are data, not importable packages.
-exclude = ["omphjc.processes.resources*"]
+# omphjc/config links to the top-level config/ directory; it is data, and its
+# vendored UFO models are not importable packages.
+exclude = ["omphjc.config*"]
 
 [tool.setuptools.package-data]
-omphjc = ["py.typed", "processes/*.yaml", "processes/resources/**/*"]
+omphjc = ["py.typed", "config/**/*"]
 
 [tool.setuptools_scm]
 # Version derived from git tags; falls back to 0.0.0 in a shallow checkout.
@@ -63,12 +64,12 @@ omphjc = ["py.typed", "processes/*.yaml", "processes/resources/**/*"]
 [tool.black]
 line-length = 88
 target-version = ["py310"]
-extend-exclude = "src/omphjc/processes/resources/"
+extend-exclude = "^/config/|^/src/omphjc/config/"
 
 [tool.ruff]
 line-length = 88
 target-version = "py310"
-extend-exclude = ["src/omphjc/processes/resources"]
+extend-exclude = ["config", "src/omphjc/config"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "SIM", "C90"]
@@ -85,7 +86,7 @@ known-first-party = ["omphjc"]
 python_version = "3.10"
 strict = true
 packages = ["omphjc"]
-exclude = ["src/omphjc/processes/resources/"]
+exclude = ["^config/", "src/omphjc/config/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

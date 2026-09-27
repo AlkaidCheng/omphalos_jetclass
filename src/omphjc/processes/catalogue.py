@@ -1,20 +1,21 @@
 """The JetClass-I process catalogue.
 
-Ten processes are defined as data in ``jetclass.yaml``. Each entry records the
-MadGraph model, the process definitions, the run-card settings that pin the
-physics, whether MadSpin decays the tops, whether the sample is MLM-matched and
-the per-process seed offset. The official gridpack cards packaged under
-``resources/jetclass`` are the reference these values are tested against.
+Ten processes are defined as data in ``config/jetclass.yaml``. Each entry
+records the MadGraph model, the process definitions, the run-card settings that
+pin the physics, whether MadSpin decays the tops, whether the sample is
+MLM-matched and the per-process seed offset. The official gridpack cards under
+``config/cards/jetclass`` are the reference these values are tested against.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
-from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from omphjc.config_paths import catalogue_path
 
 RunCardValue = bool | int | float | str | dict[int, float]
 """A MadGraph run-card value as it appears after ``set name value``."""
@@ -100,8 +101,8 @@ def get_process(name: str) -> ProcessSpec:
 
 @cache
 def catalogue() -> Mapping[str, ProcessSpec]:
-    """Return the packaged catalogue, keyed by process name."""
-    return load_catalogue(Path(str(files("omphjc.processes") / "jetclass.yaml")))
+    """Return the shipped catalogue, keyed by process name."""
+    return load_catalogue(catalogue_path())
 
 
 def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:

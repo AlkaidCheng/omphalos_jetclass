@@ -3,12 +3,12 @@
 # Values follow the official gridpacks of jet-universe/jetclass_generation at
 # commit ae722ea:
 #   https://github.com/jet-universe/jetclass_generation/tree/ae722ea560efa01c6ed814c72d15b7cdafdf3449
-# The vendored copies of those cards live in resources/jetclass/<process>/ and
+# The vendored copies of those cards live in cards/jetclass/<process>/ and
 # the test suite keeps the two in step: every run-card value here must equal
 # the official one, and every tracked official value must appear here.
 #
 # Model names: "heft" and "heft_c_mass_jetclass" are vendored UFO models under
-# resources/models/; "sm" and "sm-ckm" ship with MadGraph. A "-suffix" selects
+# models/; "sm" and "sm-ckm" ship with MadGraph. A "-suffix" selects
 # a restriction card of the model.
 
 common:

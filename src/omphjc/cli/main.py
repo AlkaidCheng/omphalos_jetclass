@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 
 from omphjc import __version__
+from omphjc.config_paths import models_dir
 from omphjc.delphes import DelphesCard, compare_cards, load_card, reference_card
 from omphjc.madgraph import (
     compare_all,
@@ -12,7 +13,7 @@ from omphjc.madgraph import (
     launch_commands,
     proc_card_commands,
 )
-from omphjc.processes import catalogue, get_process, models_dir, process_names
+from omphjc.processes import catalogue, get_process, process_names
 
 
 @click.group()

@@ -3,15 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from omphjc.processes import (
-    VENDORED_MODELS,
-    ProcessSpec,
-    get_process,
-    load_catalogue,
-    models_dir,
-    process_names,
-    reference_dir,
-)
+from omphjc.config_paths import VENDORED_MODELS, models_dir, reference_dir
+from omphjc.processes import ProcessSpec, get_process, load_catalogue, process_names
 
 JETCLASS_CLASSES = {
     "HToBB": "Hbb",

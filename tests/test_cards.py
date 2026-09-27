@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from omphjc.config_paths import models_dir, reference_dir
 from omphjc.madgraph import (
     DISABLED_DEFAULTS,
     TRACKED_PARAMETERS,
@@ -15,7 +16,7 @@ from omphjc.madgraph import (
     reference_proc_lines,
     reference_run_settings,
 )
-from omphjc.processes import ProcessSpec, models_dir, reference_dir
+from omphjc.processes import ProcessSpec
 
 
 def test_catalogue_matches_the_official_gridpack_cards() -> None:
