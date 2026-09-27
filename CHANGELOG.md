@@ -21,3 +21,7 @@
   the run card as used.
 - Job seeds derived from the process offsets of the official production
   (`derive_seeds`), with unseeded runs as the default.
+- A process is described entirely by its catalogue entry: `reference_cards`,
+  `madspin_card` and the models directory are paths relative to the catalogue,
+  and `check-cards` lists processes without reference cards instead of
+  failing on them.
