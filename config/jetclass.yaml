@@ -12,6 +12,10 @@
 # models/ (heft, heft_c_mass_jetclass) is imported from there; any other name
 # (sm, sm-ckm) is left to MadGraph. A "-suffix" selects a restriction card.
 # A process is decayed by MadSpin when it names a madspin_card.
+#
+# seed_offset values follow run.sh of the same commit, which adds 10 000 000 x n
+# to the job id of the n-th Higgs process and nothing to the others:
+#   https://github.com/jet-universe/jetclass_generation/blob/ae722ea560efa01c6ed814c72d15b7cdafdf3449/run.sh
 
 common:
   # Run-card values shared by every process, taken from the official run cards
