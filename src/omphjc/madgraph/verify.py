@@ -79,6 +79,7 @@ The catalogue only lists active physics, so a tracked parameter that the
 reference card leaves at one of these values needs no catalogue entry.
 """
 
+# Lines MadGraph writes at the top of every process card before user input.
 _PROC_CARD_PREAMBLE: tuple[str, ...] = (
     "import model sm",
     "define p = g u c d s u~ c~ d~ s~",
@@ -88,10 +89,9 @@ _PROC_CARD_PREAMBLE: tuple[str, ...] = (
     "define vl = ve vm vt",
     "define vl~ = ve~ vm~ vt~",
 )
-"""Lines MadGraph writes at the top of every process card before user input."""
 
+# Official model names that the catalogue provides under a vendored name.
 _OFFICIAL_MODEL_ALIASES: dict[str, str] = {"heft-c_mass": "heft_c_mass_jetclass"}
-"""Official model names that the catalogue provides under a vendored name."""
 
 
 @dataclass(frozen=True)
