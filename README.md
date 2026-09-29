@@ -11,6 +11,24 @@ event (hard process, decays, parton shower and hadronisation) is extracted from
 the Delphes output into a columnar file, from which the Parnassus input is
 derived in Parnassus's own stable-particle convention.
 
+## Pipeline
+
+![The omphjc pipeline: catalogue → MadGraph → DelphesPythia8 → extract → convert → Parnassus and JetClass ntuple](docs/pipeline.svg)
+
+| Step | What it does | Configuration it reads | What it writes |
+|---|---|---|---|
+| Process catalogue | Defines each process: model, process lines, run-card cuts, MadSpin card, matching, seed offset | `config/jetclass.yaml`, `config/cards/jetclass/<process>/`, `config/models/` | the MadGraph scripts and Pythia settings of every later step |
+| MadGraph5_aMC@NLO | Generates the hard process (and MadSpin decays) at parton level | process and launch scripts written from the catalogue | `events.lhe.gz`, the banner (cross section, seed, run card as used) |
+| DelphesPythia8 | Showers and hadronises with Pythia 8 and simulates the detector, in one process, so MLM matching runs where the catalogue asks for it | `pythia.cmnd` (from `common.pythia`, the matching block and the run's seed), `config/cards/delphes/delphes_card_JetClass.tcl` | `delphes.root` with the full generator record in its `Particle` branch |
+| extract *(planned)* | Reads the generator record out of the Delphes file | — | `simulation.parquet`: every particle with mothers, daughters and vertices |
+| convert *(planned)* | Applies Parnassus's stable-particle convention (cτ > 10 mm) | — | `parnassus.parquet`, or `.hepmc3` for the current Parnassus reader |
+| ntuple *(planned)* | Builds the JetClass jet table (jets, labels, constituents) from the Delphes output | — | `jetclass.parquet` |
+
+Every stage of a job writes into one directory with a manifest recording
+versions, seeds, card hashes, cross sections and event counts. Dashed boxes in
+the diagram are the stages not yet available; the sections below cover the
+available ones.
+
 ## Installation
 
 ```
