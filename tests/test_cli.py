@@ -36,7 +36,11 @@ def test_check_cards_passes_for_the_shipped_catalogue() -> None:
 
 
 def test_a_custom_catalogue_is_used_by_every_command(tmp_path: Path) -> None:
+    shipped = catalogue_path().parent
     text = catalogue_path().read_text(encoding="utf-8")
+    text = text.replace("common:\n", f"common:\n  models_dir: {shipped / 'models'}\n")
+    text = text.replace("_cards: cards/", f"_cards: {shipped}/cards/")
+    text = text.replace("_card: cards/", f"_card: {shipped}/cards/")
     custom = tmp_path / "study.yaml"
     custom.write_text(text.replace("misset: 450.0", "misset: 400.0"), encoding="utf-8")
 
@@ -91,3 +95,12 @@ def test_pythia_show_prints_a_command_file() -> None:
     assert "Main:numberOfEvents = 50" in result.output
     assert "JetMatching:qCut = 45" in result.output
     assert "Random:seed = 3" in result.output
+    overridden = CliRunner().invoke(
+        cli, ["pythia", "show", "HToBB", "--set", "Check:epTolErr=0.1"]
+    )
+    assert overridden.exit_code == 0, overridden.output
+    assert "Check:epTolErr = 0.1" in overridden.output
+    assert (
+        CliRunner().invoke(cli, ["pythia", "show", "HToBB", "--set", "x"]).exit_code
+        != 0
+    )

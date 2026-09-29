@@ -2,12 +2,18 @@
 
 The official production showered through MadGraph's Pythia interface, which
 writes a command file from the run card. ``DelphesPythia8`` reads a command
-file of its own, so this module writes the equivalent one: the LHE input, the
-event count, the settings MadGraph injects into every run (``Check:epTolErr``,
-``JetMatching:setMad``, ``JetMatching:etaJetMax``) and, for MLM-matched
-processes, the matching block MadGraph derives from the run card
-(``qCut = 1.5 × xqcut``, ``nQmatch = maxjetflavor``, ``nJetMax`` from the
-process definitions).
+file of its own, so this module writes the equivalent one from three sources:
+
+* the catalogue's ``pythia`` settings, written for every process (what
+  MadGraph's interface injects into every run), and its ``pythia_matching``
+  settings, added for MLM-matched processes;
+* the values MadGraph derives from the run card for a matched process:
+  ``JetMatching:qCut = 1.5 × xqcut``, ``JetMatching:nQmatch = maxjetflavor``
+  and ``JetMatching:nJetMax``, the most light jets in any process line
+  (``setup_Pythia8RunAndCard`` in ``madgraph/interface/madevent_interface.py``,
+  https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544-L4602);
+* the run controls of one job: the LHE file, the event count, the seed, and
+  any overrides given by the caller, which win over everything else.
 
 MadGraph's interface also registers bookkeeping keys of its own
 (``HEPMCoutput:*``, ``SysCalc:*``, ``LHEFInputs:*``). They are not Pythia
@@ -21,13 +27,27 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from omphjc.comparison import Difference
-from omphjc.processes.catalogue import ProcessSpec
+from omphjc.processes.catalogue import ProcessSpec, SettingValue
 
 MATCHING_SCALE_FACTOR = 1.5
-"""``JetMatching:qCut`` as a multiple of the run card's ``xqcut`` (MadGraph's rule)."""
+"""``JetMatching:qCut`` as a multiple of the run card's ``xqcut``.
+
+MadGraph's rule when the Pythia card leaves ``qCut`` at -1:
+``PY8_Card.MadGraphSet('JetMatching:qCut', 1.5*self.run_card['xqcut'])`` in
+``setup_Pythia8RunAndCard``,
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544
+(the same line in MadGraph 3.1.1 gave the official ``qCut = 45`` for
+``xqcut = 30``). A catalogue ``pythia`` override of ``JetMatching:qCut`` wins.
+"""
 
 PYTHIA_SEED_LIMIT = 900_000_000
-"""Largest value Pythia accepts for ``Random:seed``; 0 draws the seed from the clock."""
+"""Largest value Pythia accepts for ``Random:seed``.
+
+``<modeopen name="Random:seed" default="-1" max="900000000">`` in Pythia's
+settings database, ``share/Pythia8/xmldoc/RandomNumberSeed.xml`` (8.312);
+documented at https://pythia.org/latest-manual/RandomNumberSeed.html. Seed 0
+draws the seed from the clock.
+"""
 
 MADGRAPH_INTERFACE_PREFIXES: frozenset[str] = frozenset(
     {"hepmcoutput:", "syscalc:", "lhefinputs:"}
@@ -46,14 +66,20 @@ _BOOLEAN_WORDS = {
 
 
 def shower_settings(
-    spec: ProcessSpec, *, lhe_path: Path, n_events: int, seed: int | None
+    spec: ProcessSpec,
+    *,
+    lhe_path: Path,
+    n_events: int,
+    seed: int | None,
+    overrides: Mapping[str, SettingValue] | None = None,
 ) -> dict[str, str]:
     """Return the Pythia settings for showering `spec` with ``DelphesPythia8``.
 
     Parameters
     ----------
     spec : ProcessSpec
-        The process whose events are showered.
+        The process whose events are showered; its ``pythia`` and
+        ``pythia_matching`` settings come from the catalogue.
     lhe_path : Path
         Uncompressed LHE file. ``DelphesPythia8`` also reads it as text for
         its ``EventLHEF`` branch, so a gzipped file cannot be used.
@@ -64,6 +90,8 @@ def shower_settings(
         ``Random:seed`` between 1 and :data:`PYTHIA_SEED_LIMIT`. ``None``
         draws the seed from the clock (Pythia's built-in default is one fixed
         seed).
+    overrides : Mapping[str, SettingValue] or None
+        Settings applied last, over everything derived above.
 
     Returns
     -------
@@ -79,30 +107,32 @@ def shower_settings(
         raise ValueError(f"n_events must be positive, got {n_events}")
     if seed is not None and not 1 <= seed <= PYTHIA_SEED_LIMIT:
         raise ValueError(f"seed must be between 1 and {PYTHIA_SEED_LIMIT}, got {seed}")
-    settings = {
-        "Beams:frameType": "4",
-        "Beams:LHEF": str(lhe_path),
-        "Main:numberOfEvents": str(n_events),
-        "Check:epTolErr": "0.01",
-        "JetMatching:setMad": "off",
-        "JetMatching:etaJetMax": "1000.0",
-    }
+    settings = {key: format_setting(value) for key, value in spec.pythia.items()}
+    settings["Beams:LHEF"] = str(lhe_path)
+    settings["Main:numberOfEvents"] = str(n_events)
     if spec.matching:
         settings.update(
-            {
-                "Beams:setProductionScalesFromLHEF": "on",
-                "JetMatching:merge": "on",
-                "JetMatching:scheme": "1",
-                "JetMatching:qCut": f"{matching_scale(spec):g}",
-                "JetMatching:nJetMax": str(max_matched_jets(spec)),
-                "JetMatching:nQmatch": str(int(_run_card_number(spec, "maxjetflavor"))),
-                "JetMatching:coneRadius": "1.0",
-                "JetMatching:doShowerKt": "off",
-            }
+            (key, format_setting(value)) for key, value in spec.pythia_matching.items()
+        )
+        settings["JetMatching:qCut"] = format_setting(matching_scale(spec))
+        settings["JetMatching:nJetMax"] = str(max_matched_jets(spec))
+        settings["JetMatching:nQmatch"] = str(
+            int(_run_card_number(spec, "maxjetflavor"))
         )
     settings["Random:setSeed"] = "on"
     settings["Random:seed"] = "0" if seed is None else str(seed)
+    for key, value in (overrides or {}).items():
+        settings[key] = format_setting(value)
     return settings
+
+
+def format_setting(value: SettingValue) -> str:
+    """Return `value` as Pythia reads it: ``on``/``off`` for booleans."""
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
 
 
 def matching_scale(spec: ProcessSpec) -> float:

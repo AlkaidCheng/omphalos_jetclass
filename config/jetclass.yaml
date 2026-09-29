@@ -3,15 +3,24 @@
 # Values follow the official gridpacks of jet-universe/jetclass_generation at
 # commit ae722ea:
 #   https://github.com/jet-universe/jetclass_generation/tree/ae722ea560efa01c6ed814c72d15b7cdafdf3449
-# The vendored copies of those cards live in cards/jetclass/<process>/ and
-# the test suite keeps the two in step: every run-card value here must equal
-# the official one, and every tracked official value must appear here.
+# Each process names the directory of its official cards (reference_cards);
+# the test suite and `omphjc check-cards` keep the two in step: every run-card
+# value here must equal the official one, and every tracked official value
+# must appear here. A process without reference_cards is not checked.
 #
-# Model names: "heft" and "heft_c_mass_jetclass" are vendored UFO models under
-# models/; "sm" and "sm-ckm" ship with MadGraph. A "-suffix" selects
-# a restriction card of the model.
+# Paths are relative to this file. A model whose directory exists under
+# models/ (heft, heft_c_mass_jetclass) is imported from there; any other name
+# (sm, sm-ckm) is left to MadGraph. A "-suffix" selects a restriction card.
+# A process is decayed by MadSpin when it names a madspin_card.
+#
+# seed_offset values follow run.sh of the same commit, which adds 10 000 000 x n
+# to the job id of the n-th Higgs process and nothing to the others:
+#   https://github.com/jet-universe/jetclass_generation/blob/ae722ea560efa01c6ed814c72d15b7cdafdf3449/run.sh
 
 common:
+  # Run-card values shared by every process, taken from the official run cards
+  # (cards/jetclass/<process>/run_card.dat, identical across the ten processes
+  # for these parameters); the per-process blocks below hold the rest.
   run_card:
     lpp1: 1
     lpp2: 1
@@ -26,6 +35,31 @@ common:
     bwcutoff: 15.0
     maxjetflavor: 5
     use_syst: false
+
+  # Pythia 8 settings written for every process: what MadGraph's Pythia
+  # interface injects into every run (the PY8Card defaults marked
+  # always_write_to_card in madgraph/various/banner.py,
+  # https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/various/banner.py#L2050-L2089;
+  # the official production's MadGraph 3.1.1 wrote the same values, see
+  # tests/data/pythia). A process may add or override entries in its own
+  # pythia block.
+  pythia:
+    Beams:frameType: 4            # events come from a Les Houches event file
+    Check:epTolErr: 0.01          # tolerate the momentum rounding of the LHE file
+    JetMatching:setMad: off       # matching parameters are read from this file, not the LHE banner
+    JetMatching:etaJetMax: 1000.0 # no rapidity limit on the jets that partons are matched to
+
+  # Added for MLM-matched processes (setup_Pythia8RunAndCard in
+  # madgraph/interface/madevent_interface.py,
+  # https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544-L4602).
+  # JetMatching:qCut (1.5 x xqcut), nJetMax (jets in the process lines) and
+  # nQmatch (maxjetflavor) are derived from the run card by the package.
+  pythia_matching:
+    Beams:setProductionScalesFromLHEF: on
+    JetMatching:merge: on
+    JetMatching:scheme: 1         # MLM
+    JetMatching:coneRadius: 1.0
+    JetMatching:doShowerKt: off
 
 processes:
   HToBB:
@@ -43,6 +77,7 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 10000000
+    reference_cards: cards/jetclass/HToBB
 
   HToCC:
     label: Hcc
@@ -59,6 +94,7 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 20000000
+    reference_cards: cards/jetclass/HToCC
 
   HToGG:
     label: Hgg
@@ -72,6 +108,7 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 30000000
+    reference_cards: cards/jetclass/HToGG
 
   HToWW4Q:
     label: H4q
@@ -88,6 +125,7 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 40000000
+    reference_cards: cards/jetclass/HToWW4Q
 
   HToWW2Q1L:
     label: Hqql
@@ -111,6 +149,7 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 50000000
+    reference_cards: cards/jetclass/HToWW2Q1L
 
   TTBar:
     label: Tbqq
@@ -121,8 +160,9 @@ processes:
     run_card:
       pt_min_pdg: {6: 450.0}
       eta_max_pdg: {6: 2.5}
-    madspin: true
+    madspin_card: cards/jetclass/TTBar/madspin_card.dat
     seed_offset: 0
+    reference_cards: cards/jetclass/TTBar
 
   TTBarLep:
     label: Tbl
@@ -133,8 +173,9 @@ processes:
     run_card:
       pt_min_pdg: {6: 450.0}
       eta_max_pdg: {6: 2.5}
-    madspin: true
+    madspin_card: cards/jetclass/TTBarLep/madspin_card.dat
     seed_offset: 0
+    reference_cards: cards/jetclass/TTBarLep
 
   WToQQ:
     label: Wqq
@@ -151,6 +192,7 @@ processes:
       drjj: 0.01
       misset: 450.0
     seed_offset: 0
+    reference_cards: cards/jetclass/WToQQ
 
   ZToQQ:
     label: Zqq
@@ -165,6 +207,7 @@ processes:
       drjj: 0.01
       misset: 450.0
     seed_offset: 0
+    reference_cards: cards/jetclass/ZToQQ
 
   ZJetsToNuNu:
     label: QCD
@@ -185,3 +228,4 @@ processes:
       misset: 450.0
     matching: true
     seed_offset: 0
+    reference_cards: cards/jetclass/ZJetsToNuNu
