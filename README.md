@@ -85,7 +85,7 @@ of your own, then point the command line at it with `--catalogue`:
 processes:
   ZPrimeToTT:
     label: Zptt                        # class name, unique within the catalogue
-    description: "Z' → tt̄ with up to one extra jet"
+    description: "$Z' \\to t\\bar{t}$ with up to one extra jet"
     model: zprime-restricted           # models/zprime/ next to the catalogue, or a MadGraph model
     definitions: ["tops = t t~"]       # optional multiparticle definitions
     processes:

@@ -51,7 +51,7 @@ common:
 processes:
   ZPrimeToTT:
     label: Zptt
-    description: "Z' → tt̄ with up to one extra jet"
+    description: "$Z' \\to t\\bar{{t}}$ with up to one extra jet"
     model: zprime-restricted
     definitions:
       - "tops = t t~"

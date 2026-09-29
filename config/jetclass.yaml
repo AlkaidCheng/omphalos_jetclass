@@ -65,7 +65,7 @@ common:
 processes:
   HToBB:
     label: Hbb
-    description: "H → bb̄ recoiling against Z → νν̄"
+    description: "$H \\to b\\bar{b}$ recoiling against $Z \\to \\nu\\bar{\\nu}$"
     model: heft
     processes:
       - "p p > ve ve~ h, h > b b~"
@@ -82,7 +82,7 @@ processes:
 
   HToCC:
     label: Hcc
-    description: "H → cc̄ recoiling against Z → νν̄ (massive charm, c̄cH vertex)"
+    description: "$H \\to c\\bar{c}$ recoiling against $Z \\to \\nu\\bar{\\nu}$ (massive charm, $c\\bar{c}H$ vertex)"
     model: heft_c_mass_jetclass
     processes:
       - "p p > ve ve~ h, h > c c~"
@@ -99,7 +99,7 @@ processes:
 
   HToGG:
     label: Hgg
-    description: "H → gg recoiling against Z → νν̄"
+    description: "$H \\to gg$ recoiling against $Z \\to \\nu\\bar{\\nu}$"
     model: heft
     processes:
       - "p p > ve ve~ h, h > g g"
@@ -113,7 +113,7 @@ processes:
 
   HToWW4Q:
     label: H4q
-    description: "H → WW* → 4 quarks recoiling against Z → νν̄"
+    description: "$H \\to WW^* \\to 4q$ recoiling against $Z \\to \\nu\\bar{\\nu}$"
     model: heft-ckm
     processes:
       - "p p > ve ve~ h, h > w+ w- > j j j j"
@@ -130,7 +130,7 @@ processes:
 
   HToWW2Q1L:
     label: Hqql
-    description: "H → WW* → 2 quarks + charged lepton + neutrino, recoiling against Z → νν̄"
+    description: "$H \\to WW^* \\to q q \\ell \\nu$ recoiling against $Z \\to \\nu\\bar{\\nu}$"
     model: heft-ckm
     definitions:
       - "lep = l+ l-"
@@ -154,7 +154,7 @@ processes:
 
   TTBar:
     label: Tbqq
-    description: "tt̄, both tops decaying hadronically (MadSpin)"
+    description: "$t\\bar{t}$, both tops decaying hadronically (MadSpin)"
     model: sm-ckm
     processes:
       - "p p > t t~"
@@ -166,7 +166,7 @@ processes:
 
   TTBarLep:
     label: Tbl
-    description: "tt̄, both tops decaying to e/μ + ν + b (MadSpin, dileptonic)"
+    description: "$t\\bar{t}$, both tops decaying to $\\ell \\nu b$ with $\\ell = e, \\mu$ (MadSpin, dileptonic)"
     model: sm-ckm
     processes:
       - "p p > t t~"
@@ -178,7 +178,7 @@ processes:
 
   WToQQ:
     label: Wqq
-    description: "W → qq̄' recoiling against Z → νν̄"
+    description: "$W \\to q\\bar{q}'$ recoiling against $Z \\to \\nu\\bar{\\nu}$"
     model: sm-ckm
     definitions:
       - "wpm = w+ w-"
@@ -194,7 +194,7 @@ processes:
 
   ZToQQ:
     label: Zqq
-    description: "Z → qq̄ recoiling against Z → νν̄"
+    description: "$Z \\to q\\bar{q}$ recoiling against $Z \\to \\nu\\bar{\\nu}$"
     model: sm-ckm
     processes:
       - "p p > ve ve~ z, z > j j"
@@ -208,7 +208,7 @@ processes:
 
   ZJetsToNuNu:
     label: QCD
-    description: "Z → νν̄ + 1 or 2 jets, MLM-matched; the QCD jet class"
+    description: "$Z \\to \\nu\\bar{\\nu}$ + 1 or 2 jets, MLM-matched; the QCD jet class"
     model: sm
     processes:
       - "p p > ve ve~ j @0"
