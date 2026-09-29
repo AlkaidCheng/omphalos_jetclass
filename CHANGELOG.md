@@ -15,3 +15,9 @@
 - `omphjc config path` and `omphjc config export DIR` locate and copy the
   shipped configuration; `--catalogue PATH` (or `OMPHJC_CATALOGUE`) runs every
   command on another catalogue.
+- Pythia settings for `DelphesPythia8` mirrored from MadGraph's interface, with
+  the MLM matching block for matched processes (`omphjc pythia show`).
+- MadGraph banner reader: version, event count, cross section and error, and
+  the run card as used.
+- Job seeds derived from the process offsets of the official production
+  (`derive_seeds`), with unseeded runs as the default.
