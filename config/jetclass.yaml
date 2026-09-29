@@ -3,10 +3,11 @@
 # Values follow the official gridpacks of jet-universe/jetclass_generation at
 # commit ae722ea:
 #   https://github.com/jet-universe/jetclass_generation/tree/ae722ea560efa01c6ed814c72d15b7cdafdf3449
-# Each process names the directory of its official cards (reference_cards);
-# the test suite and `omphjc check-cards` keep the two in step: every run-card
-# value here must equal the official one, and every tracked official value
-# must appear here. A process without reference_cards is not checked.
+# Each JetClass process names the directory of its official cards
+# (reference_cards) so that `omphjc check-cards` can report, value by value,
+# where an entry departs from the official production. That comparison is a
+# dedicated check, not a step of generation: edit any value here to suit a
+# study, and leave reference_cards out for a process of your own.
 #
 # Paths are relative to this file. A model whose directory exists under
 # models/ (heft, heft_c_mass_jetclass) is imported from there; any other name

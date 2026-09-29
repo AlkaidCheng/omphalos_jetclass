@@ -46,7 +46,7 @@ Everything a user may want to read, cite or adapt lives in `config/`:
 - `jetclass.yaml`: the ten JetClass classes as data (model, process lines,
   run-card settings, MadSpin, matching, seed offsets);
 - `cards/jetclass/<process>/`: the official gridpack cards of the JetClass
-  production, the reference the catalogue is checked against;
+  production, which `check-cards` compares the catalogue with;
 - `cards/delphes/delphes_card_JetClass.tcl`: the official Delphes card;
 - `models/`: the vendored MadGraph UFO models;
 - `PROVENANCE.md`: where each file comes from, with hashes.
@@ -63,17 +63,18 @@ export OMPHJC_CATALOGUE=./my_config/jetclass.yaml   # same, for every command
 
 ## Processes
 
-The catalogue is checked against the official cards:
-
 ```
 omphjc processes              # list the catalogue
 omphjc processes show HToBB   # MadGraph inputs written for one process
-omphjc check-cards            # compare the catalogue with the official cards
+omphjc check-cards            # differences from the official cards, if any
 ```
 
-`check-cards` verifies, value by value, that every physics setting the package
-applies equals the one in the official cards and that no tracked official
-setting is missing.
+`check-cards` is a dedicated comparison, not part of generation. For every
+process that names `reference_cards` it reports, value by value, each physics
+setting that differs from the official cards and each tracked official setting
+the entry leaves out, and it lists the processes it cannot compare. The shipped
+catalogue reports no differences; a catalogue edited for a study reports the
+differences that were intended.
 
 ## Adding a process
 

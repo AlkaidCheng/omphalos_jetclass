@@ -1,11 +1,14 @@
-"""Check the catalogue against its reference cards.
+"""Compare catalogue entries with their reference cards.
 
-The reference cards of the JetClass processes are the official gridpack cards:
-MadGraph 3.1.1 templates with the values filled in, plus a launch script with a
-few overrides, while this package applies its settings at launch. The
-comparison is therefore made value by value: every setting the catalogue
-applies must equal the reference one, and every tracked reference setting must
-be applied by the catalogue. Processes without reference cards are not checked.
+A reference is the set of MadGraph cards an entry reproduces; for the JetClass
+processes these are the official gridpack cards, MadGraph 3.1.1 templates with
+the values filled in plus a launch script with a few overrides, while this
+package applies its settings at launch. The comparison is therefore made value
+by value: it reports every setting the catalogue applies that differs from the
+reference and every tracked reference setting the catalogue leaves out. It is
+a dedicated check (``omphjc check-cards``), not a step of generation: a
+catalogue may depart from its references on purpose, and processes without
+reference cards are not compared.
 """
 
 from collections.abc import Iterable
@@ -61,7 +64,7 @@ TRACKED_PARAMETERS: frozenset[str] = frozenset(
         "asrwgtflavor",
     }
 )
-"""Run-card parameters that carry physics and must match the reference cards.
+"""Run-card parameters that carry physics and are compared with the reference cards.
 
 Parameters left out are MadGraph internals (run tag, event count, seed,
 integration strategy, event normalisation, bias modules, systematics program
