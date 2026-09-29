@@ -26,11 +26,16 @@ RunCardValue = bool | int | float | str | dict[int, float]
 SettingValue = bool | int | float | str
 """A Pythia setting value as written in the catalogue."""
 
-_REQUIRED_KEYS = frozenset(
-    {"label", "description", "model", "processes", "run_card", "seed_offset"}
-)
+_REQUIRED_KEYS = frozenset({"label", "description", "model", "processes", "run_card"})
 _OPTIONAL_KEYS = frozenset(
-    {"definitions", "matching", "madspin_card", "reference_cards", "pythia"}
+    {
+        "definitions",
+        "matching",
+        "madspin_card",
+        "reference_cards",
+        "pythia",
+        "seed_offset",
+    }
 )
 _DEFAULT_MODELS_DIR = "models"
 
@@ -67,8 +72,9 @@ class ProcessSpec:
     matching : bool
         Whether the sample is MLM-matched (``ickkw = 1``).
     seed_offset : int
-        Offset added to the job seed so that samples never share a random
-        sequence, as in the official production.
+        Offset added to every job seed of the process, 0 unless the entry
+        sets one; the official production offset its Higgs samples so that
+        they never share a random sequence with another process.
     model_path : Path or None
         Directory of the model when it ships with the catalogue; ``None``
         leaves the model to MadGraph.
@@ -225,7 +231,7 @@ def _build_spec(
         pythia=pythia,
         pythia_matching=dict(shared.pythia_matching),
         matching=matching,
-        seed_offset=int(entry["seed_offset"]),
+        seed_offset=int(entry.get("seed_offset", 0)),
         model_path=model_dir if model_dir.is_dir() else None,
         madspin_card=_existing(name, entry, "madspin_card", base, directory=False),
         reference_cards=_existing(name, entry, "reference_cards", base, directory=True),

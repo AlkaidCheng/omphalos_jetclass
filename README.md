@@ -95,7 +95,7 @@ processes:
     matching: true                     # MLM matching; adds the Pythia matching block
     madspin_card: decays/zprime.dat    # optional; MadSpin runs when present
     reference_cards: cards/zprime      # optional; check-cards compares against these
-    seed_offset: 60000000              # keeps its seeds apart from every other process
+    seed_offset: 60000000              # optional; keeps its seeds apart from other processes
 ```
 
 Paths are relative to the catalogue file. A model whose directory exists under
