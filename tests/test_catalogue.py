@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from omphjc.config_paths import catalogue_path
 from omphjc.processes import ProcessSpec, get_process, load_catalogue, process_names
 
 JETCLASS_CLASSES = {
@@ -96,9 +97,10 @@ def test_reference_cards_are_shipped_for_every_process(
         assert (directory / "run_card.dat").is_file()
         assert (directory / "proc_card_mg5.dat").is_file()
         assert (directory / f"run_{name}.mg5").is_file()
+    shipped = catalogue_path().parent
+    assert specs["TTBar"].madspin_card == shipped / "madspin" / "TTBar.dat"
     assert (
-        specs["TTBar"].madspin_card
-        == specs["TTBar"].reference_cards / "madspin_card.dat"
+        specs["TTBar"].reference_cards == shipped / "references" / "jetclass" / "TTBar"
     )
 
 

@@ -3,7 +3,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from omphjc.cli import cli
-from omphjc.config_paths import catalogue_path
+from omphjc.config_paths import export_config
 
 
 def test_processes_lists_every_class() -> None:
@@ -36,12 +36,8 @@ def test_check_cards_passes_for_the_shipped_catalogue() -> None:
 
 
 def test_a_custom_catalogue_is_used_by_every_command(tmp_path: Path) -> None:
-    shipped = catalogue_path().parent
-    text = catalogue_path().read_text(encoding="utf-8")
-    text = text.replace("common:\n", f"common:\n  models_dir: {shipped / 'models'}\n")
-    text = text.replace("_cards: cards/", f"_cards: {shipped}/cards/")
-    text = text.replace("_card: cards/", f"_card: {shipped}/cards/")
-    custom = tmp_path / "study.yaml"
+    custom = export_config(tmp_path / "config") / "jetclass.yaml"
+    text = custom.read_text(encoding="utf-8")
     custom.write_text(text.replace("misset: 450.0", "misset: 400.0"), encoding="utf-8")
 
     listing = CliRunner().invoke(cli, ["--catalogue", str(custom), "processes"])
@@ -77,7 +73,10 @@ def test_config_path_and_export(tmp_path: Path) -> None:
     exported = CliRunner().invoke(cli, ["config", "export", str(destination)])
     assert exported.exit_code == 0, exported.output
     assert (destination / "jetclass.yaml").is_file()
-    assert (destination / "cards" / "jetclass" / "HToBB" / "run_card.dat").is_file()
+    assert (
+        destination / "references" / "jetclass" / "HToBB" / "run_card.dat"
+    ).is_file()
+    assert (destination / "madspin" / "TTBar.dat").is_file()
     assert (destination / "models" / "heft" / "restrict_ckm.dat").is_file()
     assert not list(destination.rglob("__pycache__"))
 

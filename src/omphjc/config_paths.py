@@ -1,7 +1,8 @@
 """Locate the configuration shipped with the package.
 
-The repository keeps it in ``config/`` at the top level: the process catalogue
-with the cards and models it names, and the Delphes card. The package reaches
+The repository keeps it in ``config/`` at the top level: the process catalogue,
+the files a run reads (models, MadSpin and Delphes cards) and, under
+``references/``, the official JetClass cards kept for comparison. The package reaches
 the same directory as ``omphjc/config``, so an installed package finds its copy
 next to its own modules. Every accessor returns a real filesystem path that
 external tools such as MadGraph can use.
@@ -26,7 +27,7 @@ def catalogue_path() -> Path:
 
 def delphes_reference_card_path() -> Path:
     """Return the path of the official JetClass Delphes card."""
-    return config_root() / "cards" / "delphes" / "delphes_card_JetClass.tcl"
+    return config_root() / "references" / "jetclass" / "delphes_card.tcl"
 
 
 def export_config(destination: Path) -> Path:

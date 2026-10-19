@@ -149,3 +149,21 @@ def test_a_tracked_cut_at_its_disabled_default_needs_no_entry(
     assert reference["pt_min_pdg"] == {}
     assert "pt_min_pdg" not in specs["WToQQ"].run_card
     assert compare_process(specs["WToQQ"]) == []
+
+
+def test_a_changed_decay_is_reported(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    original = specs["TTBar"]
+    assert original.madspin_card is not None
+    hadronic = "decay t~ > w- b~, w- > j j"
+    leptonic = "decay t~ > w- b~, w- > l- vl~"
+    text = original.madspin_card.read_text(encoding="utf-8")
+    assert hadronic in text
+    card = tmp_path / "TTBar.dat"
+    card.write_text(text.replace(hadronic, leptonic), encoding="utf-8")
+    altered = ProcessSpec(**{**original.__dict__, "madspin_card": card})
+    assert sorted(str(m) for m in compare_process(altered)) == [
+        f"TTBar: madspin {hadronic}: expected present, got absent",
+        f"TTBar: madspin {leptonic}: expected absent, got present",
+    ]

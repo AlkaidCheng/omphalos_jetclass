@@ -62,7 +62,7 @@ processes:
       ickkw: 1
       xqcut: 40.0
       pt_min_pdg: {{6: 450.0}}
-    madspin_card: decays/zprime_madspin.dat
+    madspin_card: madspin/ZPrimeToTT.dat
     matching: true
     pythia:
       Main:timesAllowErrors: 50
@@ -82,7 +82,7 @@ processes:
       misset: 400.0
       pt_min_pdg: {{25: 450.0}}
       eta_max_pdg: {{25: 2.5}}
-    reference_cards: {shipped}/cards/jetclass/HToBB
+    reference_cards: {shipped}/references/jetclass/HToBB
     seed_offset: 70000000
 """
 
@@ -91,8 +91,8 @@ processes:
 def study(tmp_path: Path) -> Path:
     (tmp_path / "models" / "zprime").mkdir(parents=True)
     (tmp_path / "models" / "zprime" / "__init__.py").write_text("")
-    (tmp_path / "decays").mkdir()
-    (tmp_path / "decays" / "zprime_madspin.dat").write_text(
+    (tmp_path / "madspin").mkdir()
+    (tmp_path / "madspin" / "ZPrimeToTT.dat").write_text(
         "set spinmode none\ndecay t > w+ b, w+ > j j\ndecay t~ > w- b~, w- > j j\n"
     )
     path = tmp_path / "study.yaml"

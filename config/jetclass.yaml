@@ -21,7 +21,7 @@
 
 common:
   # Run-card values shared by every process, taken from the official run cards
-  # (cards/jetclass/<process>/run_card.dat, identical across the ten processes
+  # (references/jetclass/<process>/run_card.dat, identical across the ten processes
   # for these parameters); the per-process blocks below hold the rest.
   run_card:
     lpp1: 1
@@ -79,7 +79,7 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 10000000
-    reference_cards: cards/jetclass/HToBB
+    reference_cards: references/jetclass/HToBB
 
   HToCC:
     label: Hcc
@@ -96,7 +96,7 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 20000000
-    reference_cards: cards/jetclass/HToCC
+    reference_cards: references/jetclass/HToCC
 
   HToGG:
     label: Hgg
@@ -110,7 +110,7 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 30000000
-    reference_cards: cards/jetclass/HToGG
+    reference_cards: references/jetclass/HToGG
 
   HToWW4Q:
     label: H4q
@@ -127,7 +127,7 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 40000000
-    reference_cards: cards/jetclass/HToWW4Q
+    reference_cards: references/jetclass/HToWW4Q
 
   HToWW2Q1L:
     label: Hqql
@@ -151,7 +151,7 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 50000000
-    reference_cards: cards/jetclass/HToWW2Q1L
+    reference_cards: references/jetclass/HToWW2Q1L
 
   TTBar:
     label: Tbqq
@@ -162,8 +162,8 @@ processes:
     run_card:
       pt_min_pdg: {6: 450.0}
       eta_max_pdg: {6: 2.5}
-    madspin_card: cards/jetclass/TTBar/madspin_card.dat
-    reference_cards: cards/jetclass/TTBar
+    madspin_card: madspin/TTBar.dat
+    reference_cards: references/jetclass/TTBar
 
   TTBarLep:
     label: Tbl
@@ -174,8 +174,8 @@ processes:
     run_card:
       pt_min_pdg: {6: 450.0}
       eta_max_pdg: {6: 2.5}
-    madspin_card: cards/jetclass/TTBarLep/madspin_card.dat
-    reference_cards: cards/jetclass/TTBarLep
+    madspin_card: madspin/TTBarLep.dat
+    reference_cards: references/jetclass/TTBarLep
 
   WToQQ:
     label: Wqq
@@ -191,7 +191,7 @@ processes:
       etaj: 5.0
       drjj: 0.01
       misset: 450.0
-    reference_cards: cards/jetclass/WToQQ
+    reference_cards: references/jetclass/WToQQ
 
   ZToQQ:
     label: Zqq
@@ -205,7 +205,7 @@ processes:
       etaj: 5.0
       drjj: 0.01
       misset: 450.0
-    reference_cards: cards/jetclass/ZToQQ
+    reference_cards: references/jetclass/ZToQQ
 
   ZJetsToNuNu:
     label: QCD
@@ -225,4 +225,4 @@ processes:
       drjj: 0.0
       misset: 450.0
     matching: true
-    reference_cards: cards/jetclass/ZJetsToNuNu
+    reference_cards: references/jetclass/ZJetsToNuNu
