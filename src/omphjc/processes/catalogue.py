@@ -2,12 +2,11 @@
 
 Processes are defined as data in a YAML file, ``config/jetclass.yaml`` for the
 ten JetClass classes. Each entry records the MadGraph model, the process
-definitions, the run-card settings that pin the physics, the MadSpin card when
-the heavy resonances are decayed, whether the sample is MLM-matched, the
-per-process seed offset and, when official cards exist, the directory holding
-them as the reference the entry is checked against. Paths are relative to the
-catalogue file, and a model whose directory exists under the catalogue's
-models directory is imported from there.
+definitions, the run-card and Pythia settings, the MadSpin card when the heavy
+resonances are decayed, whether the sample is MLM-matched, the seed offset and,
+optionally, the reference cards ``omphjc check-cards`` compares it with. A
+``common`` block holds the settings shared by every entry and names the Delphes
+card. Paths are relative to the catalogue file.
 """
 
 from collections.abc import Mapping
@@ -77,9 +76,8 @@ class ProcessSpec:
     matching : bool
         Whether the sample is MLM-matched (``ickkw = 1``).
     seed_offset : int
-        Offset added to every job seed of the process, 0 unless the entry
-        sets one; the official production offset its Higgs samples so that
-        they never share a random sequence with another process.
+        Offset added to every job seed of the process; 0 unless the entry
+        sets one.
     model_path : Path or None
         Directory of the model when it ships with the catalogue; ``None``
         leaves the model to MadGraph.
@@ -90,8 +88,8 @@ class ProcessSpec:
         catalogue in its ``common`` block; ``None`` when the catalogue names
         none.
     reference_cards : Path or None
-        Directory of the reference (official) MadGraph cards the entry is
-        checked against; ``None`` when there is nothing to check against.
+        Directory of the MadGraph cards ``omphjc check-cards`` compares the
+        entry with; ``None`` for an entry that is not compared.
     """
 
     name: str
@@ -167,16 +165,16 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     Returns
     -------
     Mapping[str, ProcessSpec]
-        Specifications in file order, with the common run-card settings
-        merged into each process (process values win).
+        Specifications in file order, with the common run-card and Pythia
+        settings merged into each entry (the entry's values win).
 
     Raises
     ------
     ValueError
-        If an entry lacks a required key, holds an unknown key or a value of
-        the wrong type, names a file that does not exist, shares its label
-        with another entry, or is matched while the catalogue has no
-        ``pythia_matching`` block switching matching on.
+        If the ``common`` block or an entry holds an unknown key, an entry
+        lacks a required key or holds a value of the wrong type, a named file
+        does not exist, two entries share a label, or an entry is matched
+        while the catalogue has no ``pythia_matching`` block.
     """
     with path.open(encoding="utf-8") as stream:
         document = yaml.safe_load(stream)

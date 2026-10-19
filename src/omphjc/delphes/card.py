@@ -9,8 +9,8 @@ ships with Python, and exposes the evaluated configuration as keys and values.
 Two cards that differ only in whitespace, comments, loop spelling or the order
 of definitions therefore compare equal.
 
-The official JetClass card is shipped as a reference to compare against; the
-card used for a run may be any file.
+The official JetClass card is shipped under ``config/references/`` as the
+default reference for comparisons; a run uses the card the catalogue names.
 """
 
 import math
@@ -158,8 +158,7 @@ def reference_card() -> DelphesCard:
 def with_random_seed(text: str, seed: int) -> str:
     """Return `text` with a ``set RandomSeed`` line prepended.
 
-    Without such a line Delphes seeds its random generator from the clock,
-    as the official production did.
+    Without such a line Delphes seeds its random generator from the clock.
     """
     return f"set RandomSeed {seed}\n\n{text}"
 

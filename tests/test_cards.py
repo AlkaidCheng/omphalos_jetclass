@@ -133,7 +133,7 @@ def test_launch_commands_reject_a_non_positive_event_count(
         launch_commands(specs["HToBB"], process_dir=Path("x"), n_events=0, seed=1)
 
 
-def test_madspin_card_is_the_official_one(specs: Mapping[str, ProcessSpec]) -> None:
+def test_madspin_card_text_is_the_named_card(specs: Mapping[str, ProcessSpec]) -> None:
     text = madspin_card_text(specs["TTBarLep"])
     card = specs["TTBarLep"].madspin_card
     assert card is not None and text == card.read_text("utf-8")

@@ -1,14 +1,11 @@
-"""Compare catalogue entries with their reference cards.
+"""Compare catalogue entries with their reference cards (``omphjc check-cards``).
 
-A reference is the set of MadGraph cards an entry reproduces; for the JetClass
-processes these are the official gridpack cards, MadGraph 3.1.1 templates with
-the values filled in plus a launch script with a few overrides, while this
-package applies its settings at launch. The comparison is therefore made value
-by value: it reports every setting the catalogue applies that differs from the
-reference and every tracked reference setting the catalogue leaves out. It is
-a dedicated check (``omphjc check-cards``), not a step of generation: a
-catalogue may depart from its references on purpose, and processes without
-reference cards are not compared.
+The reference of a JetClass process is its official gridpack cards: a run card
+and a launch script with ``set`` overrides, a process card and, for the top
+processes, a MadSpin card. The comparison reports, value by value, every
+setting an entry applies that differs from its reference and every tracked
+reference setting the entry leaves out. Entries without reference cards are
+not compared.
 """
 
 from collections.abc import Iterable

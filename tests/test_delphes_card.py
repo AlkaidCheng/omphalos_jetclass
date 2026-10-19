@@ -15,7 +15,7 @@ from omphjc.delphes import (
 from omphjc.processes import get_process
 
 
-def test_packaged_reference_matches_the_official_hash() -> None:
+def test_shipped_reference_matches_the_official_hash() -> None:
     digest = hashlib.sha256(reference_card_text().encode("utf-8")).hexdigest()
     assert digest == REFERENCE_CARD_SHA256
 

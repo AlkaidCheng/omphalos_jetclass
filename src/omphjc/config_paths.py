@@ -1,11 +1,11 @@
 """Locate the configuration shipped with the package.
 
-The repository keeps it in ``config/`` at the top level: the process catalogue,
-the files a run reads (models, MadSpin and Delphes cards) and, under
-``references/``, the official JetClass cards kept for comparison. The package reaches
-the same directory as ``omphjc/config``, so an installed package finds its copy
-next to its own modules. Every accessor returns a real filesystem path that
-external tools such as MadGraph can use.
+The repository keeps it in ``config/`` at the top level: the process
+catalogue, the files a run reads (models, MadSpin and Delphes cards) and, under
+``references/``, the official JetClass cards kept for comparison. The package
+reaches the same directory as ``omphjc/config``, so an installed package finds
+its copy next to its own modules. Every accessor returns a real filesystem path
+that external tools such as MadGraph can use.
 """
 
 import shutil
