@@ -146,3 +146,30 @@ def test_load_catalogue_rejects_duplicate_labels(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match=r"more than one process: \['Same'\]"):
         load_catalogue(path)
+
+
+def test_the_delphes_card_is_named_once_for_every_process(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    card = catalogue_path().parent / "delphes" / "delphes_card_JetClass.tcl"
+    assert {spec.delphes_card for spec in specs.values()} == {card}
+
+
+def test_load_catalogue_checks_the_common_block(tmp_path: Path) -> None:
+    entry = (
+        "processes:\n  X:\n    label: X\n    description: d\n    model: sm\n"
+        "    processes: ['p p > z']\n    run_card: {}\n"
+    )
+    typo = tmp_path / "typo.yaml"
+    typo.write_text("common:\n  delphes_cards: d.tcl\n" + entry, encoding="utf-8")
+    with pytest.raises(
+        ValueError, match="common block has unknown keys.*delphes_cards"
+    ):
+        load_catalogue(typo)
+    missing = tmp_path / "missing.yaml"
+    missing.write_text("common:\n  delphes_card: d.tcl\n" + entry, encoding="utf-8")
+    with pytest.raises(ValueError, match="common: delphes_card 'd.tcl' does not exist"):
+        load_catalogue(missing)
+    bare = tmp_path / "bare.yaml"
+    bare.write_text(entry, encoding="utf-8")
+    assert load_catalogue(bare)["X"].delphes_card is None

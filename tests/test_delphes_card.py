@@ -6,11 +6,13 @@ import pytest
 from omphjc.delphes import (
     REFERENCE_CARD_SHA256,
     compare_cards,
+    load_card,
     parse_card,
     reference_card,
     reference_card_text,
     with_random_seed,
 )
+from omphjc.processes import get_process
 
 
 def test_packaged_reference_matches_the_official_hash() -> None:
@@ -104,3 +106,9 @@ def test_random_seed_becomes_a_top_level_setting() -> None:
 def test_invalid_tcl_is_rejected() -> None:
     with pytest.raises(ValueError, match="does not evaluate"):
         parse_card("module FastJetFinder Broken {\n  set ParameterR\n")
+
+
+def test_the_card_a_run_reads_starts_as_the_official_one() -> None:
+    card = get_process("HToBB").delphes_card
+    assert card is not None
+    assert compare_cards(load_card(card), reference_card()) == []

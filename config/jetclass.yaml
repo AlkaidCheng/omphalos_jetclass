@@ -20,6 +20,15 @@
 #   https://github.com/jet-universe/jetclass_generation/blob/ae722ea560efa01c6ed814c72d15b7cdafdf3449/run.sh
 
 common:
+  # UFO models imported by path: model "heft-ckm" uses models/heft/ with its
+  # restriction card models/heft/restrict_ckm.dat.
+  models_dir: models
+
+  # Delphes card of the detector simulation, a copy of the official card
+  # references/jetclass/delphes_card.tcl. Point it at another card to change the
+  # detector for every process.
+  delphes_card: delphes/delphes_card_JetClass.tcl
+
   # Run-card values shared by every process, taken from the official run cards
   # (references/jetclass/<process>/run_card.dat, identical across the ten processes
   # for these parameters); the per-process blocks below hold the rest.

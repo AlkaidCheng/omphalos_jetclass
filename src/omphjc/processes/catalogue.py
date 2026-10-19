@@ -37,6 +37,9 @@ _OPTIONAL_KEYS = frozenset(
         "seed_offset",
     }
 )
+_COMMON_KEYS = frozenset(
+    {"run_card", "pythia", "pythia_matching", "models_dir", "delphes_card"}
+)
 _DEFAULT_MODELS_DIR = "models"
 
 
@@ -80,6 +83,10 @@ class ProcessSpec:
         leaves the model to MadGraph.
     madspin_card : Path or None
         MadSpin card decaying the heavy resonances; ``None`` for no MadSpin.
+    delphes_card : Path or None
+        Delphes card of the detector simulation, named once for the whole
+        catalogue in its ``common`` block; ``None`` when the catalogue names
+        none.
     reference_cards : Path or None
         Directory of the reference (official) MadGraph cards the entry is
         checked against; ``None`` when there is nothing to check against.
@@ -98,6 +105,7 @@ class ProcessSpec:
     seed_offset: int
     model_path: Path | None
     madspin_card: Path | None
+    delphes_card: Path | None
     reference_cards: Path | None
 
     @property
@@ -150,9 +158,9 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     path : Path
         YAML file with an optional ``common`` block (``run_card`` and
         ``pythia`` settings shared by every process, ``pythia_matching``
-        settings for the matched ones, and ``models_dir``, by default
-        ``models``) and a ``processes`` mapping. Paths inside are resolved relative to
-        the file's directory.
+        settings for the matched ones, the ``delphes_card`` and the
+        ``models_dir``, by default ``models``) and a ``processes`` mapping.
+        Paths inside are resolved relative to the file's directory.
 
     Returns
     -------
@@ -172,11 +180,15 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
         document = yaml.safe_load(stream)
     base = path.parent
     common = document.get("common", {})
+    unknown = common.keys() - _COMMON_KEYS
+    if unknown:
+        raise ValueError(f"The common block has unknown keys: {sorted(unknown)}")
     shared = _Shared(
         run_card=_read_run_card(common.get("run_card", {})),
         pythia=_read_settings(common.get("pythia", {})),
         pythia_matching=_read_settings(common.get("pythia_matching", {})),
         models_dir=base / common.get("models_dir", _DEFAULT_MODELS_DIR),
+        delphes_card=_existing("common", common, "delphes_card", base, directory=False),
     )
     specs = {
         name: _build_spec(name, entry, shared, base=base)
@@ -197,6 +209,7 @@ class _Shared:
     pythia: Mapping[str, SettingValue]
     pythia_matching: Mapping[str, SettingValue]
     models_dir: Path
+    delphes_card: Path | None
 
 
 def _build_spec(
@@ -233,19 +246,24 @@ def _build_spec(
         matching=matching,
         seed_offset=int(entry.get("seed_offset", 0)),
         model_path=model_dir if model_dir.is_dir() else None,
-        madspin_card=_existing(name, entry, "madspin_card", base, directory=False),
-        reference_cards=_existing(name, entry, "reference_cards", base, directory=True),
+        madspin_card=_existing(
+            f"Process {name!r}", entry, "madspin_card", base, directory=False
+        ),
+        delphes_card=shared.delphes_card,
+        reference_cards=_existing(
+            f"Process {name!r}", entry, "reference_cards", base, directory=True
+        ),
     )
 
 
 def _existing(
-    name: str, entry: Mapping[str, Any], key: str, base: Path, *, directory: bool
+    owner: str, block: Mapping[str, Any], key: str, base: Path, *, directory: bool
 ) -> Path | None:
-    if entry.get(key) is None:
+    if block.get(key) is None:
         return None
-    path = base / str(entry[key])
+    path = base / str(block[key])
     if directory and not path.is_dir() or not directory and not path.is_file():
-        raise ValueError(f"Process {name!r}: {key} {str(entry[key])!r} does not exist")
+        raise ValueError(f"{owner}: {key} {str(block[key])!r} does not exist")
     return path
 
 
