@@ -29,3 +29,5 @@
   process (`pythia:`) or per run (`omphjc pythia show --set KEY=VALUE`). (#3)
 - The five-flavour `p` and `j` definitions written for every process live in
   the catalogue's `common.definitions`. (#3)
+- `docs/guide.md` introduces MadGraph, Pythia and Delphes to newcomers: what
+  each program does and the syntax of the files it reads. (#4)
