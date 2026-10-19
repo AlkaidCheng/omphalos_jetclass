@@ -17,9 +17,9 @@ derived in Parnassus's own stable-particle convention.
 
 | Step | What it does | Configuration it reads | What it writes |
 |---|---|---|---|
-| Process catalogue | Defines each process: model, process lines, run-card cuts, MadSpin card, matching, seed offset | `config/jetclass.yaml`, `config/cards/jetclass/<process>/`, `config/models/` | the MadGraph scripts and Pythia settings of every later step |
+| Process catalogue | Defines each process: model, process lines, run-card cuts, MadSpin card, matching, seed offset | `config/jetclass.yaml`, `config/models/`, `config/madspin/` | the MadGraph scripts and Pythia settings of every later step |
 | MadGraph5_aMC@NLO | Generates the hard process (and MadSpin decays) at parton level | process and launch scripts written from the catalogue | `events.lhe.gz`, the banner (cross section, seed, run card as used) |
-| DelphesPythia8 | Showers and hadronises with Pythia 8 and simulates the detector, in one process, so MLM matching runs where the catalogue asks for it | `pythia.cmnd` (from `common.pythia`, the matching block and the run's seed), `config/cards/delphes/delphes_card_JetClass.tcl` | `delphes.root` with the full generator record in its `Particle` branch |
+| DelphesPythia8 | Showers and hadronises with Pythia 8 and simulates the detector, in one process, so MLM matching runs where the catalogue asks for it | `pythia.cmnd` (from `common.pythia`, the matching block and the run's seed), `config/delphes/delphes_card_JetClass.tcl` (`common.delphes_card`) | `delphes.root` with the full generator record in its `Particle` branch |
 | extract *(planned)* | Reads the generator record out of the Delphes file | — | `simulation.parquet`: every particle with mothers, daughters and vertices |
 | convert *(planned)* | Applies Parnassus's stable-particle convention (cτ > 10 mm) | — | `parnassus.parquet`, or `.hepmc3` for the current Parnassus reader |
 | ntuple *(planned)* | Builds the JetClass jet table (jets, labels, constituents) from the Delphes output | — | `jetclass.parquet` |
@@ -41,15 +41,40 @@ needs MadGraph5_aMC@NLO, Pythia 8 and Delphes built with Pythia support; the
 
 ## Configuration
 
-Everything a user may want to read, cite or adapt lives in `config/`:
+Everything a run reads, and the official JetClass cards it can be compared
+with, lives in `config/`:
 
-- `jetclass.yaml`: the ten JetClass classes as data (model, process lines,
-  run-card settings, MadSpin, matching, seed offsets);
-- `cards/jetclass/<process>/`: the official gridpack cards of the JetClass
-  production, which `check-cards` compares the catalogue with;
-- `cards/delphes/delphes_card_JetClass.tcl`: the official Delphes card;
-- `models/`: the vendored MadGraph UFO models;
-- `PROVENANCE.md`: where each file comes from, with hashes.
+```
+config/
+├── jetclass.yaml                      the process catalogue
+├── models/                            UFO models imported by path
+│   ├── heft/                          + restrict_default.dat, restrict_ckm.dat, …
+│   └── heft_c_mass_jetclass/
+├── madspin/                           MadSpin cards: TTBar.dat, TTBarLep.dat
+├── delphes/                           the Delphes card a run uses
+├── references/jetclass/               official JetClass files, never read by a run
+│   ├── <process>/                     gridpack cards: proc, run, param, pythia8, launch, MadSpin
+│   ├── delphes_card.tcl
+│   └── LICENSE
+└── PROVENANCE.md                      origin and SHA-256 of every shipped file
+```
+
+`jetclass.yaml` names everything else by a path relative to itself: an entry's
+`madspin_card` and `reference_cards`, and the common `delphes_card` and
+`models_dir`. The files in `madspin/` and `delphes/` start as copies of the
+official ones; edit them in your own copy to change decays or the detector, and
+`references/` keeps the originals for `omphjc check-cards` and
+`omphjc delphes compare`.
+
+**Models.** An entry's `model: heft-ckm` imports `models/heft/` by path, so
+MadGraph never downloads it, and the `-ckm` suffix selects
+`models/heft/restrict_ckm.dat`. A name with no folder under `models/`, such as
+`sm` or `sm-ckm`, is left to MadGraph. Model parameters (masses, widths,
+couplings) come from the restriction card: to change one, add a card such as
+`models/zprime/restrict_m2tev.dat` and use `model: zprime-m2tev`. `heft` is
+vendored because MadGraph would download it on first use, and
+`heft_c_mass_jetclass` because the HToCC charm-mass model exists only inside
+the official gridpack.
 
 An installed package carries a copy of this directory. To work from a modified
 catalogue, export the configuration and point the command line at it:
@@ -80,27 +105,30 @@ differences that were intended.
 
 A process is one catalogue entry; no code changes are involved. Export the
 shipped configuration (`omphjc config export ./my_config`) or write a catalogue
-of your own, then point the command line at it with `--catalogue`:
+of your own, then point the command line at it with `--catalogue`. An entry
+needs `label`, `description`, `model` and `processes`; every other key is
+optional:
 
 ```yaml
 processes:
   ZPrimeToTT:
     label: Zptt                        # class name, unique within the catalogue
     description: "$Z' \\to t\\bar{t}$ with up to one extra jet"
-    model: zprime-restricted           # models/zprime/ next to the catalogue, or a MadGraph model
-    definitions: ["tops = t t~"]       # optional multiparticle definitions
+    model: zprime-m2tev                # models/zprime/ with restrict_m2tev.dat
+    definitions: ["tops = t t~"]       # multiparticle definitions
     processes:
       - "p p > zp > tops tops @0"
       - "p p > zp > tops tops j @1"
-    run_card: {ickkw: 1, xqcut: 40.0, pt_min_pdg: {6: 450.0}}
+    run_card: {ickkw: 1, xqcut: 40.0, pt_min_pdg: {6: 450.0}}   # merged over common.run_card
     matching: true                     # MLM matching; adds the Pythia matching block
-    madspin_card: decays/zprime.dat    # optional; MadSpin runs when present
-    reference_cards: cards/zprime      # optional; check-cards compares against these
-    seed_offset: 60000000              # optional; keeps its seeds apart from other processes
+    madspin_card: madspin/ZPrimeToTT.dat   # MadSpin runs when present
+    reference_cards: references/zprime     # check-cards compares against these
+    seed_offset: 60000000              # keeps its seeds apart from other processes
 ```
 
-Paths are relative to the catalogue file. A model whose directory exists under
-`models/` is imported by path; any other model name is left to MadGraph.
+A process you add provides at most a model folder (only when MadGraph does not
+ship the model) and a MadSpin card (only when it decays heavy particles); the
+package writes the MadGraph scripts and the Pythia command file.
 `omphjc check-cards` compares every process that names `reference_cards` and
 lists the others as not checked.
 
@@ -172,12 +200,15 @@ and the process lines; they can be overridden the same way.
 
 ## Delphes cards
 
-The official JetClass Delphes card is packaged and used by default; any card
-can be used instead. Cards are compared as configuration, the way Delphes reads
-them, so layout, comments and definition order never count as differences:
+A run uses the card named by the catalogue's `common.delphes_card`, shipped as
+`config/delphes/delphes_card_JetClass.tcl`, a copy of the official JetClass
+card; point it at any other card to change the detector. Cards are compared as
+configuration, the way Delphes reads them, so layout, comments and definition
+order never count as differences:
 
 ```
-omphjc delphes show                    # execution path, modules and parameters
+omphjc delphes show                    # the official card: execution path, modules, parameters
+omphjc delphes show my_card.tcl        # any other card
 omphjc delphes compare my_card.tcl     # differences from the official card
 ```
 

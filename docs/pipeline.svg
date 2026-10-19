@@ -25,8 +25,8 @@
   <text class="title" x="34" y="72">Process catalogue</text>
   <text class="step" x="34" y="92">one entry per process</text>
   <text class="file" x="34" y="116">config/jetclass.yaml</text>
-  <text class="file" x="34" y="134">config/cards/jetclass/&lt;P&gt;/</text>
-  <text class="file" x="34" y="152">config/models/</text>
+  <text class="file" x="34" y="134">config/models/</text>
+  <text class="file" x="34" y="152">config/madspin/</text>
   <text class="step" x="34" y="182">omphjc processes · check-cards</text>
 
   <!-- 2. madgraph -->
@@ -43,7 +43,7 @@
   <text class="title" x="569" y="72">DelphesPythia8</text>
   <text class="step" x="569" y="92">shower and detector, one process</text>
   <text class="file" x="569" y="116">pythia.cmnd</text>
-  <text class="file" x="569" y="134">delphes_card_JetClass.tcl</text>
+  <text class="file" x="569" y="134">config/delphes/*.tcl</text>
   <text class="file" x="569" y="152">→ delphes.root</text>
   <text class="step" x="569" y="182">omphjc pythia show · delphes show</text>
 

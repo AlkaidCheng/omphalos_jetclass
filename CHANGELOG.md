@@ -19,9 +19,14 @@
   its error and the run card of an event or banner file. (#2)
 - `derive_seeds` gives a job one seed for MadGraph, Pythia and Delphes from the
   process offsets of the official production; unseeded runs stay the default. (#2)
-- A process is one catalogue entry: `reference_cards`, `madspin_card` and the
-  models directory are paths relative to the catalogue, and `check-cards` lists
-  processes without reference cards instead of failing on them. (#3)
+- A process is one catalogue entry: only `label`, `description`, `model` and
+  `processes` are required, `madspin_card` and `reference_cards` are paths
+  relative to the catalogue, and `check-cards` lists processes without
+  reference cards instead of failing on them. (#3)
+- The shipped configuration keeps the files a run reads (`models/`, `madspin/`,
+  `delphes/`) apart from the official JetClass cards kept for comparison
+  (`references/`), and the catalogue names the Delphes card
+  (`common.delphes_card`). (#3)
 - The shared Pythia settings live in the catalogue (`common.pythia`,
   `common.pythia_matching`) with their provenance, and a process or a run may
   override them (`pythia:` block, `omphjc pythia show --set KEY=VALUE`). (#3)
