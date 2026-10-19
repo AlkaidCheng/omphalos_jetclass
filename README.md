@@ -59,9 +59,9 @@ config/
 └── PROVENANCE.md                      origin and SHA-256 of every shipped file
 ```
 
-`jetclass.yaml` names everything else by a path relative to itself: an entry's
-`madspin_card` and `reference_cards`, and the common `delphes_card` and
-`models_dir`. The files in `madspin/` and `delphes/` start as copies of the
+`jetclass.yaml` names everything else by a path, either absolute or relative to
+the catalogue's own folder: an entry's `madspin_card` and `reference_cards`,
+and the common `delphes_card` and `models_dir`. The files in `madspin/` and `delphes/` start as copies of the
 official ones; edit them in your own copy to change decays or the detector, and
 `references/` keeps the originals for `omphjc check-cards` and
 `omphjc delphes compare`.

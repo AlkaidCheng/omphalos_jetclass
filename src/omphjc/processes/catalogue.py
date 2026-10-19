@@ -6,7 +6,7 @@ definitions, the run-card and Pythia settings, the MadSpin card when the heavy
 resonances are decayed, whether the sample is MLM-matched, the seed offset and,
 optionally, the reference cards ``omphjc check-cards`` compares it with. A
 ``common`` block holds the settings shared by every entry and names the Delphes
-card. Paths are relative to the catalogue file.
+card. Paths are absolute or relative to the catalogue file.
 """
 
 from collections.abc import Mapping
@@ -160,7 +160,8 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
         ``pythia`` settings shared by every process, ``pythia_matching``
         settings for the matched ones, the ``delphes_card`` and the
         ``models_dir``, by default ``models``) and a ``processes`` mapping.
-        Paths inside are resolved relative to the file's directory.
+        Relative paths inside are resolved against the file's directory;
+        absolute paths are used as they are.
 
     Returns
     -------

@@ -9,7 +9,7 @@
 # dedicated check, not a step of generation: edit any value here to suit a
 # study, and leave reference_cards out for a process of your own.
 #
-# Paths are relative to this file. A model whose directory exists under
+# Paths are absolute or relative to this file. A model whose directory exists under
 # models/ (heft, heft_c_mass_jetclass) is imported from there; any other name
 # (sm, sm-ckm) is left to MadGraph. A "-suffix" selects a restriction card.
 # A process is decayed by MadSpin when it names a madspin_card.

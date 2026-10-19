@@ -186,3 +186,23 @@ def test_an_entry_needs_only_its_physics(tmp_path: Path) -> None:
     spec = load_catalogue(path)["Z"]
     assert spec.run_card == {"ebeam1": 6800.0}
     assert (spec.seed_offset, spec.matching, spec.madspin) == (0, False, False)
+
+
+def test_paths_may_be_absolute(tmp_path: Path) -> None:
+    shipped = catalogue_path().parent
+    path = tmp_path / "elsewhere" / "absolute.yaml"
+    path.parent.mkdir()
+    path.write_text(
+        f"common:\n  models_dir: {shipped / 'models'}\n"
+        f"  delphes_card: {shipped / 'delphes' / 'delphes_card_JetClass.tcl'}\n"
+        "processes:\n  T:\n    label: T\n    description: d\n    model: heft\n"
+        "    processes: ['p p > t t~']\n"
+        f"    madspin_card: {shipped / 'madspin' / 'TTBar.dat'}\n"
+        f"    reference_cards: {shipped / 'references' / 'jetclass' / 'TTBar'}\n",
+        encoding="utf-8",
+    )
+    spec = load_catalogue(path)["T"]
+    assert spec.model_path == shipped / "models" / "heft"
+    assert spec.delphes_card == shipped / "delphes" / "delphes_card_JetClass.tcl"
+    assert spec.madspin_card == shipped / "madspin" / "TTBar.dat"
+    assert spec.reference_cards == shipped / "references" / "jetclass" / "TTBar"
