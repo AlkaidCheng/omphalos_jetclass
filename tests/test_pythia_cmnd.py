@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -189,3 +190,29 @@ def test_every_setting_is_known_to_pythia(specs: Mapping[str, ProcessSpec]) -> N
         settings = shower_settings(spec, lhe_path=LHE, n_events=10, seed=1)
         for key, value in settings.items():
             assert pythia.readString(f"{key} = {value}"), (spec.name, key, value)
+
+
+def test_catalogue_settings_override_the_derived_matching_values(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    spec = specs["ZJetsToNuNu"]
+    tuned = replace(
+        spec,
+        pythia={**spec.pythia, "JetMatching:qCut": 60.0, "jetmatching:coneradius": 0.4},
+    )
+    settings = shower_settings(tuned, lhe_path=LHE, n_events=10, seed=1)
+    assert settings["JetMatching:qCut"] == "60"
+    assert settings["jetmatching:coneradius"] == "0.4"
+    assert "JetMatching:coneRadius" not in settings
+    run = shower_settings(
+        tuned, lhe_path=LHE, n_events=10, seed=1, overrides={"jetmatching:qcut": 70}
+    )
+    assert run["jetmatching:qcut"] == "70"
+    assert "JetMatching:qCut" not in run
+
+
+def test_run_controls_override_the_catalogue(specs: Mapping[str, ProcessSpec]) -> None:
+    spec = specs["HToBB"]
+    tuned = replace(spec, pythia={**spec.pythia, "Main:numberOfEvents": 5})
+    settings = shower_settings(tuned, lhe_path=LHE, n_events=10, seed=None)
+    assert settings["Main:numberOfEvents"] == "10"

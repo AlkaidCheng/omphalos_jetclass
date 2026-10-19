@@ -142,36 +142,38 @@ package writes for a process:
 $ omphjc pythia show ZJetsToNuNu --events 1000 --seed 1
 ! Pythia 8 settings for DelphesPythia8: ZJetsToNuNu
 !
+JetMatching:qCut = 45
+JetMatching:nJetMax = 2
+JetMatching:nQmatch = 5
+Beams:setProductionScalesFromLHEF = on
+JetMatching:merge = on
+JetMatching:scheme = 1
+JetMatching:coneRadius = 1
+JetMatching:doShowerKt = off
 Beams:frameType = 4
 Check:epTolErr = 0.01
 JetMatching:setMad = off
 JetMatching:etaJetMax = 1000
 Beams:LHEF = events.lhe
 Main:numberOfEvents = 1000
-Beams:setProductionScalesFromLHEF = on
-JetMatching:merge = on
-JetMatching:scheme = 1
-JetMatching:coneRadius = 1
-JetMatching:doShowerKt = off
-JetMatching:qCut = 45
-JetMatching:nJetMax = 2
-JetMatching:nQmatch = 5
 Random:setSeed = on
 Random:seed = 1
 ```
 
+The lines are written in the order they apply: like Pythia, read a later line
+as overriding an earlier one.
+
+- The first eight lines are the MLM matching block, written only for a process
+  with `matching: true` in the catalogue (ZJetsToNuNu). `JetMatching:qCut` is
+  1.5 × the run card's `xqcut`, `JetMatching:nJetMax` the largest number of
+  jets in the process lines and `JetMatching:nQmatch` the run card's
+  `maxjetflavor`; the next five are MadGraph's fixed matching choices.
 - `Beams:frameType`, `Check:epTolErr`, `JetMatching:setMad` and
   `JetMatching:etaJetMax` are the settings MadGraph's own Pythia interface adds
   to every run; they are written for every process.
 - `Beams:LHEF`, `Main:numberOfEvents` and `Random:*` describe the run:
   `--lhe`, `--events` and `--seed`. Without `--seed` the shower is seeded from
   the clock (`Random:seed = 0`).
-- The `JetMatching:*` block and `Beams:setProductionScalesFromLHEF` implement
-  MLM matching and appear only for a process with `matching: true` in the
-  catalogue (ZJetsToNuNu). `JetMatching:qCut` is 1.5 × the run card's `xqcut`,
-  `JetMatching:nQmatch` its `maxjetflavor`, `JetMatching:nJetMax` the largest
-  number of jets in the process lines; the remaining values are MadGraph's
-  fixed choices.
 
 ### Changing the settings
 

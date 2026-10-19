@@ -2,18 +2,19 @@
 
 The official production showered through MadGraph's Pythia interface, which
 writes a command file from the run card. ``DelphesPythia8`` reads a command
-file of its own, so this module writes the equivalent one from three sources:
+file of its own, so this module writes the equivalent one, in layers where a
+later layer overrides an earlier one:
 
-* the catalogue's ``pythia`` settings, written for every process (what
-  MadGraph's interface injects into every run), and its ``pythia_matching``
-  settings, added for MLM-matched processes;
-* the values MadGraph derives from the run card for a matched process:
-  ``JetMatching:qCut = 1.5 × xqcut``, ``JetMatching:nQmatch = maxjetflavor``
-  and ``JetMatching:nJetMax``, the most light jets in any process line
-  (``setup_Pythia8RunAndCard`` in ``madgraph/interface/madevent_interface.py``,
-  https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544-L4602);
-* the run controls of one job: the LHE file, the event count, the seed, and
-  any overrides given by the caller, which win over everything else.
+1. for an MLM-matched process, the values MadGraph derives from the run card:
+   ``JetMatching:qCut = 1.5 × xqcut``, ``JetMatching:nQmatch = maxjetflavor``
+   and ``JetMatching:nJetMax``, the most light jets in any process line
+   (``setup_Pythia8RunAndCard`` in ``madgraph/interface/madevent_interface.py``,
+   https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544-L4602),
+   then the catalogue's ``pythia_matching`` block;
+2. the catalogue's ``pythia`` settings, written for every process (what
+   MadGraph's interface injects into every run), with the entry's own;
+3. the run controls of one job: the LHE file, the event count and the seed;
+4. any overrides given by the caller.
 
 MadGraph's interface also registers bookkeeping keys of its own
 (``HEPMCoutput:*``, ``SysCalc:*``, ``LHEFInputs:*``). They are not Pythia
@@ -37,7 +38,7 @@ MadGraph's rule when the Pythia card leaves ``qCut`` at -1:
 ``setup_Pythia8RunAndCard``,
 https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544
 (the same line in MadGraph 3.1.1 gave the official ``qCut = 45`` for
-``xqcut = 30``). A catalogue ``pythia`` override of ``JetMatching:qCut`` wins.
+``xqcut = 30``). A ``JetMatching:qCut`` written in the catalogue replaces it.
 """
 
 PYTHIA_SEED_LIMIT = 900_000_000
@@ -91,12 +92,14 @@ def shower_settings(
         draws the seed from the clock (Pythia's built-in default is one fixed
         seed).
     overrides : Mapping[str, SettingValue] or None
-        Settings applied last, over everything derived above.
+        Settings applied last, over every other layer.
 
     Returns
     -------
     dict[str, str]
-        Settings in file order, values as Pythia reads them.
+        One entry per setting, keys matched case-insensitively as Pythia
+        reads them, in the order of the layer that first sets them; values as
+        Pythia reads them.
 
     Raises
     ------
@@ -107,23 +110,21 @@ def shower_settings(
         raise ValueError(f"n_events must be positive, got {n_events}")
     if seed is not None and not 1 <= seed <= PYTHIA_SEED_LIMIT:
         raise ValueError(f"seed must be between 1 and {PYTHIA_SEED_LIMIT}, got {seed}")
-    settings = {key: format_setting(value) for key, value in spec.pythia.items()}
-    settings["Beams:LHEF"] = str(lhe_path)
-    settings["Main:numberOfEvents"] = str(n_events)
+    layers: list[Mapping[str, SettingValue]] = []
     if spec.matching:
-        settings.update(
-            (key, format_setting(value)) for key, value in spec.pythia_matching.items()
-        )
-        settings["JetMatching:qCut"] = format_setting(matching_scale(spec))
-        settings["JetMatching:nJetMax"] = str(max_matched_jets(spec))
-        settings["JetMatching:nQmatch"] = str(
-            int(_run_card_number(spec, "maxjetflavor"))
-        )
-    settings["Random:setSeed"] = "on"
-    settings["Random:seed"] = "0" if seed is None else str(seed)
-    for key, value in (overrides or {}).items():
-        settings[key] = format_setting(value)
-    return settings
+        layers.append(_derived_matching_settings(spec))
+        layers.append(spec.pythia_matching)
+    layers.append(spec.pythia)
+    layers.append(
+        {
+            "Beams:LHEF": str(lhe_path),
+            "Main:numberOfEvents": n_events,
+            "Random:setSeed": True,
+            "Random:seed": 0 if seed is None else seed,
+        }
+    )
+    layers.append(overrides or {})
+    return _merge(layers)
 
 
 def format_setting(value: SettingValue) -> str:
@@ -221,6 +222,23 @@ def compare_settings(
             key, value = expected[lowered]
             differences.append(Difference(key, value, actual[lowered][1]))
     return differences
+
+
+def _derived_matching_settings(spec: ProcessSpec) -> dict[str, SettingValue]:
+    return {
+        "JetMatching:qCut": matching_scale(spec),
+        "JetMatching:nJetMax": max_matched_jets(spec),
+        "JetMatching:nQmatch": int(_run_card_number(spec, "maxjetflavor")),
+    }
+
+
+def _merge(layers: Iterable[Mapping[str, SettingValue]]) -> dict[str, str]:
+    """Merge settings so that later layers win, matching keys case-insensitively."""
+    merged: dict[str, tuple[str, str]] = {}
+    for layer in layers:
+        for key, value in layer.items():
+            merged[key.lower()] = (key, format_setting(value))
+    return dict(merged.values())
 
 
 def _values_equal(left: str, right: str) -> bool:
