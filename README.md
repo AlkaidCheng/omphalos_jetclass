@@ -47,12 +47,12 @@ with, lives in `config/`:
 ```
 config/
 ├── jetclass.yaml                      the process catalogue
-├── models/                            UFO models imported by path
-│   ├── heft/                          + restrict_default.dat, restrict_ckm.dat, …
+├── models/                            MadGraph models (UFO), one folder each
+│   ├── heft/                          model files and restriction cards (parameter values)
 │   └── heft_c_mass_jetclass/
-├── madspin/                           MadSpin cards: TTBar.dat, TTBarLep.dat
-├── delphes/                           the Delphes card a run uses
-├── references/jetclass/               official JetClass files, never read by a run
+├── madspin/                           MadSpin cards
+├── delphes/                           Delphes cards
+├── references/jetclass/               official JetClass cards, for comparison
 │   ├── <process>/                     gridpack cards: proc, run, param, pythia8, launch, MadSpin
 │   ├── delphes_card.tcl
 │   └── LICENSE
@@ -66,15 +66,18 @@ official ones; edit them in your own copy to change decays or the detector, and
 `references/` keeps the originals for `omphjc check-cards` and
 `omphjc delphes compare`.
 
-**Models.** An entry's `model: heft-ckm` imports `models/heft/` by path, so
-MadGraph never downloads it, and the `-ckm` suffix selects
-`models/heft/restrict_ckm.dat`. A name with no folder under `models/`, such as
-`sm` or `sm-ckm`, is left to MadGraph. Model parameters (masses, widths,
-couplings) come from the restriction card: to change one, add a card such as
-`models/zprime/restrict_m2tev.dat` and use `model: zprime-m2tev`. `heft` is
-vendored because MadGraph would download it on first use, and
-`heft_c_mass_jetclass` because the HToCC charm-mass model exists only inside
-the official gridpack.
+**Models.** A model folder holds the model's Python files (its particles,
+parameters and interactions) and its restriction cards, `restrict_<name>.dat`.
+A restriction card gives every parameter of the model a value; MadGraph applies
+it on import and removes the parameters set to 0, with every interaction that
+vanishes with them. An entry's `model: heft-ckm` imports `models/heft/` by path,
+so MadGraph never downloads it, with `models/heft/restrict_ckm.dat`; plain
+`heft` uses `restrict_default.dat`. A name with no folder under `models/`, such
+as `sm` or `sm-ckm`, is left to MadGraph. To run with other parameter values,
+add a card such as `models/zprime/restrict_m2tev.dat` and use
+`model: zprime-m2tev`. `heft` is vendored because MadGraph would download it on
+first use, and `heft_c_mass_jetclass` because the HToCC charm-mass model exists
+only inside the official gridpack.
 
 An installed package carries a copy of this directory. To work from a modified
 catalogue, export the configuration and point the command line at it:
