@@ -26,7 +26,7 @@ RunCardValue = bool | int | float | str | dict[int, float]
 SettingValue = bool | int | float | str
 """A Pythia setting value as written in the catalogue."""
 
-_REQUIRED_KEYS = frozenset({"label", "description", "model", "processes", "run_card"})
+_REQUIRED_KEYS = frozenset({"label", "description", "model", "processes"})
 _OPTIONAL_KEYS = frozenset(
     {
         "definitions",
@@ -34,6 +34,7 @@ _OPTIONAL_KEYS = frozenset(
         "madspin_card",
         "reference_cards",
         "pythia",
+        "run_card",
         "seed_offset",
     }
 )
@@ -65,7 +66,8 @@ class ProcessSpec:
         Process definitions; the first becomes ``generate`` and the rest
         ``add process``.
     run_card : Mapping[str, RunCardValue]
-        Run-card settings applied at launch, common settings included.
+        Run-card settings applied at launch: the catalogue's common settings
+        with the entry's own merged in (the entry wins).
     pythia : Mapping[str, SettingValue]
         Pythia settings written for every run of the process: the
         catalogue's common ``pythia`` block with the process's own entries
@@ -222,7 +224,7 @@ def _build_spec(
     if unknown:
         raise ValueError(f"Process {name!r} has unknown keys: {sorted(unknown)}")
     run_card = dict(shared.run_card)
-    run_card.update(_read_run_card(entry["run_card"]))
+    run_card.update(_read_run_card(entry.get("run_card", {})))
     pythia = dict(shared.pythia)
     pythia.update(_read_settings(entry.get("pythia", {})))
     matching = bool(entry.get("matching", False))

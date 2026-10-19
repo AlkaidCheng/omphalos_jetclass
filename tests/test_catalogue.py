@@ -173,3 +173,16 @@ def test_load_catalogue_checks_the_common_block(tmp_path: Path) -> None:
     bare = tmp_path / "bare.yaml"
     bare.write_text(entry, encoding="utf-8")
     assert load_catalogue(bare)["X"].delphes_card is None
+
+
+def test_an_entry_needs_only_its_physics(tmp_path: Path) -> None:
+    path = tmp_path / "minimal.yaml"
+    path.write_text(
+        "common:\n  run_card: {ebeam1: 6800.0}\n"
+        "processes:\n  Z:\n    label: Z\n    description: d\n    model: sm\n"
+        "    processes: ['p p > z']\n",
+        encoding="utf-8",
+    )
+    spec = load_catalogue(path)["Z"]
+    assert spec.run_card == {"ebeam1": 6800.0}
+    assert (spec.seed_offset, spec.matching, spec.madspin) == (0, False, False)
