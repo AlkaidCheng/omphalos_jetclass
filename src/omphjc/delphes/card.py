@@ -38,16 +38,6 @@ from pathlib import Path
 from omphjc.comparison import Difference
 from omphjc.config_paths import delphes_reference_card_path
 
-REFERENCE_CARD_SHA256 = (
-    "bf205dd95fe9fe0031847d76edf70a6a8e125ed65141ea9c479aef453588ed1c"
-)
-"""SHA-256 of the shipped reference card.
-
-The reference is ``delphes_card.tcl`` of jet-universe/jetclass_generation at
-commit ae722ea:
-https://github.com/jet-universe/jetclass_generation/blob/ae722ea560efa01c6ed814c72d15b7cdafdf3449/delphes_card.tcl
-"""
-
 ParameterValue = tuple[str, ...]
 """A Delphes parameter as the list of Tcl elements it evaluates to.
 

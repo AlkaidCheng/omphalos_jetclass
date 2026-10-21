@@ -34,3 +34,5 @@
 - The CMS card distributed with Delphes, from which the JetClass card is
   adapted, ships in `config/references/delphes/` for
   `omphjc delphes compare --reference`. (#5)
+- `config/checksums.json` records the SHA-256 hash of every file the
+  configuration takes from the JetClass production, MadGraph and Delphes. (#6)
