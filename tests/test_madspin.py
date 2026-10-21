@@ -8,7 +8,7 @@ from omphjc.madgraph import (
 from omphjc.processes import ProcessSpec
 
 
-def test_official_top_card_decays_both_tops_hadronically(
+def test_ttbar_card_decays_both_tops_hadronically(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     card = parse_madspin_card(madspin_card_text(specs["TTBar"]))

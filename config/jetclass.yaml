@@ -1,17 +1,33 @@
-# JetClass-I process catalogue.
+# Process catalogue of the ten JetClass-I classes. The keys are described in
+# the package README, sections "Configuration" and "Adding a process".
 #
-# Values follow the official gridpacks of jet-universe/jetclass_generation at
-# commit ae722ea:
-#   https://github.com/jet-universe/jetclass_generation/tree/ae722ea560efa01c6ed814c72d15b7cdafdf3449
-# The vendored copies of those cards live in cards/jetclass/<process>/ and
-# the test suite keeps the two in step: every run-card value here must equal
-# the official one, and every tracked official value must appear here.
-#
-# Model names: "heft" and "heft_c_mass_jetclass" are vendored UFO models under
-# models/; "sm" and "sm-ckm" ship with MadGraph. A "-suffix" selects
-# a restriction card of the model.
+# Sources of the values (PROVENANCE.md lists the origin of every shipped file):
+#   definitions, process lines, model names, run-card values and MadSpin cards:
+#   the official gridpacks of jet-universe/jetclass_generation, copied to
+#   references/jetclass/,
+#     https://github.com/jet-universe/jetclass_generation/tree/ae722ea560efa01c6ed814c72d15b7cdafdf3449/gridpacks
+#   seed_offset: run.sh of the same commit, which adds 10 000 000 x n to the job
+#   number of the n-th Higgs process,
+#     https://github.com/jet-universe/jetclass_generation/blob/ae722ea560efa01c6ed814c72d15b7cdafdf3449/run.sh
+#   Pythia settings: MadGraph5_aMC@NLO 3.8.0, cited at each block below.
 
 common:
+  # MadGraph models imported by path, one folder per model.
+  models_dir: models
+
+  # Delphes card of the detector simulation, a copy of
+  # references/jetclass/delphes_card.tcl.
+  delphes_card: delphes/delphes_card_JetClass.tcl
+
+  # MadGraph multiparticle definitions written for every process, before the
+  # entry's own, from the official proc cards
+  # (references/jetclass/<process>/proc_card_mg5.dat).
+  definitions:
+    - "p = p b b~"   # five-flavour proton
+    - "j = j b b~"   # five-flavour jet
+
+  # Run-card values shared by every process, from the official run cards
+  # (references/jetclass/<process>/run_card.dat).
   run_card:
     lpp1: 1
     lpp2: 1
@@ -27,10 +43,30 @@ common:
     maxjetflavor: 5
     use_syst: false
 
+  # Pythia settings for every process: the PY8Card defaults that MadGraph's
+  # Pythia interface writes into every run (always_write_to_card in
+  # madgraph/various/banner.py,
+  # https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/various/banner.py#L2050-L2089).
+  pythia:
+    Beams:frameType: 4            # events come from a Les Houches event file
+    Check:epTolErr: 0.01          # tolerate the momentum rounding of the LHE file
+    JetMatching:setMad: off       # matching parameters are read from this file, not the LHE banner
+    JetMatching:etaJetMax: 1000.0 # no rapidity limit on the jets that partons are matched to
+
+  # Pythia settings for MLM-matched processes: the fixed values set by
+  # setup_Pythia8RunAndCard in madgraph/interface/madevent_interface.py,
+  # https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544-L4602.
+  pythia_matching:
+    Beams:setProductionScalesFromLHEF: on
+    JetMatching:merge: on
+    JetMatching:scheme: 1         # MLM
+    JetMatching:coneRadius: 1.0
+    JetMatching:doShowerKt: off
+
 processes:
   HToBB:
     label: Hbb
-    description: "H → bb̄ recoiling against Z → νν̄"
+    description: "$H \\to b\\bar{b}$ recoiling against $Z \\to \\nu\\bar{\\nu}$"
     model: heft
     processes:
       - "p p > ve ve~ h, h > b b~"
@@ -43,10 +79,11 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 10000000
+    reference_cards: references/jetclass/HToBB
 
   HToCC:
     label: Hcc
-    description: "H → cc̄ recoiling against Z → νν̄ (massive charm, c̄cH vertex)"
+    description: "$H \\to c\\bar{c}$ recoiling against $Z \\to \\nu\\bar{\\nu}$ (massive charm, $c\\bar{c}H$ vertex)"
     model: heft_c_mass_jetclass
     processes:
       - "p p > ve ve~ h, h > c c~"
@@ -59,10 +96,11 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 20000000
+    reference_cards: references/jetclass/HToCC
 
   HToGG:
     label: Hgg
-    description: "H → gg recoiling against Z → νν̄"
+    description: "$H \\to gg$ recoiling against $Z \\to \\nu\\bar{\\nu}$"
     model: heft
     processes:
       - "p p > ve ve~ h, h > g g"
@@ -72,10 +110,11 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 30000000
+    reference_cards: references/jetclass/HToGG
 
   HToWW4Q:
     label: H4q
-    description: "H → WW* → 4 quarks recoiling against Z → νν̄"
+    description: "$H \\to WW^* \\to 4q$ recoiling against $Z \\to \\nu\\bar{\\nu}$"
     model: heft-ckm
     processes:
       - "p p > ve ve~ h, h > w+ w- > j j j j"
@@ -88,10 +127,11 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 40000000
+    reference_cards: references/jetclass/HToWW4Q
 
   HToWW2Q1L:
     label: Hqql
-    description: "H → WW* → 2 quarks + charged lepton + neutrino, recoiling against Z → νν̄"
+    description: "$H \\to WW^* \\to q q \\ell \\nu$ recoiling against $Z \\to \\nu\\bar{\\nu}$"
     model: heft-ckm
     definitions:
       - "lep = l+ l-"
@@ -111,34 +151,35 @@ processes:
       pt_min_pdg: {25: 450.0}
       eta_max_pdg: {25: 2.5}
     seed_offset: 50000000
+    reference_cards: references/jetclass/HToWW2Q1L
 
   TTBar:
     label: Tbqq
-    description: "tt̄, both tops decaying hadronically (MadSpin)"
+    description: "$t\\bar{t}$, both tops decaying hadronically (MadSpin)"
     model: sm-ckm
     processes:
       - "p p > t t~"
     run_card:
       pt_min_pdg: {6: 450.0}
       eta_max_pdg: {6: 2.5}
-    madspin: true
-    seed_offset: 0
+    madspin_card: madspin/TTBar.dat
+    reference_cards: references/jetclass/TTBar
 
   TTBarLep:
     label: Tbl
-    description: "tt̄, both tops decaying to e/μ + ν + b (MadSpin, dileptonic)"
+    description: "$t\\bar{t}$, both tops decaying to $\\ell \\nu b$ with $\\ell = e, \\mu$ (MadSpin, dileptonic)"
     model: sm-ckm
     processes:
       - "p p > t t~"
     run_card:
       pt_min_pdg: {6: 450.0}
       eta_max_pdg: {6: 2.5}
-    madspin: true
-    seed_offset: 0
+    madspin_card: madspin/TTBarLep.dat
+    reference_cards: references/jetclass/TTBarLep
 
   WToQQ:
     label: Wqq
-    description: "W → qq̄' recoiling against Z → νν̄"
+    description: "$W \\to q\\bar{q}'$ recoiling against $Z \\to \\nu\\bar{\\nu}$"
     model: sm-ckm
     definitions:
       - "wpm = w+ w-"
@@ -150,11 +191,11 @@ processes:
       etaj: 5.0
       drjj: 0.01
       misset: 450.0
-    seed_offset: 0
+    reference_cards: references/jetclass/WToQQ
 
   ZToQQ:
     label: Zqq
-    description: "Z → qq̄ recoiling against Z → νν̄"
+    description: "$Z \\to q\\bar{q}$ recoiling against $Z \\to \\nu\\bar{\\nu}$"
     model: sm-ckm
     processes:
       - "p p > ve ve~ z, z > j j"
@@ -164,11 +205,11 @@ processes:
       etaj: 5.0
       drjj: 0.01
       misset: 450.0
-    seed_offset: 0
+    reference_cards: references/jetclass/ZToQQ
 
   ZJetsToNuNu:
     label: QCD
-    description: "Z → νν̄ + 1 or 2 jets, MLM-matched; the QCD jet class"
+    description: "$Z \\to \\nu\\bar{\\nu}$ + 1 or 2 jets, MLM-matched; the QCD jet class"
     model: sm
     processes:
       - "p p > ve ve~ j @0"
@@ -184,4 +225,4 @@ processes:
       drjj: 0.0
       misset: 450.0
     matching: true
-    seed_offset: 0
+    reference_cards: references/jetclass/ZJetsToNuNu

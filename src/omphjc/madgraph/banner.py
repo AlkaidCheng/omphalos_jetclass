@@ -72,7 +72,13 @@ class Banner:
 
     @property
     def seed(self) -> int:
-        """The ``iseed`` MadGraph ran with."""
+        """The ``iseed`` MadGraph ran with.
+
+        Raises
+        ------
+        ValueError
+            If the run card holds no integer ``iseed``.
+        """
         value = self.run_card.get("iseed")
         if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError(f"The run card holds no integer iseed: {value!r}")

@@ -1,11 +1,13 @@
-# Provenance of the packaged resources
+# Provenance of the shipped configuration
 
-All hashes are SHA-256.
+All hashes are SHA-256. Files under `references/` are kept unchanged as the
+official reference; the files a run reads (`madspin/`, `delphes/`) start as
+byte-identical copies of them and may be edited in an exported configuration.
 
-## cards/jetclass/<process>/
+## references/jetclass/
 
-Cards extracted from the gridpack tarballs of jet-universe/jetclass_generation
-at commit ae722ea (MIT, see `cards/jetclass/LICENSE`):
+Taken from jet-universe/jetclass_generation at commit ae722ea (MIT, see
+`references/jetclass/LICENSE`):
 
 - repository at that commit:
   https://github.com/jet-universe/jetclass_generation/tree/ae722ea560efa01c6ed814c72d15b7cdafdf3449
@@ -17,10 +19,18 @@ Each `<process>/` holds `proc_card_mg5.dat`, `run_card.dat`, `param_card.dat`,
 plus `madspin_card.dat` for the two top processes. The gridpacks were produced
 with MadGraph5_aMC@NLO 3.1.1.
 
-## cards/delphes/delphes_card_JetClass.tcl
-
-`delphes_card.tcl` from the same commit:
+`delphes_card.tcl` is the repository's Delphes card:
 https://github.com/jet-universe/jetclass_generation/blob/ae722ea560efa01c6ed814c72d15b7cdafdf3449/delphes_card.tcl
+
+## madspin/
+
+`TTBar.dat` and `TTBarLep.dat` are copies of
+`references/jetclass/TTBar/madspin_card.dat` and
+`references/jetclass/TTBarLep/madspin_card.dat`.
+
+## delphes/
+
+`delphes_card_JetClass.tcl` is a copy of `references/jetclass/delphes_card.tcl`.
 
 ## models/heft/
 
@@ -40,7 +50,10 @@ restricted, as MadGraph wrote it when the gridpack was produced.
 ## Hashes
 
 ```
-bf205dd95fe9fe0031847d76edf70a6a8e125ed65141ea9c479aef453588ed1c  cards/delphes/delphes_card_JetClass.tcl
+bf205dd95fe9fe0031847d76edf70a6a8e125ed65141ea9c479aef453588ed1c  references/jetclass/delphes_card.tcl
+bf205dd95fe9fe0031847d76edf70a6a8e125ed65141ea9c479aef453588ed1c  delphes/delphes_card_JetClass.tcl
+7b0b5b7056beecf10fae97c97d3490be1dbaaa8bb9a46602320a226477a68750  madspin/TTBar.dat
+a2675696c2a783364d642389196e183325e2acee5da70570635b8e12837f8c78  madspin/TTBarLep.dat
 121806cb4d171d7a8f8974001a3eb4025ecc6ff11b792a625b734e30a0baaa47  models/heft/__init__.py
 f252a54cf4f7605dea8dcdf1013169438ece67185acb11df78a94b569eb997ad  models/heft/coupling_orders.py
 9bb282906d42693cd3072cbc2f36a98e508d511b868cc6ac66fe84fdfc4c5431  models/heft/couplings.py

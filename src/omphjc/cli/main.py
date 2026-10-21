@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 
 from omphjc import __version__
-from omphjc.config_paths import config_root, export_config, models_dir
+from omphjc.config_paths import config_root, export_config
 from omphjc.delphes import DelphesCard, compare_cards, load_card, reference_card
 from omphjc.madgraph import (
     compare_all,
@@ -62,9 +62,7 @@ def processes_show(specs: Catalogue, name: str) -> None:
     click.echo(f"class label: {spec.label}")
     click.echo(f"seed offset: {spec.seed_offset}")
     click.echo("\nprocess script:")
-    for line in proc_card_commands(
-        spec, output_dir=Path(spec.name), models_dir=models_dir()
-    ):
+    for line in proc_card_commands(spec, output_dir=Path(spec.name)):
         click.echo(f"  {line}")
     click.echo("\nlaunch script (1000 events, random seed):")
     for line in launch_commands(
@@ -79,10 +77,14 @@ def processes_show(specs: Catalogue, name: str) -> None:
 @cli.command("check-cards")
 @click.pass_obj
 def check_cards(specs: Catalogue) -> None:
-    """Compare the catalogue with the official JetClass gridpack cards."""
-    mismatches = compare_all(specs.values())
+    """Compare every process that names reference cards with those cards."""
+    checked = [spec for spec in specs.values() if spec.reference_cards is not None]
+    unchecked = [spec.name for spec in specs.values() if spec.reference_cards is None]
+    if unchecked:
+        click.echo(f"Without reference cards, not checked: {', '.join(unchecked)}")
+    mismatches = compare_all(checked)
     if not mismatches:
-        click.echo(f"{len(specs)} processes match the official cards.")
+        click.echo(f"{len(checked)} processes match their reference cards.")
         return
     for mismatch in mismatches:
         click.echo(str(mismatch), err=True)
@@ -136,13 +138,28 @@ def pythia() -> None:
     show_default=True,
     help="Uncompressed LHE file Pythia reads.",
 )
+@click.option(
+    "--set",
+    "assignments",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Override one Pythia setting; may be repeated.",
+)
 @click.pass_obj
 def pythia_show(
-    specs: Catalogue, name: str, n_events: int, seed: int | None, lhe: Path
+    specs: Catalogue,
+    name: str,
+    n_events: int,
+    seed: int | None,
+    lhe: Path,
+    assignments: tuple[str, ...],
 ) -> None:
     """Print the Pythia command file written for one process."""
     spec = _lookup(specs, name)
-    settings = shower_settings(spec, lhe_path=lhe, n_events=n_events, seed=seed)
+    overrides = dict(_assignment(item) for item in assignments)
+    settings = shower_settings(
+        spec, lhe_path=lhe, n_events=n_events, seed=seed, overrides=overrides
+    )
     click.echo(render_cmnd(settings, title=spec.name), nl=False)
 
 
@@ -198,6 +215,15 @@ def _lookup(specs: Catalogue, name: str) -> ProcessSpec:
         raise click.BadParameter(
             f"unknown process {name!r}; choose from {known}"
         ) from None
+
+
+def _assignment(text: str) -> tuple[str, str]:
+    key, separator, value = text.partition("=")
+    if not separator or not key.strip() or not value.strip():
+        raise click.BadParameter(
+            f"expected KEY=VALUE, got {text!r}", param_hint="--set"
+        )
+    return key.strip(), value.strip()
 
 
 def _render(value: tuple[str, ...], limit: int = 8) -> str:

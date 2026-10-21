@@ -1,10 +1,10 @@
 """Random seeds of a job.
 
-A job runs three generators, each with its own random generator: MadGraph
-(``iseed``), Pythia (``Random:seed``) and Delphes (``RandomSeed``). One job
-seed serves all three, so a job is reproducible from its process and its id
-alone, and every process starts its seeds at its own offset, as the official
-production did.
+A job runs three programs, each with a random generator of its own: MadGraph
+(``iseed``), Pythia (``Random:seed``) and Delphes (``RandomSeed``). Job `n` of
+a process gives all three the seed ``seed_offset + n``, where ``seed_offset``
+is the process's catalogue value (0 unless the entry sets one), so the seeds of
+a job follow from its process and number alone.
 """
 
 from dataclasses import dataclass
@@ -38,8 +38,7 @@ def derive_seeds(spec: ProcessSpec, job_id: int) -> Seeds:
     Parameters
     ----------
     spec : ProcessSpec
-        The process, whose ``seed_offset`` keeps its jobs apart from those of
-        every other process.
+        The process; its ``seed_offset`` is added to `job_id`.
     job_id : int
         Positive job number within the process.
 

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1250 400" role="img" aria-label="The omphjc pipeline: the process catalogue in config/ drives MadGraph, which writes an LHE file and its banner; DelphesPythia8 showers the events with Pythia 8 and simulates the detector with the JetClass Delphes card, writing a Delphes ROOT file; the extract stage reads its Particle branch into simulation.parquet; the convert stage applies the Parnassus stable-particle rule and writes parnassus.parquet or a HepMC3 file for Parnassus, while a JetClass ntuple is built from the Delphes output. Stages drawn with dashed borders are planned.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606a"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #24292f; }
+    .title { font-size: 15px; font-weight: 600; }
+    .step { font-size: 12px; fill: #57606a; }
+    .file { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; fill: #0550ae; }
+    .label { font-size: 11.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.4; }
+    .box.planned { stroke-dasharray: 5 4; }
+    .arrow { stroke: #57606a; stroke-width: 1.4; fill: none; marker-end: url(#arrow); }
+    .lane { font-size: 11px; font-weight: 600; letter-spacing: .08em; fill: #57606a; }
+  </style>
+
+  <text class="lane" x="20" y="28">CONFIGURATION</text>
+  <text class="lane" x="290" y="28">GENERATE AND SIMULATE</text>
+  <text class="lane" x="840" y="28">EXTRACT AND CONVERT</text>
+
+  <!-- 1. catalogue -->
+  <rect class="box" x="20" y="48" width="220" height="150" rx="6"/>
+  <text class="title" x="34" y="72">Process catalogue</text>
+  <text class="step" x="34" y="92">one entry per process</text>
+  <text class="file" x="34" y="116">config/jetclass.yaml</text>
+  <text class="file" x="34" y="134">config/models/</text>
+  <text class="file" x="34" y="152">config/madspin/</text>
+  <text class="step" x="34" y="182">omphjc processes · check-cards</text>
+
+  <!-- 2. madgraph -->
+  <rect class="box" x="290" y="48" width="215" height="150" rx="6"/>
+  <text class="title" x="304" y="72">MadGraph5_aMC@NLO</text>
+  <text class="step" x="304" y="92">hard process, MadSpin decays</text>
+  <text class="file" x="304" y="116">proc + launch scripts</text>
+  <text class="file" x="304" y="134">→ events.lhe.gz</text>
+  <text class="file" x="304" y="152">→ banner (σ, seed)</text>
+  <text class="step" x="304" y="182">omphjc processes show</text>
+
+  <!-- 3. delphespythia8 -->
+  <rect class="box" x="555" y="48" width="235" height="150" rx="6"/>
+  <text class="title" x="569" y="72">DelphesPythia8</text>
+  <text class="step" x="569" y="92">shower and detector, one process</text>
+  <text class="file" x="569" y="116">pythia.cmnd</text>
+  <text class="file" x="569" y="134">config/delphes/*.tcl</text>
+  <text class="file" x="569" y="152">→ delphes.root</text>
+  <text class="step" x="569" y="182">omphjc pythia show · delphes show</text>
+
+  <!-- 4. extract -->
+  <rect class="box planned" x="840" y="48" width="160" height="150" rx="6"/>
+  <text class="title" x="854" y="72">extract</text>
+  <text class="step" x="854" y="92">full generator record</text>
+  <text class="file" x="854" y="116">Particle branch</text>
+  <text class="file" x="854" y="134">→ simulation.parquet</text>
+  <text class="step" x="854" y="182">omphjc extract</text>
+
+  <!-- 5. convert -->
+  <rect class="box planned" x="1050" y="48" width="180" height="150" rx="6"/>
+  <text class="title" x="1064" y="72">convert</text>
+  <text class="step" x="1064" y="92">Parnassus convention</text>
+  <text class="file" x="1064" y="116">cτ &gt; 10 mm kept stable</text>
+  <text class="file" x="1064" y="134">→ parnassus.parquet</text>
+  <text class="file" x="1064" y="152">→ or .hepmc3</text>
+  <text class="step" x="1064" y="182">omphjc convert</text>
+
+  <!-- consumers -->
+  <rect class="box planned" x="840" y="250" width="170" height="70" rx="6"/>
+  <text class="title" x="854" y="274">JetClass ntuple</text>
+  <text class="step" x="854" y="294">jets, labels, constituents</text>
+  <text class="step" x="854" y="310">omphjc ntuple</text>
+
+  <rect class="box planned" x="1050" y="250" width="180" height="70" rx="6"/>
+  <text class="title" x="1064" y="274">Parnassus</text>
+  <text class="step" x="1064" y="294">external tool</text>
+
+  <!-- arrows -->
+  <line class="arrow" x1="240" y1="123" x2="290" y2="123"/>
+  <text class="label" x="265" y="115" text-anchor="middle">cards</text>
+  <line class="arrow" x1="505" y1="123" x2="555" y2="123"/>
+  <text class="label" x="530" y="115" text-anchor="middle">LHE</text>
+  <line class="arrow" x1="790" y1="123" x2="840" y2="123"/>
+  <text class="label" x="815" y="115" text-anchor="middle">ROOT</text>
+  <line class="arrow" x1="1000" y1="123" x2="1050" y2="123"/>
+  <text class="label" x="1025" y="115" text-anchor="middle">parquet</text>
+  <path class="arrow" d="M790,160 L815,160 L815,285 L840,285"/>
+  <text class="label" x="808" y="230" text-anchor="end">ROOT</text>
+  <line class="arrow" x1="1140" y1="198" x2="1140" y2="250"/>
+  <text class="label" x="1150" y="228">input</text>
+
+  <!-- legend -->
+  <rect class="box" x="20" y="244" width="18" height="12" rx="2"/>
+  <text class="label" x="46" y="254">solid: available now</text>
+  <rect class="box planned" x="20" y="266" width="18" height="12" rx="2"/>
+  <text class="label" x="46" y="276">dashed: planned stage</text>
+
+  <!-- job directory -->
+  <text class="step" x="20" y="352">Each job writes one directory:</text>
+  <text class="file" x="20" y="372">manifest.json · cards/ · events.lhe.gz · delphes.root · simulation.parquet · parnassus.parquet · logs/</text>
+</svg>
