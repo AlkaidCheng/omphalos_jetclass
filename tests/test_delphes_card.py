@@ -3,6 +3,7 @@ import re
 
 import pytest
 
+from omphjc.config_paths import config_root
 from omphjc.delphes import (
     REFERENCE_CARD_SHA256,
     compare_cards,
@@ -112,3 +113,42 @@ def test_the_card_a_run_reads_starts_as_the_official_one() -> None:
     card = get_process("HToBB").delphes_card
     assert card is not None
     assert compare_cards(load_card(card), reference_card()) == []
+
+
+def test_the_jetclass_card_adapts_the_delphes_cms_card() -> None:
+    cms = load_card(config_root() / "references" / "delphes" / "delphes_card_CMS.tcl")
+    differences = compare_cards(reference_card(), cms)
+    modules = {d.item: d.actual for d in differences if d.item.startswith("module ")}
+    removed = {item for item, actual in modules.items() if actual == "absent"}
+    added = {item for item, actual in modules.items() if actual == "defined"}
+    assert added == {"module TrackSmearing"}
+    assert removed == {
+        f"module {name}"
+        for name in (
+            "BTagging",
+            "ChargedHadronFilter",
+            "EFlowFilter",
+            "ElectronEfficiency",
+            "ElectronFilter",
+            "ElectronIsolation",
+            "FastJetFinder",
+            "GenMissingET",
+            "JetEnergyScale",
+            "JetFlavorAssociation",
+            "MissingET",
+            "MuonEfficiency",
+            "MuonIsolation",
+            "PhotonEfficiency",
+            "PhotonIsolation",
+            "ScalarHT",
+            "TauTagging",
+            "UniqueObjectFinder",
+        )
+    }
+    adapted = {"ExecutionPath", "FatJetFinder", "GenJetFinder", "TreeWriter"}
+    changed_cms_parameters = {
+        d.item
+        for d in differences
+        if d.item not in modules and d.item.partition(".")[0] not in adapted
+    }
+    assert changed_cms_parameters == {"ECal.TrackInputArray"}
