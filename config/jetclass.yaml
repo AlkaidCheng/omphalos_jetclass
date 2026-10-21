@@ -2,8 +2,9 @@
 # the package README, sections "Configuration" and "Adding a process".
 #
 # Sources of the values (PROVENANCE.md lists the origin of every shipped file):
-#   process lines, model names, run-card values and MadSpin cards: the official
-#   gridpacks of jet-universe/jetclass_generation, copied to references/jetclass/,
+#   definitions, process lines, model names, run-card values and MadSpin cards:
+#   the official gridpacks of jet-universe/jetclass_generation, copied to
+#   references/jetclass/,
 #     https://github.com/jet-universe/jetclass_generation/tree/ae722ea560efa01c6ed814c72d15b7cdafdf3449/gridpacks
 #   seed_offset: run.sh of the same commit, which adds 10 000 000 x n to the job
 #   number of the n-th Higgs process,
@@ -17,6 +18,13 @@ common:
   # Delphes card of the detector simulation, a copy of
   # references/jetclass/delphes_card.tcl.
   delphes_card: delphes/delphes_card_JetClass.tcl
+
+  # MadGraph multiparticle definitions written for every process, before the
+  # entry's own, from the official proc cards
+  # (references/jetclass/<process>/proc_card_mg5.dat).
+  definitions:
+    - "p = p b b~"   # five-flavour proton
+    - "j = j b b~"   # five-flavour jet
 
   # Run-card values shared by every process, from the official run cards
   # (references/jetclass/<process>/run_card.dat).

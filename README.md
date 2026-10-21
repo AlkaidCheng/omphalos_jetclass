@@ -67,6 +67,7 @@ shares, and `processes`, with one entry per process (see
 |---|---|
 | `models_dir` | Folder of the models imported by path; `models` by default |
 | `delphes_card` | Delphes card of every run |
+| `definitions` | MadGraph multiparticle definitions for every process, written before each entry's own (see [Models](#models)) |
 | `run_card` | Run-card values for every process |
 | `pythia` | Pythia settings for every process (see [Pythia settings](#pythia-settings)) |
 | `pythia_matching` | Pythia settings added for MLM-matched processes |
@@ -105,6 +106,12 @@ such as `models/zprime/restrict_m2tev.dat` and use `model: zprime-m2tev`.
 `heft` is vendored because MadGraph would download it on first use, and
 `heft_c_mass_jetclass` because the HToCC charm-mass model exists only inside
 the official gridpack.
+
+MadGraph includes the b quark in its own `p` and `j` only when the model's b
+is massless. Every model in the shipped catalogue keeps it massive (4.7 GeV),
+so `common.definitions` adds b and b̄ to both, as the official production
+does; without it, ZToQQ would contain no Z → bb̄ decays. An entry can redefine
+either name in its own `definitions`, which are written after the common ones.
 
 ## Processes
 
@@ -161,7 +168,7 @@ An entry needs the first four keys below; the others are optional.
 | `description` | The physics, with formulas in LaTeX syntax | required |
 | `model` | MadGraph model, with an optional restriction suffix (see [Models](#models)) | required |
 | `processes` | MadGraph process lines; the first is generated and the others are added to it | required |
-| `definitions` | Multiparticle definitions, without the leading `define` | none |
+| `definitions` | Multiparticle definitions, without the leading `define`, written after `common.definitions` | none |
 | `run_card` | Run-card values, added to `common.run_card` and overriding it | none |
 | `pythia` | Pythia settings, added to `common.pythia` and overriding it | none |
 | `matching` | `true` for an MLM-matched sample: the Pythia settings gain `common.pythia_matching` and the matching values derived from the run card | `false` |

@@ -38,7 +38,14 @@ _OPTIONAL_KEYS = frozenset(
     }
 )
 _COMMON_KEYS = frozenset(
-    {"run_card", "pythia", "pythia_matching", "models_dir", "delphes_card"}
+    {
+        "definitions",
+        "run_card",
+        "pythia",
+        "pythia_matching",
+        "models_dir",
+        "delphes_card",
+    }
 )
 _DEFAULT_MODELS_DIR = "models"
 
@@ -59,8 +66,9 @@ class ProcessSpec:
         MadGraph model name, optionally with a ``-restriction`` suffix, for
         example ``"heft-ckm"``.
     definitions : tuple[str, ...]
-        Extra multiparticle definitions in MadGraph syntax, without the
-        leading ``define``.
+        Multiparticle definitions in MadGraph syntax, without the leading
+        ``define``: the catalogue's common definitions followed by the entry's
+        own, so that an entry can redefine a common name.
     processes : tuple[str, ...]
         Process definitions; the first becomes ``generate`` and the rest
         ``add process``.
@@ -156,18 +164,18 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     Parameters
     ----------
     path : Path
-        YAML file with an optional ``common`` block (``run_card`` and
-        ``pythia`` settings shared by every process, ``pythia_matching``
-        settings for the matched ones, the ``delphes_card`` and the
-        ``models_dir``, by default ``models``) and a ``processes`` mapping.
-        Relative paths inside are resolved against the file's directory;
-        absolute paths are used as they are.
+        YAML file with an optional ``common`` block (``definitions``,
+        ``run_card`` and ``pythia`` settings shared by every process,
+        ``pythia_matching`` settings for the matched ones, the
+        ``delphes_card`` and the ``models_dir``, by default ``models``) and a
+        ``processes`` mapping. Relative paths inside are resolved against the
+        file's directory; absolute paths are used as they are.
 
     Returns
     -------
     Mapping[str, ProcessSpec]
-        Specifications in file order, with the common run-card and Pythia
-        settings merged into each entry (the entry's values win).
+        Specifications in file order, with the common definitions, run-card
+        and Pythia settings merged into each entry (the entry's values win).
 
     Raises
     ------
@@ -185,6 +193,7 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     if unknown:
         raise ValueError(f"The common block has unknown keys: {sorted(unknown)}")
     shared = _Shared(
+        definitions=tuple(common.get("definitions", ())),
         run_card=_read_run_card(common.get("run_card", {})),
         pythia=_read_settings(common.get("pythia", {})),
         pythia_matching=_read_settings(common.get("pythia_matching", {})),
@@ -206,6 +215,7 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
 class _Shared:
     """The ``common`` block of a catalogue, resolved."""
 
+    definitions: tuple[str, ...]
     run_card: Mapping[str, RunCardValue]
     pythia: Mapping[str, SettingValue]
     pythia_matching: Mapping[str, SettingValue]
@@ -239,7 +249,7 @@ def _build_spec(
         label=str(entry["label"]),
         description=str(entry["description"]),
         model=model,
-        definitions=tuple(entry.get("definitions", ())),
+        definitions=shared.definitions + tuple(entry.get("definitions", ())),
         processes=tuple(entry["processes"]),
         run_card=run_card,
         pythia=pythia,

@@ -22,6 +22,9 @@ from omphjc.pythia import shower_settings
 
 CATALOGUE = """\
 common:
+  definitions:
+    - "p = p b b~"
+    - "j = j b b~"
   run_card:
     lpp1: 1
     lpp2: 1

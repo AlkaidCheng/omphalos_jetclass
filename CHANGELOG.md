@@ -27,3 +27,5 @@
 - Pythia settings shared by every process live in the catalogue's
   `common.pythia` and `common.pythia_matching` blocks and can be overridden per
   process (`pythia:`) or per run (`omphjc pythia show --set KEY=VALUE`). (#3)
+- The five-flavour `p` and `j` definitions written for every process live in
+  the catalogue's `common.definitions`. (#3)

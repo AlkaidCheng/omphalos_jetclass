@@ -11,9 +11,6 @@ from pathlib import Path
 from omphjc.madgraph.runcard import format_value
 from omphjc.processes.catalogue import ProcessSpec
 
-STANDARD_DEFINITIONS: tuple[str, ...] = ("p = p b b~", "j = j b b~")
-"""Five-flavour proton and jet definitions shared by every process."""
-
 
 def model_import_target(spec: ProcessSpec) -> str:
     """Return the argument of ``import model`` for `spec`.
@@ -40,7 +37,6 @@ def proc_card_commands(spec: ProcessSpec, *, output_dir: Path) -> list[str]:
         Directory MadGraph writes the process into (``output`` argument).
     """
     commands = [f"import model {model_import_target(spec)}"]
-    commands.extend(f"define {item}" for item in STANDARD_DEFINITIONS)
     commands.extend(f"define {item}" for item in spec.definitions)
     first, *rest = spec.processes
     commands.append(f"generate {first}")

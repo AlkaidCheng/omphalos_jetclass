@@ -2,7 +2,6 @@
 
 from omphjc.madgraph.banner import Banner
 from omphjc.madgraph.cards import (
-    STANDARD_DEFINITIONS,
     launch_commands,
     madspin_card_text,
     model_import_target,
@@ -32,7 +31,6 @@ from omphjc.madgraph.verify import (
 
 __all__ = [
     "DISABLED_DEFAULTS",
-    "STANDARD_DEFINITIONS",
     "TRACKED_PARAMETERS",
     "Banner",
     "MadSpinCard",

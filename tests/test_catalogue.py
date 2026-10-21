@@ -51,10 +51,12 @@ def test_common_settings_are_merged_into_every_process(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     for spec in specs.values():
+        assert spec.definitions[:2] == ("p = p b b~", "j = j b b~")
         assert spec.run_card["ebeam1"] == 6500.0
         assert spec.run_card["pdlabel"] == "nn23lo1"
         assert spec.run_card["maxjetflavor"] == 5
         assert spec.run_card["use_syst"] is False
+    assert specs["HToWW2Q1L"].definitions[2:] == ("lep = l+ l-", "nu = vl vl~")
 
 
 def test_pdg_keyed_cuts_use_integer_keys(specs: Mapping[str, ProcessSpec]) -> None:
@@ -185,6 +187,7 @@ def test_an_entry_needs_only_its_physics(tmp_path: Path) -> None:
     )
     spec = load_catalogue(path)["Z"]
     assert spec.run_card == {"ebeam1": 6800.0}
+    assert spec.definitions == ()
     assert (spec.seed_offset, spec.matching, spec.madspin) == (0, False, False)
 
 
