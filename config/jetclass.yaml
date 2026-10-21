@@ -1,37 +1,25 @@
-# JetClass-I process catalogue.
+# Process catalogue of the ten JetClass-I classes. The keys are described in
+# the package README, sections "Configuration" and "Adding a process".
 #
-# Values follow the official gridpacks of jet-universe/jetclass_generation at
-# commit ae722ea:
-#   https://github.com/jet-universe/jetclass_generation/tree/ae722ea560efa01c6ed814c72d15b7cdafdf3449
-# Each JetClass process names the directory of its official cards
-# (reference_cards) so that `omphjc check-cards` can report, value by value,
-# where an entry departs from the official production. That comparison is a
-# dedicated check, not a step of generation: edit any value here to suit a
-# study, and leave reference_cards out for a process of your own.
-#
-# Paths are absolute or relative to this file. A model whose directory exists under
-# models/ (heft, heft_c_mass_jetclass) is imported from there; any other name
-# (sm, sm-ckm) is left to MadGraph. A "-suffix" selects a restriction card.
-# A process is decayed by MadSpin when it names a madspin_card.
-#
-# seed_offset (default 0) is added to every job seed of a process. The values
-# follow run.sh of the same commit, which adds 10 000 000 x n to the job id of
-# the n-th Higgs process and nothing to the others:
-#   https://github.com/jet-universe/jetclass_generation/blob/ae722ea560efa01c6ed814c72d15b7cdafdf3449/run.sh
+# Sources of the values (PROVENANCE.md lists the origin of every shipped file):
+#   process lines, model names, run-card values and MadSpin cards: the official
+#   gridpacks of jet-universe/jetclass_generation, copied to references/jetclass/,
+#     https://github.com/jet-universe/jetclass_generation/tree/ae722ea560efa01c6ed814c72d15b7cdafdf3449/gridpacks
+#   seed_offset: run.sh of the same commit, which adds 10 000 000 x n to the job
+#   number of the n-th Higgs process,
+#     https://github.com/jet-universe/jetclass_generation/blob/ae722ea560efa01c6ed814c72d15b7cdafdf3449/run.sh
+#   Pythia settings: MadGraph5_aMC@NLO 3.8.0, cited at each block below.
 
 common:
-  # UFO models imported by path: model "heft-ckm" uses models/heft/ with its
-  # restriction card models/heft/restrict_ckm.dat.
+  # MadGraph models imported by path, one folder per model.
   models_dir: models
 
-  # Delphes card of the detector simulation, a copy of the official card
-  # references/jetclass/delphes_card.tcl. Point it at another card to change the
-  # detector for every process.
+  # Delphes card of the detector simulation, a copy of
+  # references/jetclass/delphes_card.tcl.
   delphes_card: delphes/delphes_card_JetClass.tcl
 
-  # Run-card values shared by every process, taken from the official run cards
-  # (references/jetclass/<process>/run_card.dat, identical across the ten processes
-  # for these parameters); the per-process blocks below hold the rest.
+  # Run-card values shared by every process, from the official run cards
+  # (references/jetclass/<process>/run_card.dat).
   run_card:
     lpp1: 1
     lpp2: 1
@@ -47,24 +35,19 @@ common:
     maxjetflavor: 5
     use_syst: false
 
-  # Pythia 8 settings written for every process: what MadGraph's Pythia
-  # interface injects into every run (the PY8Card defaults marked
-  # always_write_to_card in madgraph/various/banner.py,
-  # https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/various/banner.py#L2050-L2089;
-  # the official production's MadGraph 3.1.1 wrote the same values, see
-  # tests/data/pythia). A process may add or override entries in its own
-  # pythia block.
+  # Pythia settings for every process: the PY8Card defaults that MadGraph's
+  # Pythia interface writes into every run (always_write_to_card in
+  # madgraph/various/banner.py,
+  # https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/various/banner.py#L2050-L2089).
   pythia:
     Beams:frameType: 4            # events come from a Les Houches event file
     Check:epTolErr: 0.01          # tolerate the momentum rounding of the LHE file
     JetMatching:setMad: off       # matching parameters are read from this file, not the LHE banner
     JetMatching:etaJetMax: 1000.0 # no rapidity limit on the jets that partons are matched to
 
-  # Added for MLM-matched processes (setup_Pythia8RunAndCard in
-  # madgraph/interface/madevent_interface.py,
-  # https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544-L4602).
-  # JetMatching:qCut (1.5 x xqcut), nJetMax (jets in the process lines) and
-  # nQmatch (maxjetflavor) are derived from the run card by the package.
+  # Pythia settings for MLM-matched processes: the fixed values set by
+  # setup_Pythia8RunAndCard in madgraph/interface/madevent_interface.py,
+  # https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544-L4602.
   pythia_matching:
     Beams:setProductionScalesFromLHEF: on
     JetMatching:merge: on
