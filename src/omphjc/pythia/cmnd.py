@@ -146,7 +146,7 @@ def matching_scale(spec: ProcessSpec) -> float:
     """
     if not spec.matching:
         raise ValueError(f"Process {spec.name!r} is not MLM-matched")
-    return MATCHING_SCALE_FACTOR * _run_card_number(spec, "xqcut")
+    return MATCHING_SCALE_FACTOR * _numeric_run_card_value(spec, "xqcut")
 
 
 def max_matched_jets(spec: ProcessSpec) -> int:
@@ -227,7 +227,7 @@ def _derived_matching_settings(spec: ProcessSpec) -> dict[str, SettingValue]:
     return {
         "JetMatching:qCut": matching_scale(spec),
         "JetMatching:nJetMax": max_matched_jets(spec),
-        "JetMatching:nQmatch": int(_run_card_number(spec, "maxjetflavor")),
+        "JetMatching:nQmatch": int(_numeric_run_card_value(spec, "maxjetflavor")),
     }
 
 
@@ -259,7 +259,8 @@ def _normalise(value: str) -> bool | float | str:
         return value
 
 
-def _run_card_number(spec: ProcessSpec, name: str) -> float:
+def _numeric_run_card_value(spec: ProcessSpec, name: str) -> float:
+    """Return the run-card value `name` of `spec`, which must be set and numeric."""
     try:
         value = spec.run_card[name]
     except KeyError:
