@@ -59,25 +59,27 @@ config/
 └── PROVENANCE.md                      origin and SHA-256 of every shipped file
 ```
 
-`jetclass.yaml` names everything else by a path, either absolute or relative to
-the catalogue's own folder: an entry's `madspin_card` and `reference_cards`,
-and the common `delphes_card` and `models_dir`. The files in `madspin/` and `delphes/` start as copies of the
-official ones; edit them in your own copy to change decays or the detector, and
-`references/` keeps the originals for `omphjc check-cards` and
-`omphjc delphes compare`.
+`jetclass.yaml` has two blocks: `common`, with the settings every process
+shares, and `processes`, with one entry per process (see
+[Adding a process](#adding-a-process)). The `common` block holds:
 
-**Models.** A model folder holds the model's Python files (its particles,
-parameters and interactions) and its restriction cards, `restrict_<name>.dat`.
-A restriction card gives every parameter of the model a value; MadGraph applies
-it on import and removes the parameters set to 0, with every interaction that
-vanishes with them. An entry's `model: heft-ckm` imports `models/heft/` by path,
-so MadGraph never downloads it, with `models/heft/restrict_ckm.dat`; plain
-`heft` uses `restrict_default.dat`. A name with no folder under `models/`, such
-as `sm` or `sm-ckm`, is left to MadGraph. To run with other parameter values,
-add a card such as `models/zprime/restrict_m2tev.dat` and use
-`model: zprime-m2tev`. `heft` is vendored because MadGraph would download it on
-first use, and `heft_c_mass_jetclass` because the HToCC charm-mass model exists
-only inside the official gridpack.
+| Key | Content |
+|---|---|
+| `models_dir` | Folder of the models imported by path; `models` by default |
+| `delphes_card` | Delphes card of every run |
+| `run_card` | Run-card values for every process |
+| `pythia` | Pythia settings for every process (see [Pythia settings](#pythia-settings)) |
+| `pythia_matching` | Pythia settings added for MLM-matched processes |
+
+Comments in the file give the source of the shipped values: an official card
+or a line of MadGraph's source code.
+
+Files are named by a path, either absolute or relative to the catalogue's own
+folder: an entry's `madspin_card` and `reference_cards`, and the common
+`delphes_card` and `models_dir`. The files in `madspin/` and `delphes/` start
+as copies of the official ones; edit them in your own copy to change decays or
+the detector, and `references/` keeps the originals for `omphjc check-cards`
+and `omphjc delphes compare`.
 
 An installed package carries a copy of this directory. To work from a modified
 catalogue, export the configuration and point the command line at it:
@@ -89,6 +91,21 @@ omphjc --catalogue ./my_config/jetclass.yaml processes
 export OMPHJC_CATALOGUE=./my_config/jetclass.yaml   # same, for every command
 ```
 
+### Models
+
+A model folder holds the model's Python files (its particles, parameters and
+interactions) and its restriction cards, `restrict_<name>.dat`. A restriction
+card gives every parameter of the model a value; MadGraph applies it on import
+and removes the parameters set to 0, with every interaction that vanishes with
+them. An entry's `model: heft-ckm` imports `models/heft/` by path, with
+`models/heft/restrict_ckm.dat`, so MadGraph never downloads it; plain `heft`
+uses `restrict_default.dat`. A name with no folder under `models/`, such as `sm` or
+`sm-ckm`, is left to MadGraph. To run with other parameter values, add a card
+such as `models/zprime/restrict_m2tev.dat` and use `model: zprime-m2tev`.
+`heft` is vendored because MadGraph would download it on first use, and
+`heft_c_mass_jetclass` because the HToCC charm-mass model exists only inside
+the official gridpack.
+
 ## Processes
 
 ```
@@ -97,43 +114,64 @@ omphjc processes show HToBB   # MadGraph inputs written for one process
 omphjc check-cards            # differences from the official cards, if any
 ```
 
-`check-cards` is a dedicated comparison, not part of generation. For every
-process that names `reference_cards` it reports, value by value, each physics
-setting that differs from the official cards and each tracked official setting
-the entry leaves out, and it lists the processes it cannot compare. The shipped
-catalogue reports no differences; a catalogue edited for a study reports the
-differences that were intended.
+`check-cards` compares, value by value, every process that names
+`reference_cards` with those cards: it reports each physics setting that
+differs from the official cards and each tracked official setting the entry
+leaves out, and it lists the processes without reference cards. The shipped
+catalogue reports no differences.
+
+### Seeds
+
+Job *n* of a process seeds MadGraph, Pythia and Delphes with
+`seed_offset + n`, so the seeds of a job follow from its process and number
+alone. `seed_offset` is 0 unless the entry sets it. The shipped catalogue
+follows the official production, which offset the n-th Higgs process by
+10 000 000 × n (HToBB 10 000 000, …, HToWW2Q1L 50 000 000) and no other
+process. Giving a process an offset of its own keeps its seeds apart from those
+of the other processes.
 
 ## Adding a process
 
 A process is one catalogue entry; no code changes are involved. Export the
 shipped configuration (`omphjc config export ./my_config`) or write a catalogue
-of your own, then point the command line at it with `--catalogue`. An entry
-needs `label`, `description`, `model` and `processes`; every other key is
-optional:
+of your own, then point the command line at it with `--catalogue`:
 
 ```yaml
 processes:
   ZPrimeToTT:
-    label: Zptt                        # class name, unique within the catalogue
+    label: Zptt
     description: "$Z' \\to t\\bar{t}$ with up to one extra jet"
-    model: zprime-m2tev                # models/zprime/ with restrict_m2tev.dat
-    definitions: ["tops = t t~"]       # multiparticle definitions
+    model: zprime-m2tev
+    definitions: ["tops = t t~"]
     processes:
       - "p p > zp > tops tops @0"
       - "p p > zp > tops tops j @1"
-    run_card: {ickkw: 1, xqcut: 40.0, pt_min_pdg: {6: 450.0}}   # merged over common.run_card
-    matching: true                     # MLM matching; adds the Pythia matching block
-    madspin_card: madspin/ZPrimeToTT.dat   # MadSpin runs when present
-    reference_cards: references/zprime     # check-cards compares against these
-    seed_offset: 60000000              # keeps its seeds apart from other processes
+    run_card: {ickkw: 1, xqcut: 40.0, pt_min_pdg: {6: 450.0}}
+    matching: true
+    madspin_card: madspin/ZPrimeToTT.dat
+    reference_cards: references/zprime
+    seed_offset: 60000000
 ```
+
+An entry needs the first four keys below; the others are optional.
+
+| Key | Content | Default |
+|---|---|---|
+| `label` | Class name of the sample, unique within the catalogue | required |
+| `description` | The physics, with formulas in LaTeX syntax | required |
+| `model` | MadGraph model, with an optional restriction suffix (see [Models](#models)) | required |
+| `processes` | MadGraph process lines; the first is generated and the others are added to it | required |
+| `definitions` | Multiparticle definitions, without the leading `define` | none |
+| `run_card` | Run-card values, added to `common.run_card` and overriding it | none |
+| `pythia` | Pythia settings, added to `common.pythia` and overriding it | none |
+| `matching` | `true` for an MLM-matched sample: the Pythia settings gain `common.pythia_matching` and the matching values derived from the run card | `false` |
+| `madspin_card` | MadSpin card; MadSpin runs only for an entry that names one | none |
+| `reference_cards` | Folder of official cards that `omphjc check-cards` compares the entry with | none |
+| `seed_offset` | Added to the job number to give the job's seeds (see [Seeds](#seeds)) | 0 |
 
 A process you add provides at most a model folder (only when MadGraph does not
 ship the model) and a MadSpin card (only when it decays heavy particles); the
 package writes the MadGraph scripts and the Pythia command file.
-`omphjc check-cards` compares every process that names `reference_cards` and
-lists the others as not checked.
 
 ## Pythia settings
 
@@ -182,8 +220,8 @@ as overriding an earlier one.
 
 The fixed values live in `config/jetclass.yaml`: `common.pythia` holds the
 settings written for every run, `common.pythia_matching` the fixed part of the
-matching block, each value with a comment naming the MadGraph source it comes
-from. Three places change them, later ones winning:
+matching block, each block with a comment naming the MadGraph source line its
+values come from. Three places change them, later ones winning:
 
 1. The catalogue blocks themselves, in your own copy
    (`omphjc config export ./my_config`, then `--catalogue ./my_config/jetclass.yaml`).
