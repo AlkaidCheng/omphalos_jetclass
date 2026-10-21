@@ -29,6 +29,10 @@ versions, seeds, card hashes, cross sections and event counts. Dashed boxes in
 the diagram are the stages not yet available; the sections below cover the
 available ones.
 
+New to MadGraph, Pythia or Delphes? [The guide](docs/guide.md) explains what
+each program does, the syntax of the files it reads, and where each catalogue
+key ends up.
+
 ## Installation
 
 ```
