@@ -9,8 +9,23 @@ ships with Python, and exposes the evaluated configuration as keys and values.
 Two cards that differ only in whitespace, comments, loop spelling or the order
 of definitions therefore compare equal.
 
-The official JetClass card is shipped under ``config/references/`` as the
-default reference for comparisons; a run uses the card the catalogue names.
+The official JetClass card is the CMS card distributed with Delphes
+(``cards/delphes_card_CMS.tcl``, identical in Delphes 3.4.2 and 3.5.0) adapted
+to jet tagging, as section 2 of the JetClass paper describes
+(https://arxiv.org/abs/2202.03772):
+
+- the propagation, tracking, calorimeter and particle-flow modules are the CMS
+  ones, unchanged except that ``ECal`` reads the smeared tracks;
+- a ``TrackSmearing`` module smears the impact parameters of charged tracks to
+  the resolution of the CMS tracker (https://arxiv.org/abs/1405.6569);
+- ``FatJetFinder`` and ``GenJetFinder`` cluster anti-kT jets with R = 0.8 and
+  pT > 500 GeV, with N-subjettiness and soft-drop observables;
+- the modules for isolated leptons and photons, missing energy, flavour tagging
+  and R = 0.5 jets are removed, and the output keeps the generator particles,
+  the particle-flow candidates and the two jet collections.
+
+It is shipped under ``config/references/`` as the default reference for
+comparisons; a run uses the card the catalogue names.
 """
 
 import math

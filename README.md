@@ -256,9 +256,14 @@ and the process lines; they can be overridden the same way.
 
 A run uses the card named by the catalogue's `common.delphes_card`, shipped as
 `config/delphes/delphes_card_JetClass.tcl`, a copy of the official JetClass
-card; point it at any other card to change the detector. Cards are compared as
-configuration, the way Delphes reads them, so layout, comments and definition
-order never count as differences:
+card; point it at any other card to change the detector. The JetClass card is
+the CMS card distributed with Delphes, adapted to jet tagging: it adds
+impact-parameter smearing for charged tracks, clusters anti-kT jets with
+R = 0.8 above 500 GeV, and drops the lepton, photon, missing-energy and
+flavour-tagging modules.
+
+Cards are compared as configuration, the way Delphes reads them, so layout,
+comments and definition order never count as differences:
 
 ```
 omphjc delphes show                    # the official card: execution path, modules, parameters
