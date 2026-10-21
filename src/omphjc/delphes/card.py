@@ -10,8 +10,9 @@ Two cards that differ only in whitespace, comments, loop spelling or the order
 of definitions therefore compare equal.
 
 The official JetClass card is the CMS card distributed with Delphes
-(``cards/delphes_card_CMS.tcl``, identical in Delphes 3.4.2 and 3.5.0) adapted
-to jet tagging, as section 2 of the JetClass paper describes
+(``cards/delphes_card_CMS.tcl``, identical from Delphes 3.4.2 to 3.5.1 and
+shipped as ``config/references/delphes/delphes_card_CMS.tcl``) adapted to jet
+tagging, as section 2 of the JetClass paper describes
 (https://arxiv.org/abs/2202.03772):
 
 - the propagation, tracking, calorimeter and particle-flow modules are the CMS
@@ -24,8 +25,8 @@ to jet tagging, as section 2 of the JetClass paper describes
   and R = 0.5 jets are removed, and the output keeps the generator particles,
   the particle-flow candidates and the two jet collections.
 
-It is shipped under ``config/references/`` as the default reference for
-comparisons; a run uses the card the catalogue names.
+The JetClass card is shipped under ``config/references/jetclass/`` as the
+default reference for comparisons; a run uses the card the catalogue names.
 """
 
 import math

@@ -22,6 +22,18 @@ with MadGraph5_aMC@NLO 3.1.1.
 `delphes_card.tcl` is the repository's Delphes card:
 https://github.com/jet-universe/jetclass_generation/blob/ae722ea560efa01c6ed814c72d15b7cdafdf3449/delphes_card.tcl
 
+## references/delphes/
+
+The CMS card distributed with Delphes, from which the JetClass card is adapted
+(section 2 of https://arxiv.org/abs/2202.03772):
+
+- `delphes_card_CMS.tcl` is `cards/delphes_card_CMS.tcl` of Delphes 3.5.0,
+  https://github.com/delphes/delphes/blob/3.5.0/cards/delphes_card_CMS.tcl;
+  the file is byte-identical in Delphes 3.4.2 and 3.5.1.
+- `LICENSE` and `COPYING` are Delphes's license files at the same tag. Delphes
+  is distributed under the GNU General Public License version 3 or later, and
+  the card keeps that license.
+
 ## madspin/
 
 `TTBar.dat` and `TTBarLep.dat` are copies of
@@ -52,6 +64,9 @@ restricted, as MadGraph wrote it when the gridpack was produced.
 ```
 bf205dd95fe9fe0031847d76edf70a6a8e125ed65141ea9c479aef453588ed1c  references/jetclass/delphes_card.tcl
 bf205dd95fe9fe0031847d76edf70a6a8e125ed65141ea9c479aef453588ed1c  delphes/delphes_card_JetClass.tcl
+e363da8be306a024159b52547a80045bc48b770424fb5372ffc2ff8f1f5028c0  references/delphes/delphes_card_CMS.tcl
+58f04bea266aa58312be8d8a73b1d57daa7ed04441afea7aa90cca8080af765e  references/delphes/LICENSE
+8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903  references/delphes/COPYING
 7b0b5b7056beecf10fae97c97d3490be1dbaaa8bb9a46602320a226477a68750  madspin/TTBar.dat
 a2675696c2a783364d642389196e183325e2acee5da70570635b8e12837f8c78  madspin/TTBarLep.dat
 121806cb4d171d7a8f8974001a3eb4025ecc6ff11b792a625b734e30a0baaa47  models/heft/__init__.py

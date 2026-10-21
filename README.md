@@ -56,10 +56,15 @@ config/
 │   └── heft_c_mass_jetclass/
 ├── madspin/                           MadSpin cards
 ├── delphes/                           Delphes cards
-├── references/jetclass/               official JetClass cards, for comparison
-│   ├── <process>/                     gridpack cards: proc, run, param, pythia8, launch, MadSpin
-│   ├── delphes_card.tcl
-│   └── LICENSE
+├── references/                        official cards, for comparison
+│   ├── jetclass/                      JetClass cards
+│   │   ├── <process>/                 gridpack cards: proc, run, param, pythia8, launch, MadSpin
+│   │   ├── delphes_card.tcl
+│   │   └── LICENSE
+│   └── delphes/                       Delphes's CMS card, from which the JetClass card is adapted
+│       ├── delphes_card_CMS.tcl
+│       ├── LICENSE
+│       └── COPYING
 └── PROVENANCE.md                      origin and SHA-256 of every shipped file
 ```
 
@@ -260,7 +265,7 @@ card; point it at any other card to change the detector. The JetClass card is
 the CMS card distributed with Delphes, adapted to jet tagging: it adds
 impact-parameter smearing for charged tracks, clusters anti-kT jets with
 R = 0.8 above 500 GeV, and drops the lepton, photon, missing-energy and
-flavour-tagging modules.
+flavour-tagging modules. The CMS card ships in `config/references/delphes/`.
 
 Cards are compared as configuration, the way Delphes reads them, so layout,
 comments and definition order never count as differences:
@@ -269,6 +274,14 @@ comments and definition order never count as differences:
 omphjc delphes show                    # the official card: execution path, modules, parameters
 omphjc delphes show my_card.tcl        # any other card
 omphjc delphes compare my_card.tcl     # differences from the official card
+```
+
+`--reference` compares against another card. From the repository root, this
+lists how the JetClass card differs from the CMS card:
+
+```
+omphjc delphes compare config/references/jetclass/delphes_card.tcl \
+    --reference config/references/delphes/delphes_card_CMS.tcl
 ```
 
 Reading a card uses the Tcl interpreter that ships with Python (`tkinter`).
@@ -285,6 +298,9 @@ The process definitions, cards and Delphes configuration follow the JetClass
 production by the jet-universe project (MIT),
 [jet-universe/jetclass_generation](https://github.com/jet-universe/jetclass_generation);
 `config/PROVENANCE.md` records the exact files taken from it.
+`config/references/delphes/delphes_card_CMS.tcl` is part of
+[Delphes](https://github.com/delphes/delphes) and keeps its license, the GNU
+GPL version 3 or later (`LICENSE` and `COPYING` beside it).
 The vendored `heft` model is the MadGraph5_aMC@NLO Higgs effective-field-theory
 model. Developed with the assistance of Claude Code.
 

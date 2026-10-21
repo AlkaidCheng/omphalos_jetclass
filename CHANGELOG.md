@@ -31,3 +31,6 @@
   the catalogue's `common.definitions`. (#3)
 - `docs/guide.md` introduces MadGraph, Pythia and Delphes to newcomers: what
   each program does and the syntax of the files it reads. (#4)
+- The CMS card distributed with Delphes, from which the JetClass card is
+  adapted, ships in `config/references/delphes/` for
+  `omphjc delphes compare --reference`. (#5)
