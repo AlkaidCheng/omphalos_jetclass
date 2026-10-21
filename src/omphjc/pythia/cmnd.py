@@ -170,9 +170,8 @@ def parse_cmnd(text: str) -> dict[str, str]:
 
     Pythia's reading rules apply: a line is a setting when its first
     non-blank character is a letter or digit, the value is the first word
-    after ``=``,
-    keys are case-insensitive and the last occurrence of a key wins. The
-    spelling of the last occurrence is kept.
+    after ``=``, keys are case-insensitive and the last occurrence of a key
+    wins. The spelling of the last occurrence is kept.
     """
     settings: dict[str, tuple[str, str]] = {}
     for raw_line in text.splitlines():

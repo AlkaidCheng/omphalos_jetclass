@@ -68,9 +68,15 @@ def launch_commands(
     Returns
     -------
     list[str]
-        The shower and detector switches are off because Pythia and Delphes
-        run afterwards through ``DelphesPythia8``; MadSpin is on only for the
-        processes that name a MadSpin card.
+        The ``launch`` command, its switches and the ``set`` lines of the run
+        card. Shower and detector simulation are switched off, since
+        ``DelphesPythia8`` runs them afterwards; MadSpin is on only for a
+        process that names a MadSpin card.
+
+    Raises
+    ------
+    ValueError
+        If `n_events` is not positive.
     """
     if n_events <= 0:
         raise ValueError(f"n_events must be positive, got {n_events}")
