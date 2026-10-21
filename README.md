@@ -65,7 +65,8 @@ config/
 │       ├── delphes_card_CMS.tcl
 │       ├── LICENSE
 │       └── COPYING
-└── PROVENANCE.md                      origin and SHA-256 of every shipped file
+├── PROVENANCE.md                      origin of every file taken from elsewhere
+└── checksums.json                     SHA-256 hash of each of those files
 ```
 
 `jetclass.yaml` has two blocks: `common`, with the settings every process

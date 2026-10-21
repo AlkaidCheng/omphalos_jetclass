@@ -1,7 +1,6 @@
 """Delphes cards and drivers."""
 
 from omphjc.delphes.card import (
-    REFERENCE_CARD_SHA256,
     DelphesCard,
     ModuleConfig,
     ParameterValue,
@@ -14,7 +13,6 @@ from omphjc.delphes.card import (
 )
 
 __all__ = [
-    "REFERENCE_CARD_SHA256",
     "DelphesCard",
     "ModuleConfig",
     "ParameterValue",

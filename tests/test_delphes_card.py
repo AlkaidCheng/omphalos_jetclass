@@ -1,11 +1,9 @@
-import hashlib
 import re
 
 import pytest
 
 from omphjc.config_paths import config_root
 from omphjc.delphes import (
-    REFERENCE_CARD_SHA256,
     compare_cards,
     load_card,
     parse_card,
@@ -14,11 +12,6 @@ from omphjc.delphes import (
     with_random_seed,
 )
 from omphjc.processes import get_process
-
-
-def test_shipped_reference_matches_the_official_hash() -> None:
-    digest = hashlib.sha256(reference_card_text().encode("utf-8")).hexdigest()
-    assert digest == REFERENCE_CARD_SHA256
 
 
 def test_reference_card_evaluates_to_the_jetclass_configuration() -> None:
