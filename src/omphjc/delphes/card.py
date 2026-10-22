@@ -208,16 +208,18 @@ def _compare_values(
     for key in sorted(actual.keys() | expected.keys()):
         if key not in expected:
             differences.append(
-                Difference(f"{scope}.{key}", "absent", _render(actual[key]))
+                Difference(f"{scope}.{key}", "absent", _abbreviate(actual[key]))
             )
         elif key not in actual:
             differences.append(
-                Difference(f"{scope}.{key}", _render(expected[key]), "absent")
+                Difference(f"{scope}.{key}", _abbreviate(expected[key]), "absent")
             )
         elif not _values_equal(actual[key], expected[key]):
             differences.append(
                 Difference(
-                    f"{scope}.{key}", _render(expected[key]), _render(actual[key])
+                    f"{scope}.{key}",
+                    _abbreviate(expected[key]),
+                    _abbreviate(actual[key]),
                 )
             )
     return differences
@@ -238,7 +240,7 @@ def _elements_equal(left: str, right: str) -> bool:
         return False
 
 
-def _render(value: ParameterValue, limit: int = 6) -> str:
+def _abbreviate(value: ParameterValue, limit: int = 6) -> str:
     if len(value) <= limit:
         return " ".join(value)
     head = " ".join(value[: limit // 2])
