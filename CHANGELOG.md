@@ -36,3 +36,5 @@
   `omphjc delphes compare --reference`. (#5)
 - `config/checksums.json` records the SHA-256 hash of every file the
   configuration takes from the JetClass production, MadGraph and Delphes. (#6)
+- A catalogue entry whose process or model name is not a plain name (letters,
+  digits, `_`, `.` and `-`) is rejected when the catalogue loads. (#8)

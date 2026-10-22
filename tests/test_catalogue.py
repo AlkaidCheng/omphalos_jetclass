@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -209,3 +210,19 @@ def test_paths_may_be_absolute(tmp_path: Path) -> None:
     assert spec.delphes_card == config / "delphes" / "delphes_card_JetClass.tcl"
     assert spec.madspin_card == config / "madspin" / "TTBar.dat"
     assert spec.reference_cards == config / "references" / "jetclass" / "TTBar"
+
+
+@pytest.mark.parametrize("name", ["", ".", "..", "../x", "/etc", "a/b", "my run", "-x"])
+def test_a_process_name_that_is_not_plain_is_rejected(
+    specs: Mapping[str, ProcessSpec], name: str
+) -> None:
+    with pytest.raises(ValueError, match="Process name"):
+        replace(specs["HToBB"], name=name)
+
+
+@pytest.mark.parametrize("model", ["", "..", "../heft", "/abs/heft", "a/b", "a-b-c"])
+def test_a_model_name_that_is_not_plain_is_rejected(
+    specs: Mapping[str, ProcessSpec], model: str
+) -> None:
+    with pytest.raises(ValueError, match="model"):
+        replace(specs["HToBB"], model=model)

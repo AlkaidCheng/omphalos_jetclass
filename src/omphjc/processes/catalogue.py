@@ -9,6 +9,7 @@ optionally, the reference cards ``omphjc check-cards`` compares it with. A
 card. Paths are absolute or relative to the catalogue file.
 """
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
@@ -18,6 +19,7 @@ from typing import Any
 import yaml
 
 from omphjc.config_paths import catalogue_path
+from omphjc.safe_paths import plain_name
 
 RunCardValue = bool | int | float | str | dict[int, float]
 """A MadGraph run-card value as it appears after ``set name value``."""
@@ -49,6 +51,11 @@ _COMMON_KEYS = frozenset(
 )
 _DEFAULT_MODELS_DIR = "models"
 
+# A model's base name becomes a folder name under models_dir, and it may carry
+# one restriction suffix after "-"; the process name is screened as a plain
+# name, since it becomes a directory name.
+_MODEL_NAME = re.compile(r"[A-Za-z0-9_]+(-[A-Za-z0-9_]+)?")
+
 
 @dataclass(frozen=True)
 class ProcessSpec:
@@ -57,14 +64,15 @@ class ProcessSpec:
     Parameters
     ----------
     name : str
-        Catalogue name, for example ``"HToBB"``.
+        Catalogue name, for example ``"HToBB"``; a plain name
+        (:func:`omphjc.safe_paths.plain_name`), since it names directories.
     label : str
         Class name of the sample, the suffix of the ``label_*`` column.
     description : str
         Human-readable description of the physics.
     model : str
         MadGraph model name, optionally with a ``-restriction`` suffix, for
-        example ``"heft-ckm"``.
+        example ``"heft-ckm"``; both parts are letters, digits and ``_``.
     definitions : tuple[str, ...]
         Multiparticle definitions in MadGraph syntax, without the leading
         ``define``: the catalogue's common definitions followed by the entry's
@@ -115,6 +123,14 @@ class ProcessSpec:
     madspin_card: Path | None
     delphes_card: Path | None
     reference_cards: Path | None
+
+    def __post_init__(self) -> None:
+        plain_name(self.name, what="Process name")
+        if not _MODEL_NAME.fullmatch(self.model):
+            raise ValueError(
+                f"Process {self.name!r}: model {self.model!r} must be a name of "
+                "letters, digits and '_', with at most one '-restriction' suffix"
+            )
 
     @property
     def model_base(self) -> str:
@@ -181,9 +197,10 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     ------
     ValueError
         If the ``common`` block or an entry holds an unknown key, an entry
-        lacks a required key or holds a value of the wrong type, a named file
-        does not exist, two entries share a label, or an entry is matched
-        while ``common.pythia_matching`` sets no ``JetMatching:merge``.
+        lacks a required key, has a malformed process or model name or holds
+        a value of the wrong type, a named file does not exist, two entries
+        share a label, or an entry is matched while ``common.pythia_matching``
+        sets no ``JetMatching:merge``.
     """
     with path.open(encoding="utf-8") as stream:
         document = yaml.safe_load(stream)
