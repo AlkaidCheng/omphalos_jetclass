@@ -1,4 +1,4 @@
-"""MadGraph5_aMC@NLO cards, launch scripts, banners and reference checks."""
+"""MadGraph5_aMC@NLO cards, launch scripts, runs, banners and reference checks."""
 
 from omphjc.madgraph.banner import Banner
 from omphjc.madgraph.cards import (
@@ -6,6 +6,12 @@ from omphjc.madgraph.cards import (
     madspin_card_text,
     model_import_target,
     proc_card_commands,
+)
+from omphjc.madgraph.driver import (
+    MadGraphError,
+    MadGraphRun,
+    MadGraphWorkspace,
+    generate_events,
 )
 from omphjc.madgraph.madspin import (
     MadSpinCard,
@@ -33,6 +39,9 @@ __all__ = [
     "DISABLED_DEFAULTS",
     "TRACKED_PARAMETERS",
     "Banner",
+    "MadGraphError",
+    "MadGraphRun",
+    "MadGraphWorkspace",
     "MadSpinCard",
     "Mismatch",
     "compare_madspin_cards",
@@ -40,6 +49,7 @@ __all__ = [
     "compare_all",
     "compare_process",
     "format_value",
+    "generate_events",
     "launch_commands",
     "madspin_card_text",
     "model_import_target",

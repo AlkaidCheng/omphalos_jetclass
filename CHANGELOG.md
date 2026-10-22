@@ -38,3 +38,6 @@
   configuration takes from the JetClass production, MadGraph and Delphes. (#6)
 - A catalogue entry whose process or model name is not a plain name (letters,
   digits, `_`, `.` and `-`) is rejected when the catalogue loads. (#8)
+- `omphjc.madgraph.generate_events` runs MadGraph for one process in a working
+  directory of its own, on a chosen number of cores and within an optional time
+  limit, and returns the event file with its banner. (#9)
