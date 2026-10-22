@@ -5,13 +5,13 @@ A Delphes card is a Tcl script: ``set`` assigns top-level variables such as
 assigns the module's parameters with ``set`` and ``add``, sometimes through
 loops that build calorimeter binnings. Delphes reads the card with a Tcl
 interpreter, so this module does the same, through the Tcl interpreter that
-ships with Python, and exposes the evaluated configuration as keys and values.
+comes with Python, and exposes the evaluated configuration as keys and values.
 Two cards that differ only in whitespace, comments, loop spelling or the order
 of definitions therefore compare equal.
 
 The official JetClass card is the CMS card distributed with Delphes
 (``cards/delphes_card_CMS.tcl``, identical from Delphes 3.4.2 to 3.5.1 and
-shipped as ``config/references/delphes/delphes_card_CMS.tcl``) adapted to jet
+included as ``config/references/delphes/delphes_card_CMS.tcl``) adapted to jet
 tagging, as section 2 of the JetClass paper describes
 (https://arxiv.org/abs/2202.03772):
 
@@ -25,7 +25,7 @@ tagging, as section 2 of the JetClass paper describes
   and R = 0.5 jets are removed, and the output keeps the generator particles,
   the particle-flow candidates and the two jet collections.
 
-The JetClass card is shipped under ``config/references/jetclass/`` as the
+The JetClass card is kept under ``config/references/jetclass/`` as the
 default reference for comparisons; a run uses the card the catalogue names.
 """
 
@@ -151,7 +151,7 @@ def load_card(path: Path) -> DelphesCard:
 
 
 def reference_card_text() -> str:
-    """Return the shipped official JetClass card as text."""
+    """Return the official JetClass card as text."""
     return delphes_reference_card_path().read_text(encoding="utf-8")
 
 

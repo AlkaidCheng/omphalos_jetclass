@@ -1,7 +1,7 @@
 # Process catalogue of the ten JetClass-I classes. The keys are described in
 # the package README, sections "Configuration" and "Adding a process".
 #
-# Sources of the values (PROVENANCE.md lists the origin of every shipped file):
+# Sources of the values (PROVENANCE.md gives the origin of each copied file):
 #   definitions, process lines, model names, run-card values and MadSpin cards:
 #   the official gridpacks of jet-universe/jetclass_generation, copied to
 #   references/jetclass/,

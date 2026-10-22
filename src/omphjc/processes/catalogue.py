@@ -87,7 +87,7 @@ class ProcessSpec:
         Offset added to every job seed of the process; 0 unless the entry
         sets one.
     model_path : Path or None
-        Directory of the model when it ships with the catalogue; ``None``
+        Directory of the model when the catalogue includes it; ``None``
         leaves the model to MadGraph.
     madspin_card : Path or None
         MadSpin card decaying the heavy resonances; ``None`` for no MadSpin.
@@ -154,7 +154,7 @@ def get_process(name: str) -> ProcessSpec:
 
 @cache
 def catalogue() -> Mapping[str, ProcessSpec]:
-    """Return the shipped catalogue, keyed by process name."""
+    """Return the default catalogue, keyed by process name."""
     return load_catalogue(catalogue_path())
 
 

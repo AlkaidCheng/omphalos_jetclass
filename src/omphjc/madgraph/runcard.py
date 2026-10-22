@@ -84,7 +84,7 @@ def parse_value(text: str) -> RunCardValue:
 
 
 def format_value(value: RunCardValue) -> str:
-    """Render a value in the syntax MadGraph accepts after ``set name``."""
+    """Format a value in the syntax MadGraph accepts after ``set name``."""
     if isinstance(value, bool):
         return "True" if value else "False"
     if isinstance(value, dict):

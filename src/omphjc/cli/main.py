@@ -27,7 +27,7 @@ Catalogue = Mapping[str, ProcessSpec]
     "catalogue_file",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     envvar="OMPHJC_CATALOGUE",
-    help="Process catalogue to use instead of the shipped config/jetclass.yaml.",
+    help="Process catalogue to use instead of the default config/jetclass.yaml.",
 )
 @click.pass_context
 def cli(context: click.Context, catalogue_file: Path | None) -> None:
@@ -93,19 +93,19 @@ def check_cards(specs: Catalogue) -> None:
 
 @cli.group()
 def config() -> None:
-    """Locate or copy the configuration shipped with the package."""
+    """Locate or copy the configuration included with the package."""
 
 
 @config.command("path")
 def config_path() -> None:
-    """Print the directory of the shipped configuration."""
+    """Print the directory of the package's configuration."""
     click.echo(str(config_root()))
 
 
 @config.command("export")
 @click.argument("destination", type=click.Path(path_type=Path))
 def config_export(destination: Path) -> None:
-    """Copy the shipped configuration to DESTINATION for editing."""
+    """Copy the package's configuration to DESTINATION for editing."""
     try:
         export_config(destination)
     except FileExistsError as error:

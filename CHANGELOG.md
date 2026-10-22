@@ -9,7 +9,7 @@
   (`omphjc check-cards`).
 - Delphes cards are read and compared by their evaluated settings
   (`omphjc delphes show`, `omphjc delphes compare`).
-- The configuration ships as a top-level `config/` directory that
+- The configuration is a top-level `config/` directory that
   `omphjc config export DIR` copies for editing and `--catalogue PATH` (or
   `OMPHJC_CATALOGUE`) selects.
 - `omphjc pythia show` prints the Pythia command file `DelphesPythia8` reads,
@@ -32,7 +32,7 @@
 - `docs/guide.md` introduces MadGraph, Pythia and Delphes to newcomers: what
   each program does and the syntax of the files it reads. (#4)
 - The CMS card distributed with Delphes, from which the JetClass card is
-  adapted, ships in `config/references/delphes/` for
+  adapted, is included in `config/references/delphes/` for
   `omphjc delphes compare --reference`. (#5)
 - `config/checksums.json` records the SHA-256 hash of every file the
   configuration takes from the JetClass production, MadGraph and Delphes. (#6)

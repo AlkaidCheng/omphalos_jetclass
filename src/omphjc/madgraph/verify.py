@@ -169,7 +169,7 @@ def compare_process(spec: ProcessSpec) -> list[Mismatch]:
 def compare_all(specs: Iterable[ProcessSpec] | None = None) -> list[Mismatch]:
     """Return the differences for every process that has reference cards.
 
-    `specs` defaults to the shipped catalogue.
+    Without `specs`, the processes of the default catalogue are compared.
     """
     return [
         mismatch

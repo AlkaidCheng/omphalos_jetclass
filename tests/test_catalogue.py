@@ -75,7 +75,7 @@ def test_model_name_splits_into_base_and_restriction(
     assert specs["ZJetsToNuNu"].model_base == "sm"
 
 
-def test_shipped_models_are_resolved_and_standard_models_are_not(
+def test_vendored_models_are_resolved_and_standard_models_are_not(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     for spec in specs.values():
@@ -90,7 +90,7 @@ def test_shipped_models_are_resolved_and_standard_models_are_not(
     assert heft is not None and (heft / "restrict_ckm.dat").is_file()
 
 
-def test_reference_cards_are_shipped_for_every_process(
+def test_reference_cards_are_included_for_every_process(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     for name, spec in specs.items():
@@ -99,10 +99,10 @@ def test_reference_cards_are_shipped_for_every_process(
         assert (directory / "run_card.dat").is_file()
         assert (directory / "proc_card_mg5.dat").is_file()
         assert (directory / f"run_{name}.mg5").is_file()
-    shipped = catalogue_path().parent
-    assert specs["TTBar"].madspin_card == shipped / "madspin" / "TTBar.dat"
+    config = catalogue_path().parent
+    assert specs["TTBar"].madspin_card == config / "madspin" / "TTBar.dat"
     assert (
-        specs["TTBar"].reference_cards == shipped / "references" / "jetclass" / "TTBar"
+        specs["TTBar"].reference_cards == config / "references" / "jetclass" / "TTBar"
     )
 
 
@@ -192,20 +192,20 @@ def test_an_entry_needs_only_its_physics(tmp_path: Path) -> None:
 
 
 def test_paths_may_be_absolute(tmp_path: Path) -> None:
-    shipped = catalogue_path().parent
+    config = catalogue_path().parent
     path = tmp_path / "elsewhere" / "absolute.yaml"
     path.parent.mkdir()
     path.write_text(
-        f"common:\n  models_dir: {shipped / 'models'}\n"
-        f"  delphes_card: {shipped / 'delphes' / 'delphes_card_JetClass.tcl'}\n"
+        f"common:\n  models_dir: {config / 'models'}\n"
+        f"  delphes_card: {config / 'delphes' / 'delphes_card_JetClass.tcl'}\n"
         "processes:\n  T:\n    label: T\n    description: d\n    model: heft\n"
         "    processes: ['p p > t t~']\n"
-        f"    madspin_card: {shipped / 'madspin' / 'TTBar.dat'}\n"
-        f"    reference_cards: {shipped / 'references' / 'jetclass' / 'TTBar'}\n",
+        f"    madspin_card: {config / 'madspin' / 'TTBar.dat'}\n"
+        f"    reference_cards: {config / 'references' / 'jetclass' / 'TTBar'}\n",
         encoding="utf-8",
     )
     spec = load_catalogue(path)["T"]
-    assert spec.model_path == shipped / "models" / "heft"
-    assert spec.delphes_card == shipped / "delphes" / "delphes_card_JetClass.tcl"
-    assert spec.madspin_card == shipped / "madspin" / "TTBar.dat"
-    assert spec.reference_cards == shipped / "references" / "jetclass" / "TTBar"
+    assert spec.model_path == config / "models" / "heft"
+    assert spec.delphes_card == config / "delphes" / "delphes_card_JetClass.tcl"
+    assert spec.madspin_card == config / "madspin" / "TTBar.dat"
+    assert spec.reference_cards == config / "references" / "jetclass" / "TTBar"
