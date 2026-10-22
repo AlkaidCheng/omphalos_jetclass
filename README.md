@@ -24,10 +24,10 @@ derived in Parnassus's own stable-particle convention.
 | convert *(planned)* | Applies Parnassus's stable-particle convention (cτ > 10 mm) | — | `parnassus.parquet`, or `.hepmc3` for the current Parnassus reader |
 | ntuple *(planned)* | Builds the JetClass jet table (jets, labels, constituents) from the Delphes output | — | `jetclass.parquet` |
 
-Every stage of a job writes into one directory with a manifest recording
-versions, seeds, card hashes, cross sections and event counts. Dashed boxes in
-the diagram are the stages not yet available; the sections below cover the
-available ones.
+Dashed boxes in the diagram are the stages not yet available, and the
+sections below cover the available ones. Running a whole job, every stage in
+one directory with a manifest recording versions, seeds, card hashes, cross
+sections and event counts, is planned as well.
 
 New to MadGraph, Pythia or Delphes? [The guide](docs/guide.md) explains what
 each program does, the syntax of the files it reads, and where each catalogue
@@ -40,8 +40,7 @@ pip install -e .
 ```
 
 The package itself needs Python 3.10 or later. Generating events additionally
-needs MadGraph5_aMC@NLO, Pythia 8 and Delphes built with Pythia support; the
-`environment/` directory documents a pinned installation.
+needs MadGraph5_aMC@NLO, Pythia 8 and Delphes built with Pythia support.
 
 ## Configuration
 
@@ -286,12 +285,6 @@ omphjc delphes compare config/references/jetclass/delphes_card.tcl \
 ```
 
 Reading a card uses the Tcl interpreter that ships with Python (`tkinter`).
-
-## Layout of a job
-
-Each job produces, in its own directory, the MadGraph event file, the Delphes
-output, the simulation-only record and the Parnassus input, together with a
-manifest recording versions, seeds and cross sections.
 
 ## Acknowledgements
 

@@ -183,7 +183,7 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
         If the ``common`` block or an entry holds an unknown key, an entry
         lacks a required key or holds a value of the wrong type, a named file
         does not exist, two entries share a label, or an entry is matched
-        while the catalogue has no ``pythia_matching`` block.
+        while ``common.pythia_matching`` sets no ``JetMatching:merge``.
     """
     with path.open(encoding="utf-8") as stream:
         document = yaml.safe_load(stream)

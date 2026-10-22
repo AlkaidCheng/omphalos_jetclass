@@ -61,6 +61,11 @@ def parse_value(text: str) -> RunCardValue:
         ``True``/``False`` become booleans, integers and floats become
         numbers, ``{pdg: cut}`` mappings become ``dict[int, float]`` and
         everything else is returned as a stripped string.
+
+    Raises
+    ------
+    ValueError
+        If `text` starts with ``{`` but is not a valid mapping.
     """
     value = text.strip()
     lowered = value.lower()
