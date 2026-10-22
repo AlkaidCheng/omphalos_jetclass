@@ -134,7 +134,7 @@ class ProcessSpec:
 
 def process_names() -> tuple[str, ...]:
     """Return the catalogue names in production order."""
-    return tuple(catalogue())
+    return tuple(default_catalogue())
 
 
 def get_process(name: str) -> ProcessSpec:
@@ -146,14 +146,14 @@ def get_process(name: str) -> ProcessSpec:
         If `name` is not in the catalogue; the message lists the valid names.
     """
     try:
-        return catalogue()[name]
+        return default_catalogue()[name]
     except KeyError:
         known = ", ".join(process_names())
         raise KeyError(f"Unknown process {name!r}; known processes: {known}") from None
 
 
 @cache
-def catalogue() -> Mapping[str, ProcessSpec]:
+def default_catalogue() -> Mapping[str, ProcessSpec]:
     """Return the default catalogue, keyed by process name."""
     return load_catalogue(catalogue_path())
 

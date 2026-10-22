@@ -14,7 +14,7 @@ from omphjc.madgraph import (
     launch_commands,
     proc_card_commands,
 )
-from omphjc.processes import ProcessSpec, catalogue, load_catalogue
+from omphjc.processes import ProcessSpec, default_catalogue, load_catalogue
 from omphjc.pythia import render_cmnd, shower_settings
 
 Catalogue = Mapping[str, ProcessSpec]
@@ -33,7 +33,9 @@ Catalogue = Mapping[str, ProcessSpec]
 def cli(context: click.Context, catalogue_file: Path | None) -> None:
     """Generate JetClass samples for Delphes and Parnassus."""
     context.obj = (
-        catalogue() if catalogue_file is None else load_catalogue(catalogue_file)
+        default_catalogue()
+        if catalogue_file is None
+        else load_catalogue(catalogue_file)
     )
 
 
