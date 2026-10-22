@@ -1,4 +1,4 @@
-"""Delphes cards and drivers."""
+"""Read, compare and adapt Delphes cards."""
 
 from omphjc.delphes.card import (
     DelphesCard,

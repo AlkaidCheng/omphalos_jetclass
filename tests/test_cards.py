@@ -71,7 +71,7 @@ def test_proc_card_commands_for_a_matched_process(
     ]
 
 
-def test_shipped_models_are_imported_by_path(
+def test_vendored_models_are_imported_by_path(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     heft = specs["HToWW4Q"].model_path

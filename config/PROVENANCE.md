@@ -1,4 +1,4 @@
-# Provenance of the shipped configuration
+# Provenance of the configuration
 
 `checksums.json` records the SHA-256 hash of every file listed here. Files
 under `references/` are kept unchanged as the official reference; the files a

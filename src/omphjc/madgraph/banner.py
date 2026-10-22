@@ -130,14 +130,12 @@ class Banner:
 
 
 def _open_text(path: Path) -> IO[str]:
-    """Open a banner source for reading as text.
+    """Open `path` as text, decompressing a ``.gz`` file.
 
-    MadGraph gzips the event file it writes (``Events/run_01/
-    unweighted_events.lhe.gz``, or ``run_01_decayed_1/`` after MadSpin), so
-    that is the usual input. The two plain-text forms are the header MadGraph
-    stores alongside it (``run_01_tag_1_banner.txt``) and the uncompressed
-    ``.lhe`` a job keeps for ``DelphesPythia8``, which reads the event file as
-    text.
+    MadGraph gzips its event file (``Events/run_01/unweighted_events.lhe.gz``)
+    but writes the banner beside it (``run_01_tag_1_banner.txt``) as plain
+    text, and ``DelphesPythia8`` needs the event file uncompressed, so a
+    banner can come from either form.
     """
     if path.suffix == ".gz":
         return gzip.open(path, "rt", encoding="utf-8", errors="replace")
@@ -169,13 +167,13 @@ def _capture(
 
 
 def _init_error(block: str) -> float:
-    """Return the cross-section error of an ``<init>`` block, in pb.
+    """Return the cross-section error of an ``<init>`` block in pb.
 
-    The block follows the Les Houches Event File accord: one line describing
-    the beams, ending with NPRUP, the number of subprocesses, then one line
-    per subprocess with ``XSECUP XERRUP XMAXUP LPRUP``; MadGraph appends a
-    ``<generator>`` tag line, which is skipped. The errors of the subprocesses
-    are summed in quadrature. A MadGraph block with one subprocess::
+    MadGraph's generation summary records the cross section without its
+    error, which the event file carries only in the ``<init>`` block, as the
+    ``XERRUP`` of each subprocess line. The errors of the subprocesses are
+    summed in quadrature, and the ``<generator>`` line MadGraph appends to the
+    block is skipped. A MadGraph block with one subprocess::
 
         2212 2212 6.500000e+03 6.500000e+03 0 0 247000 247000 -4 1
          1.052824299417E+00 2.398374998897E-03 1.052824299417E+00 1
@@ -184,7 +182,7 @@ def _init_error(block: str) -> float:
     Raises
     ------
     ValueError
-        If the block does not have this shape.
+        If the block does not have the Les Houches layout.
     """
     rows = [
         line.split()

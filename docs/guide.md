@@ -90,7 +90,7 @@ Particle names follow the model; the Standard Model names are `u d c s t b`,
 
 A **model** is a folder in the UFO format: Python files (`particles.py`,
 `parameters.py`, `couplings.py`, `vertices.py`, …) that list the particles,
-their parameters and their interactions. MadGraph ships the Standard Model
+their parameters and their interactions. MadGraph includes the Standard Model
 (`sm`); other models are downloaded or supplied as folders. The package keeps
 the models it needs in `config/models/` and imports them by path, so a run
 never downloads anything.
@@ -147,7 +147,7 @@ processes, with MadGraph's own description where it has one:
 | `cut_decays` | Whether the cuts below also apply to decay products |
 | `ptj`, `etaj`, `drjj` | Minimum jet pT (GeV), maximum jet \|η\|, minimum ΔR between jets |
 | `ptl`, `etal`, `drll`, `drjl` | The same for charged leptons |
-| `misset` | Minimum missing transverse energy, the summed pT of the neutrinos. With `misset = 450`, the Z → νν̄ recoils against a Higgs boson of comparable pT, which makes the Higgs decay products land in one wide jet |
+| `misset` | Minimum missing transverse energy, the summed pT of the neutrinos. With `misset = 450`, the Z → νν̄ recoils against a Higgs boson of comparable pT, so that the Higgs decay products fall within one wide jet |
 | `pt_min_pdg`, `eta_max_pdg` | Minimum pT and maximum \|η\| for given particles by PDG code: `{25: 450.0}` requires a Higgs boson (code 25) above 450 GeV |
 | `use_syst` | Whether to store weights for systematic variations |
 | `ickkw`, `xqcut` | MLM matching: `ickkw = 1` turns it on and `xqcut` is the minimum kT distance between partons, in GeV (§3.3) |

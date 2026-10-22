@@ -15,7 +15,7 @@ from omphjc.processes.catalogue import ProcessSpec
 def model_import_target(spec: ProcessSpec) -> str:
     """Return the argument of ``import model`` for `spec`.
 
-    A model shipped with the catalogue is imported by path so that MadGraph
+    A model included with the catalogue is imported by path so that MadGraph
     never downloads it; the restriction suffix, if any, is kept.
     """
     if spec.model_path is None:

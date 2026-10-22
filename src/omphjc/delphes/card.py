@@ -5,13 +5,13 @@ A Delphes card is a Tcl script: ``set`` assigns top-level variables such as
 assigns the module's parameters with ``set`` and ``add``, sometimes through
 loops that build calorimeter binnings. Delphes reads the card with a Tcl
 interpreter, so this module does the same, through the Tcl interpreter that
-ships with Python, and exposes the evaluated configuration as keys and values.
+comes with Python, and exposes the evaluated configuration as keys and values.
 Two cards that differ only in whitespace, comments, loop spelling or the order
 of definitions therefore compare equal.
 
 The official JetClass card is the CMS card distributed with Delphes
 (``cards/delphes_card_CMS.tcl``, identical from Delphes 3.4.2 to 3.5.1 and
-shipped as ``config/references/delphes/delphes_card_CMS.tcl``) adapted to jet
+included as ``config/references/delphes/delphes_card_CMS.tcl``) adapted to jet
 tagging, as section 2 of the JetClass paper describes
 (https://arxiv.org/abs/2202.03772):
 
@@ -25,7 +25,7 @@ tagging, as section 2 of the JetClass paper describes
   and R = 0.5 jets are removed, and the output keeps the generator particles,
   the particle-flow candidates and the two jet collections.
 
-The JetClass card is shipped under ``config/references/jetclass/`` as the
+The JetClass card is kept under ``config/references/jetclass/`` as the
 default reference for comparisons; a run uses the card the catalogue names.
 """
 
@@ -151,7 +151,7 @@ def load_card(path: Path) -> DelphesCard:
 
 
 def reference_card_text() -> str:
-    """Return the shipped official JetClass card as text."""
+    """Return the official JetClass card as text."""
     return delphes_reference_card_path().read_text(encoding="utf-8")
 
 
@@ -208,16 +208,18 @@ def _compare_values(
     for key in sorted(actual.keys() | expected.keys()):
         if key not in expected:
             differences.append(
-                Difference(f"{scope}.{key}", "absent", _render(actual[key]))
+                Difference(f"{scope}.{key}", "absent", _abbreviate(actual[key]))
             )
         elif key not in actual:
             differences.append(
-                Difference(f"{scope}.{key}", _render(expected[key]), "absent")
+                Difference(f"{scope}.{key}", _abbreviate(expected[key]), "absent")
             )
         elif not _values_equal(actual[key], expected[key]):
             differences.append(
                 Difference(
-                    f"{scope}.{key}", _render(expected[key]), _render(actual[key])
+                    f"{scope}.{key}",
+                    _abbreviate(expected[key]),
+                    _abbreviate(actual[key]),
                 )
             )
     return differences
@@ -238,7 +240,7 @@ def _elements_equal(left: str, right: str) -> bool:
         return False
 
 
-def _render(value: ParameterValue, limit: int = 6) -> str:
+def _abbreviate(value: ParameterValue, limit: int = 6) -> str:
     if len(value) <= limit:
         return " ".join(value)
     head = " ".join(value[: limit // 2])

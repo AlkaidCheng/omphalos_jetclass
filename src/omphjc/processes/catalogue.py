@@ -87,7 +87,7 @@ class ProcessSpec:
         Offset added to every job seed of the process; 0 unless the entry
         sets one.
     model_path : Path or None
-        Directory of the model when it ships with the catalogue; ``None``
+        Directory of the model when the catalogue includes it; ``None``
         leaves the model to MadGraph.
     madspin_card : Path or None
         MadSpin card decaying the heavy resonances; ``None`` for no MadSpin.
@@ -134,7 +134,7 @@ class ProcessSpec:
 
 def process_names() -> tuple[str, ...]:
     """Return the catalogue names in production order."""
-    return tuple(catalogue())
+    return tuple(default_catalogue())
 
 
 def get_process(name: str) -> ProcessSpec:
@@ -146,15 +146,15 @@ def get_process(name: str) -> ProcessSpec:
         If `name` is not in the catalogue; the message lists the valid names.
     """
     try:
-        return catalogue()[name]
+        return default_catalogue()[name]
     except KeyError:
         known = ", ".join(process_names())
         raise KeyError(f"Unknown process {name!r}; known processes: {known}") from None
 
 
 @cache
-def catalogue() -> Mapping[str, ProcessSpec]:
-    """Return the shipped catalogue, keyed by process name."""
+def default_catalogue() -> Mapping[str, ProcessSpec]:
+    """Return the default catalogue, keyed by process name."""
     return load_catalogue(catalogue_path())
 
 
@@ -183,7 +183,7 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
         If the ``common`` block or an entry holds an unknown key, an entry
         lacks a required key or holds a value of the wrong type, a named file
         does not exist, two entries share a label, or an entry is matched
-        while the catalogue has no ``pythia_matching`` block.
+        while ``common.pythia_matching`` sets no ``JetMatching:merge``.
     """
     with path.open(encoding="utf-8") as stream:
         document = yaml.safe_load(stream)

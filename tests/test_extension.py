@@ -85,7 +85,7 @@ processes:
       misset: 400.0
       pt_min_pdg: {{25: 450.0}}
       eta_max_pdg: {{25: 2.5}}
-    reference_cards: {shipped}/references/jetclass/HToBB
+    reference_cards: {config}/references/jetclass/HToBB
     seed_offset: 70000000
 """
 
@@ -99,7 +99,7 @@ def study(tmp_path: Path) -> Path:
         "set spinmode none\ndecay t > w+ b, w+ > j j\ndecay t~ > w- b~, w- > j j\n"
     )
     path = tmp_path / "study.yaml"
-    path.write_text(CATALOGUE.format(shipped=config_root()), encoding="utf-8")
+    path.write_text(CATALOGUE.format(config=config_root()), encoding="utf-8")
     return path
 
 

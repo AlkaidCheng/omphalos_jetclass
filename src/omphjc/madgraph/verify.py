@@ -20,7 +20,7 @@ from omphjc.madgraph.runcard import (
     parse_run_card,
     values_equal,
 )
-from omphjc.processes.catalogue import ProcessSpec, RunCardValue, catalogue
+from omphjc.processes.catalogue import ProcessSpec, RunCardValue, default_catalogue
 
 TRACKED_PARAMETERS: frozenset[str] = frozenset(
     {
@@ -169,11 +169,11 @@ def compare_process(spec: ProcessSpec) -> list[Mismatch]:
 def compare_all(specs: Iterable[ProcessSpec] | None = None) -> list[Mismatch]:
     """Return the differences for every process that has reference cards.
 
-    `specs` defaults to the shipped catalogue.
+    Without `specs`, the processes of the default catalogue are compared.
     """
     return [
         mismatch
-        for spec in (catalogue().values() if specs is None else specs)
+        for spec in (default_catalogue().values() if specs is None else specs)
         if spec.reference_cards is not None
         for mismatch in compare_process(spec)
     ]

@@ -5,11 +5,11 @@ from omphjc.pythia.cmnd import (
     MATCHING_SCALE_FACTOR,
     PYTHIA_SEED_LIMIT,
     compare_settings,
+    format_cmnd,
     format_setting,
     matching_scale,
     max_matched_jets,
     parse_cmnd,
-    render_cmnd,
     shower_settings,
 )
 
@@ -18,10 +18,10 @@ __all__ = [
     "MATCHING_SCALE_FACTOR",
     "PYTHIA_SEED_LIMIT",
     "compare_settings",
+    "format_cmnd",
     "format_setting",
     "matching_scale",
     "max_matched_jets",
     "parse_cmnd",
-    "render_cmnd",
     "shower_settings",
 ]

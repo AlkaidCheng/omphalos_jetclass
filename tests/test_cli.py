@@ -29,7 +29,7 @@ def test_processes_show_rejects_unknown_names() -> None:
     assert "unknown process 'HToTauTau'" in result.output
 
 
-def test_check_cards_passes_for_the_shipped_catalogue() -> None:
+def test_check_cards_passes_for_the_default_catalogue() -> None:
     result = CliRunner().invoke(cli, ["check-cards"])
     assert result.exit_code == 0, result.output
     assert "10 processes match" in result.output

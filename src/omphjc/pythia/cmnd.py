@@ -158,7 +158,7 @@ def max_matched_jets(spec: ProcessSpec) -> int:
     return max(_jet_count(process) for process in spec.processes)
 
 
-def render_cmnd(settings: Mapping[str, str], *, title: str) -> str:
+def format_cmnd(settings: Mapping[str, str], *, title: str) -> str:
     """Return `settings` as the text of a Pythia command file."""
     lines = [f"! Pythia 8 settings for DelphesPythia8: {title}", "!"]
     lines.extend(f"{key} = {value}" for key, value in settings.items())

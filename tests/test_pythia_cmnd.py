@@ -9,11 +9,11 @@ from omphjc.pythia import (
     MADGRAPH_INTERFACE_PREFIXES,
     PYTHIA_SEED_LIMIT,
     compare_settings,
+    format_cmnd,
     format_setting,
     matching_scale,
     max_matched_jets,
     parse_cmnd,
-    render_cmnd,
     shower_settings,
 )
 
@@ -136,10 +136,12 @@ def test_no_setting_belongs_to_madgraph_interface(
             assert not key.lower().startswith(tuple(MADGRAPH_INTERFACE_PREFIXES)), key
 
 
-def test_rendered_file_reads_back_identically(specs: Mapping[str, ProcessSpec]) -> None:
+def test_formatted_file_reads_back_identically(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
     for spec in specs.values():
         settings = shower_settings(spec, lhe_path=LHE, n_events=500, seed=3)
-        text = render_cmnd(settings, title=spec.name)
+        text = format_cmnd(settings, title=spec.name)
         assert text.startswith("! Pythia 8 settings for DelphesPythia8")
         assert parse_cmnd(text) == settings
 

@@ -1,4 +1,4 @@
-"""Locate the configuration shipped with the package.
+"""Locate the configuration included with the package.
 
 The repository keeps it in ``config/`` at the top level: the process
 catalogue, the files a run reads (models, MadSpin and Delphes cards) and, under
@@ -16,12 +16,12 @@ _IGNORED_ON_EXPORT = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 
 def config_root() -> Path:
-    """Return the directory holding the shipped configuration."""
+    """Return the directory holding the package's configuration."""
     return Path(str(files("omphjc") / "config"))
 
 
 def catalogue_path() -> Path:
-    """Return the path of the shipped process catalogue."""
+    """Return the path of the default process catalogue."""
     return config_root() / "jetclass.yaml"
 
 
@@ -31,7 +31,7 @@ def delphes_reference_card_path() -> Path:
 
 
 def export_config(destination: Path) -> Path:
-    """Copy the shipped configuration to `destination` for editing.
+    """Copy the package's configuration to `destination` for editing.
 
     Parameters
     ----------

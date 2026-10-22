@@ -61,6 +61,11 @@ def parse_value(text: str) -> RunCardValue:
         ``True``/``False`` become booleans, integers and floats become
         numbers, ``{pdg: cut}`` mappings become ``dict[int, float]`` and
         everything else is returned as a stripped string.
+
+    Raises
+    ------
+    ValueError
+        If `text` starts with ``{`` but is not a valid mapping.
     """
     value = text.strip()
     lowered = value.lower()
@@ -79,7 +84,7 @@ def parse_value(text: str) -> RunCardValue:
 
 
 def format_value(value: RunCardValue) -> str:
-    """Render a value in the syntax MadGraph accepts after ``set name``."""
+    """Format a value in the syntax MadGraph accepts after ``set name``."""
     if isinstance(value, bool):
         return "True" if value else "False"
     if isinstance(value, dict):

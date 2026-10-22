@@ -14,8 +14,8 @@ from omphjc.madgraph import (
     launch_commands,
     proc_card_commands,
 )
-from omphjc.processes import ProcessSpec, catalogue, load_catalogue
-from omphjc.pythia import render_cmnd, shower_settings
+from omphjc.processes import ProcessSpec, default_catalogue, load_catalogue
+from omphjc.pythia import format_cmnd, shower_settings
 
 Catalogue = Mapping[str, ProcessSpec]
 
@@ -27,13 +27,15 @@ Catalogue = Mapping[str, ProcessSpec]
     "catalogue_file",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     envvar="OMPHJC_CATALOGUE",
-    help="Process catalogue to use instead of the shipped config/jetclass.yaml.",
+    help="Process catalogue to use instead of the default config/jetclass.yaml.",
 )
 @click.pass_context
 def cli(context: click.Context, catalogue_file: Path | None) -> None:
     """Generate JetClass samples for Delphes and Parnassus."""
     context.obj = (
-        catalogue() if catalogue_file is None else load_catalogue(catalogue_file)
+        default_catalogue()
+        if catalogue_file is None
+        else load_catalogue(catalogue_file)
     )
 
 
@@ -93,19 +95,19 @@ def check_cards(specs: Catalogue) -> None:
 
 @cli.group()
 def config() -> None:
-    """Locate or copy the configuration shipped with the package."""
+    """Locate or copy the configuration included with the package."""
 
 
 @config.command("path")
 def config_path() -> None:
-    """Print the directory of the shipped configuration."""
+    """Print the directory of the package's configuration."""
     click.echo(str(config_root()))
 
 
 @config.command("export")
 @click.argument("destination", type=click.Path(path_type=Path))
 def config_export(destination: Path) -> None:
-    """Copy the shipped configuration to DESTINATION for editing."""
+    """Copy the package's configuration to DESTINATION for editing."""
     try:
         export_config(destination)
     except FileExistsError as error:
@@ -160,7 +162,7 @@ def pythia_show(
     settings = shower_settings(
         spec, lhe_path=lhe, n_events=n_events, seed=seed, overrides=overrides
     )
-    click.echo(render_cmnd(settings, title=spec.name), nl=False)
+    click.echo(format_cmnd(settings, title=spec.name), nl=False)
 
 
 @cli.group()
@@ -183,7 +185,7 @@ def delphes_show(card: Path | None) -> None:
     for name, module in configuration.modules.items():
         click.echo(f"\nmodule {module.type} {name}")
         for key, value in module.parameters.items():
-            click.echo(f"  {key} = {_render(value)}")
+            click.echo(f"  {key} = {_abbreviate(value)}")
 
 
 @delphes.command("compare")
@@ -226,7 +228,7 @@ def _assignment(text: str) -> tuple[str, str]:
     return key.strip(), value.strip()
 
 
-def _render(value: tuple[str, ...], limit: int = 8) -> str:
+def _abbreviate(value: tuple[str, ...], limit: int = 8) -> str:
     if len(value) <= limit:
         return " ".join(value)
     head = " ".join(value[: limit // 2])

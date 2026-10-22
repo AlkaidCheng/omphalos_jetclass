@@ -24,10 +24,10 @@ derived in Parnassus's own stable-particle convention.
 | convert *(planned)* | Applies Parnassus's stable-particle convention (cτ > 10 mm) | — | `parnassus.parquet`, or `.hepmc3` for the current Parnassus reader |
 | ntuple *(planned)* | Builds the JetClass jet table (jets, labels, constituents) from the Delphes output | — | `jetclass.parquet` |
 
-Every stage of a job writes into one directory with a manifest recording
-versions, seeds, card hashes, cross sections and event counts. Dashed boxes in
-the diagram are the stages not yet available; the sections below cover the
-available ones.
+Dashed boxes in the diagram are the stages not yet available, and the
+sections below cover the available ones. Running a whole job, every stage in
+one directory with a manifest recording versions, seeds, card hashes, cross
+sections and event counts, is planned as well.
 
 New to MadGraph, Pythia or Delphes? [The guide](docs/guide.md) explains what
 each program does, the syntax of the files it reads, and where each catalogue
@@ -40,8 +40,7 @@ pip install -e .
 ```
 
 The package itself needs Python 3.10 or later. Generating events additionally
-needs MadGraph5_aMC@NLO, Pythia 8 and Delphes built with Pythia support; the
-`environment/` directory documents a pinned installation.
+needs MadGraph5_aMC@NLO, Pythia 8 and Delphes built with Pythia support.
 
 ## Configuration
 
@@ -82,7 +81,7 @@ shares, and `processes`, with one entry per process (see
 | `pythia` | Pythia settings for every process (see [Pythia settings](#pythia-settings)) |
 | `pythia_matching` | Pythia settings added for MLM-matched processes |
 
-Comments in the file give the source of the shipped values: an official card
+Comments in the file give the source of each value: an official card
 or a line of MadGraph's source code.
 
 Files are named by a path, either absolute or relative to the catalogue's own
@@ -96,7 +95,7 @@ An installed package carries a copy of this directory. To work from a modified
 catalogue, export the configuration and point the command line at it:
 
 ```
-omphjc config path                        # where the shipped copy lives
+omphjc config path                        # where the package's copy is
 omphjc config export ./my_config          # copy it for editing
 omphjc --catalogue ./my_config/jetclass.yaml processes
 export OMPHJC_CATALOGUE=./my_config/jetclass.yaml   # same, for every command
@@ -118,7 +117,7 @@ such as `models/zprime/restrict_m2tev.dat` and use `model: zprime-m2tev`.
 the official gridpack.
 
 MadGraph includes the b quark in its own `p` and `j` only when the model's b
-is massless. Every model in the shipped catalogue keeps it massive (4.7 GeV),
+is massless. Every model in the default catalogue keeps it massive (4.7 GeV),
 so `common.definitions` adds b and b̄ to both, as the official production
 does; without it, ZToQQ would contain no Z → bb̄ decays. An entry can redefine
 either name in its own `definitions`, which are written after the common ones.
@@ -134,14 +133,14 @@ omphjc check-cards            # differences from the official cards, if any
 `check-cards` compares, value by value, every process that names
 `reference_cards` with those cards: it reports each physics setting that
 differs from the official cards and each tracked official setting the entry
-leaves out, and it lists the processes without reference cards. The shipped
+leaves out, and it lists the processes without reference cards. The default
 catalogue reports no differences.
 
 ### Seeds
 
 Job *n* of a process seeds MadGraph, Pythia and Delphes with
 `seed_offset + n`, so the seeds of a job follow from its process and number
-alone. `seed_offset` is 0 unless the entry sets it. The shipped catalogue
+alone. `seed_offset` is 0 unless the entry sets it. The default catalogue
 follows the official production, which offset the n-th Higgs process by
 10 000 000 × n (HToBB 10 000 000, …, HToWW2Q1L 50 000 000) and no other
 process. Giving a process an offset of its own keeps its seeds apart from those
@@ -150,7 +149,7 @@ of the other processes.
 ## Adding a process
 
 A process is one catalogue entry; no code changes are involved. Export the
-shipped configuration (`omphjc config export ./my_config`) or write a catalogue
+package's configuration (`omphjc config export ./my_config`) or write a catalogue
 of your own, then point the command line at it with `--catalogue`:
 
 ```yaml
@@ -187,7 +186,7 @@ An entry needs the first four keys below; the others are optional.
 | `seed_offset` | Added to the job number to give the job's seeds (see [Seeds](#seeds)) | 0 |
 
 A process you add provides at most a model folder (only when MadGraph does not
-ship the model) and a MadSpin card (only when it decays heavy particles); the
+include the model) and a MadSpin card (only when it decays heavy particles); the
 package writes the MadGraph scripts and the Pythia command file.
 
 ## Pythia settings
@@ -260,13 +259,13 @@ and the process lines; they can be overridden the same way.
 
 ## Delphes cards
 
-A run uses the card named by the catalogue's `common.delphes_card`, shipped as
+A run uses the card named by the catalogue's `common.delphes_card`, by default
 `config/delphes/delphes_card_JetClass.tcl`, a copy of the official JetClass
 card; point it at any other card to change the detector. The JetClass card is
 the CMS card distributed with Delphes, adapted to jet tagging: it adds
 impact-parameter smearing for charged tracks, clusters anti-kT jets with
 R = 0.8 above 500 GeV, and drops the lepton, photon, missing-energy and
-flavour-tagging modules. The CMS card ships in `config/references/delphes/`.
+flavour-tagging modules. The CMS card is included in `config/references/delphes/`.
 
 Cards are compared as configuration, the way Delphes reads them, so layout,
 comments and definition order never count as differences:
@@ -285,13 +284,7 @@ omphjc delphes compare config/references/jetclass/delphes_card.tcl \
     --reference config/references/delphes/delphes_card_CMS.tcl
 ```
 
-Reading a card uses the Tcl interpreter that ships with Python (`tkinter`).
-
-## Layout of a job
-
-Each job produces, in its own directory, the MadGraph event file, the Delphes
-output, the simulation-only record and the Parnassus input, together with a
-manifest recording versions, seeds and cross sections.
+Reading a card uses the Tcl interpreter that comes with Python (`tkinter`).
 
 ## Acknowledgements
 
