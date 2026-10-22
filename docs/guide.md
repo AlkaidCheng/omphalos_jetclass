@@ -186,11 +186,14 @@ when it names a `madspin_card`.
 
 ### 2.6 What MadGraph writes
 
-The run directory holds `unweighted_events.lhe.gz` (gzipped LHE) and a banner
-file. The banner records the MadGraph version, every card as used, the number
-of events and the integrated cross section in pb; the `<init>` block of the
-event file adds the statistical error. `omphjc.madgraph.Banner.read` reads
-them.
+The run directory, `Events/run_01/`, holds `unweighted_events.lhe.gz`
+(gzipped LHE) and a banner file; after MadSpin the decayed sample has a run
+directory of its own, `Events/run_01_decayed_1/`. The banner records the
+MadGraph version, every card as used, the number of events and the integrated
+cross section in pb; the `<init>` block of the event file adds the statistical
+error. `omphjc.madgraph.generate_events` runs both scripts in a working
+directory and returns the event file with its banner, which
+`omphjc.madgraph.Banner.read` reads.
 
 ## 3. Pythia: shower and hadronisation
 
