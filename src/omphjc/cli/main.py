@@ -196,6 +196,30 @@ def _report_generation(job: Job, record: StageRecord, *, kept: bool) -> None:
     click.echo(f"  event file        {record.outputs[0]}")
     click.echo(f"  log               {record.log}")
     click.echo(f"  cards             {job.relative(job.stage_dir(MADGRAPH))}/cards/")
+    click.echo(f"  took              {_describe_usage(record.usage)}")
+
+
+def _describe_usage(usage: Mapping[str, float]) -> str:
+    """Return a stage's wall time, CPU time and peak memory in one line."""
+    parts = []
+    if "wall_seconds" in usage:
+        parts.append(f"{_duration(usage['wall_seconds'])} wall")
+    if "cpu_seconds" in usage:
+        parts.append(f"{_duration(usage['cpu_seconds'])} CPU")
+    if "max_memory_mb" in usage:
+        parts.append(f"{usage['max_memory_mb']:.0f} MiB peak")
+    return ", ".join(parts) if parts else "not recorded"
+
+
+def _duration(seconds: float) -> str:
+    """Return `seconds` as ``12.3 s``, ``4 min 05 s`` or ``2 h 07 min``."""
+    if seconds < 60:
+        return f"{seconds:.1f} s"
+    minutes, rest = divmod(round(seconds), 60)
+    if minutes < 60:
+        return f"{minutes} min {rest:02d} s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours} h {minutes:02d} min"
 
 
 @cli.command("shower")
@@ -285,6 +309,7 @@ def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
     click.echo(f"  output            {record.outputs[0]}")
     click.echo(f"  log               {record.log}")
     click.echo(f"  settings          {', '.join(metadata['settings'])}")
+    click.echo(f"  took              {_describe_usage(record.usage)}")
 
 
 @cli.group()

@@ -14,9 +14,10 @@ process name from a catalogue cannot place a job outside `outdir`.
 
 import hashlib
 import signal
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import FrameType
 from typing import Any
@@ -54,11 +55,15 @@ class StageOutcome:
         The files the stage made, inside the job directory.
     log : Path or None
         The stage's log, inside the job directory.
+    usage : dict[str, float]
+        What the stage's program took beyond the wall time the job measures
+        itself, such as ``cpu_seconds`` and ``max_memory_mb``.
     """
 
     metadata: dict[str, Any]
     outputs: list[Path]
     log: Path | None = None
+    usage: dict[str, float] = field(default_factory=dict)
 
 
 StageBody = Callable[[bool], StageOutcome]
@@ -203,6 +208,7 @@ class Job:
                 return earlier
         overwrite = force or earlier is not None
         started = now()
+        clock = time.monotonic()
         self.manifest.stages[stage] = StageRecord(
             status=RUNNING, started=started, parameters=parameters
         )
@@ -227,6 +233,10 @@ class Job:
             metadata=outcome.metadata,
             outputs=[self.relative(output) for output in outcome.outputs],
             log=None if outcome.log is None else self.relative(outcome.log),
+            usage={
+                "wall_seconds": round(time.monotonic() - clock, 3),
+                **outcome.usage,
+            },
         )
         self.manifest.stages[stage] = record
         self._write_manifest()

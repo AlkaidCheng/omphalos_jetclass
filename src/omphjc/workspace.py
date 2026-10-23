@@ -18,7 +18,13 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import ClassVar
 
-from omphjc.programs import ProgramError, find_program, log_tail, run_program
+from omphjc.programs import (
+    ProgramError,
+    ProgramUsage,
+    find_program,
+    log_tail,
+    run_program,
+)
 from omphjc.safe_paths import working_directory
 from omphjc.stamps import clear_artifacts, read_stamp, seal, write_stamp
 
@@ -55,6 +61,8 @@ class Workspace:
         The program file the run uses.
     deadline : float or None
         ``time.monotonic`` value at which a running program is stopped.
+    usage : ProgramUsage
+        What the program's runs in this workspace took so far, combined.
 
     Raises
     ------
@@ -87,6 +95,7 @@ class Workspace:
         self.purpose = purpose
         self.details = dict(details)
         self.deadline = None if timeout is None else time.monotonic() + timeout
+        self.usage = ProgramUsage(wall_seconds=0.0, cpu_seconds=0.0, max_memory_mb=None)
         self._log_name = log_name
 
     @property
@@ -157,7 +166,9 @@ class Workspace:
             doubtful=doubtful,
         )
 
-    def run(self, command: Sequence[str | os.PathLike[str]], *, failure: str) -> None:
+    def run(
+        self, command: Sequence[str | os.PathLike[str]], *, failure: str
+    ) -> ProgramUsage:
         """Run `command` in the directory, appending its output to the log.
 
         Parameters
@@ -167,6 +178,11 @@ class Workspace:
         failure : str
             How a failure is described, for example ``"MadGraph failed
             running launch.mg5"``; the program's error follows it.
+
+        Returns
+        -------
+        ProgramUsage
+            What this run took; `usage` accumulates it.
 
         Raises
         ------
@@ -180,9 +196,13 @@ class Workspace:
             else max(self.deadline - time.monotonic(), 0.0)
         )
         try:
-            run_program(command, cwd=self.directory, log=self.log_file, timeout=timeout)
+            usage = run_program(
+                command, cwd=self.directory, log=self.log_file, timeout=timeout
+            )
         except ProgramError as error:
             raise self.error_type(f"{failure}: {error}") from error
+        self.usage = self.usage.combined(usage)
+        return usage
 
     def seal_artifacts(self) -> None:
         """Record in the stamp what this run made, for later runs to compare with."""
