@@ -10,11 +10,13 @@ from omphjc.config_paths import config_root, export_config
 from omphjc.delphes import DelphesCard, compare_cards, load_card, reference_card
 from omphjc.jobs import (
     MADGRAPH,
+    SHOWER,
     Job,
     StageRecord,
     TerminationError,
     exception_on_termination,
     generate,
+    shower,
 )
 from omphjc.madgraph import (
     compare_all,
@@ -194,6 +196,95 @@ def _report_generation(job: Job, record: StageRecord, *, kept: bool) -> None:
     click.echo(f"  event file        {record.outputs[0]}")
     click.echo(f"  log               {record.log}")
     click.echo(f"  cards             {job.relative(job.stage_dir(MADGRAPH))}/cards/")
+
+
+@cli.command("shower")
+@click.argument("name")
+@click.option(
+    "--job",
+    "job_id",
+    type=int,
+    required=True,
+    help="Job number; the seed of every program follows from it.",
+)
+@click.option(
+    "--outdir",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Directory holding the jobs of every process.",
+)
+@click.option(
+    "--set",
+    "assignments",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Override one Pythia setting; may be repeated.",
+)
+@click.option(
+    "--timeout", type=float, default=None, help="Seconds DelphesPythia8 may take."
+)
+@click.option(
+    "--force", is_flag=True, help="Run the stage again, replacing its outputs."
+)
+@click.option(
+    "--delphes-pythia8",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Delphes's DelphesPythia8 (default: the one on PATH).",
+)
+@click.pass_obj
+def shower_job(
+    specs: Catalogue,
+    name: str,
+    job_id: int,
+    outdir: Path,
+    assignments: tuple[str, ...],
+    timeout: float | None,
+    force: bool,
+    delphes_pythia8: Path | None,
+) -> None:
+    """Shower one job's generated events with Pythia 8; the detector comes later."""
+    spec = _lookup(specs, name)
+    overrides = dict(_assignment(item) for item in assignments)
+    try:
+        job = Job(spec, outdir, job_id)
+        earlier = job.manifest.stages.get(SHOWER)
+        with exception_on_termination():
+            record = shower(
+                job,
+                overrides=overrides,
+                timeout=timeout,
+                force=force,
+                delphes_pythia8=delphes_pythia8,
+            )
+    except (
+        ValueError,
+        FileExistsError,
+        FileNotFoundError,
+        StampError,
+        ProgramError,
+        TerminationError,
+    ) as error:
+        raise click.ClickException(str(error)) from error
+    _report_shower(job, record, kept=record is earlier)
+
+
+def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
+    """Print what the shower stage of `job` ran with and what it made."""
+    metadata = record.metadata
+    outcome = "done, kept from an earlier run" if kept else "done"
+    click.echo(f"{job.spec.name} job {job.job_id}: {job.root}")
+    click.echo(f"Pythia shower: {outcome}")
+    click.echo(
+        f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
+    )
+    click.echo(f"  events read       {metadata['events_read']}")
+    click.echo(f"  events kept       {metadata['events_accepted']}")
+    if "matching_efficiency" in metadata:
+        click.echo(f"  kept by matching  {metadata['matching_efficiency']:.1%}")
+    click.echo(f"  output            {record.outputs[0]}")
+    click.echo(f"  log               {record.log}")
+    click.echo(f"  settings          {', '.join(metadata['settings'])}")
 
 
 @cli.group()

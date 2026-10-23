@@ -12,6 +12,7 @@ alone. Paths are built from screened names (:mod:`omphjc.safe_paths`), so a
 process name from a catalogue cannot place a job outside `outdir`.
 """
 
+import hashlib
 import signal
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -62,6 +63,11 @@ class StageOutcome:
 
 StageBody = Callable[[bool], StageOutcome]
 """Runs a stage; the argument says whether to replace what an earlier run left."""
+
+
+def sha256(path: Path) -> str:
+    """Return the SHA-256 of the file at `path`, as hexadecimal digits."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def job_seed(spec: ProcessSpec, job_id: int) -> int:
