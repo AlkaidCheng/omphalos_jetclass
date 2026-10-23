@@ -8,6 +8,14 @@ import click
 from omphjc import __version__
 from omphjc.config_paths import config_root, export_config
 from omphjc.delphes import DelphesCard, compare_cards, load_card, reference_card
+from omphjc.jobs import (
+    MADGRAPH,
+    Job,
+    StageRecord,
+    TerminationError,
+    exception_on_termination,
+    generate,
+)
 from omphjc.madgraph import (
     compare_all,
     format_value,
@@ -15,7 +23,9 @@ from omphjc.madgraph import (
     proc_card_commands,
 )
 from omphjc.processes import ProcessSpec, default_catalogue, load_catalogue
+from omphjc.programs import ProgramError
 from omphjc.pythia import format_cmnd, shower_settings
+from omphjc.stamps import StampError
 
 Catalogue = Mapping[str, ProcessSpec]
 
@@ -91,6 +101,99 @@ def check_cards(specs: Catalogue) -> None:
     for mismatch in mismatches:
         click.echo(str(mismatch), err=True)
     raise SystemExit(1)
+
+
+@cli.command("generate")
+@click.argument("name")
+@click.option(
+    "--job",
+    "job_id",
+    type=int,
+    required=True,
+    help="Job number; the seed of every program follows from it.",
+)
+@click.option(
+    "--events", "n_events", type=int, required=True, help="Events to generate."
+)
+@click.option(
+    "--outdir",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Directory holding the jobs of every process.",
+)
+@click.option(
+    "--cores",
+    "n_cores",
+    type=int,
+    default=None,
+    help="Cores MadGraph may use (default: every usable CPU).",
+)
+@click.option("--timeout", type=float, default=None, help="Seconds MadGraph may take.")
+@click.option(
+    "--force", is_flag=True, help="Run the stage again, replacing its outputs."
+)
+@click.option(
+    "--mg5",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="MadGraph's bin/mg5_aMC (default: the one on PATH).",
+)
+@click.pass_obj
+def generate_job(
+    specs: Catalogue,
+    name: str,
+    job_id: int,
+    n_events: int,
+    outdir: Path,
+    n_cores: int | None,
+    timeout: float | None,
+    force: bool,
+    mg5: Path | None,
+) -> None:
+    """Generate the parton-level events of one job of a process with MadGraph."""
+    spec = _lookup(specs, name)
+    try:
+        job = Job(spec, outdir, job_id)
+        earlier = job.manifest.stages.get(MADGRAPH)
+        with exception_on_termination():
+            record = generate(
+                job,
+                n_events=n_events,
+                n_cores=n_cores,
+                timeout=timeout,
+                force=force,
+                mg5=mg5,
+            )
+    except (
+        ValueError,
+        FileExistsError,
+        FileNotFoundError,
+        StampError,
+        ProgramError,
+        TerminationError,
+    ) as error:
+        raise click.ClickException(str(error)) from error
+    _report_generation(job, record, kept=record is earlier)
+
+
+def _report_generation(job: Job, record: StageRecord, *, kept: bool) -> None:
+    """Print what the MadGraph stage of `job` ran with and what it made."""
+    metadata = record.metadata
+    outcome = "done, kept from an earlier run" if kept else "done"
+    click.echo(f"{job.spec.name} job {job.job_id}: {job.root}")
+    click.echo(f"MadGraph generation: {outcome}")
+    click.echo(
+        f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
+    )
+    click.echo(f"  events requested  {record.parameters['events']}")
+    click.echo(f"  events generated  {metadata['events']}")
+    click.echo(
+        f"  cross section     {metadata['cross_section_pb']:g}"
+        f" +- {metadata['cross_section_error_pb']:.3g} pb"
+    )
+    click.echo(f"  event file        {record.outputs[0]}")
+    click.echo(f"  log               {record.log}")
+    click.echo(f"  cards             {job.relative(job.stage_dir(MADGRAPH))}/cards/")
 
 
 @cli.group()

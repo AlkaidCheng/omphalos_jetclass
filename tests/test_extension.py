@@ -8,7 +8,7 @@ from click.testing import CliRunner
 
 from omphjc.cli import cli
 from omphjc.config_paths import config_root
-from omphjc.jobs import derive_seeds
+from omphjc.jobs import job_seed
 from omphjc.madgraph import (
     compare_all,
     launch_commands,
@@ -132,7 +132,7 @@ def test_new_process_needs_only_a_catalogue_entry(
     assert settings["JetMatching:nJetMax"] == "1"
     assert settings["JetMatching:scheme"] == "1"
     assert settings["Main:timesAllowErrors"] == "50"
-    assert derive_seeds(spec, 1).madgraph == 60000001
+    assert job_seed(spec, 1) == 60000001
 
 
 def test_matched_process_needs_the_matching_block(tmp_path: Path) -> None:
