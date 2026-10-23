@@ -169,6 +169,38 @@ def with_random_seed(text: str, seed: int) -> str:
     return f"set RandomSeed {seed}\n\n{text}"
 
 
+_PARTICLES_CARD = """\
+# Delphes card that writes the generator record and simulates nothing.
+#
+# DelphesPythia8 fills the Delphes/allParticles array from every Pythia event
+# before the modules in ExecutionPath run. With the TreeWriter as the only
+# module, the output holds the Particle branch (every generator particle with
+# its status, mothers, daughters, momentum and production vertex) next to the
+# Event and Weight branches the program writes itself, and no detector module
+# runs. DelphesROOT reads such a file to simulate the detector later.
+
+set ExecutionPath {
+  TreeWriter
+}
+
+module TreeWriter TreeWriter {
+  add Branch Delphes/allParticles Particle GenParticle
+}
+"""
+
+
+def particles_card_text() -> str:
+    """Return the Delphes card that keeps the generator record and simulates nothing.
+
+    Run through ``DelphesPythia8``, it turns the program into Pythia's event
+    loop with a ROOT writer behind it: the output holds the ``Particle``
+    branch, the complete generator record of every event, and the ``Event``
+    and ``Weight`` branches, and no detector module runs. ``DelphesROOT`` reads
+    such a file to run a detector card on it later.
+    """
+    return _PARTICLES_CARD
+
+
 def compare_cards(card: DelphesCard, reference: DelphesCard) -> list[Difference]:
     """Return every configuration difference between `card` and `reference`.
 
