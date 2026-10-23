@@ -9,6 +9,7 @@ jobs.
 import contextlib
 import os
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -33,6 +34,37 @@ def available_cores() -> int:
     if sys.platform == "linux":
         return len(os.sched_getaffinity(0))
     return os.cpu_count() or 1
+
+
+def find_program(program: str, program_path: Path | None, *, description: str) -> Path:
+    """Return `program_path`, or the program `program` on PATH when it is ``None``.
+
+    Parameters
+    ----------
+    program : str
+        The program's name on PATH.
+    program_path : Path or None
+        The program file to use instead of the one on PATH.
+    description : str
+        How the program is called in messages, for example
+        ``"MadGraph's bin/mg5_aMC"``.
+
+    Raises
+    ------
+    FileNotFoundError
+        If `program_path` is not a file, or none is given and PATH has no
+        `program`.
+    """
+    if program_path is not None:
+        if not program_path.is_file():
+            raise FileNotFoundError(f"{description} {str(program_path)!r} not found")
+        return program_path
+    found = shutil.which(program)
+    if found is None:
+        raise FileNotFoundError(
+            f"{program} is not on PATH; give the path of {description}"
+        )
+    return Path(found)
 
 
 def run_program(
