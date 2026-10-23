@@ -25,9 +25,9 @@ derived in Parnassus's own stable-particle convention.
 | ntuple *(planned)* | Builds the JetClass jet table (jets, labels, constituents) from the Delphes output | — | `jetclass.parquet` |
 
 Dashed boxes in the diagram are the stages not yet available, and the
-sections below cover the available ones. Running a whole job, every stage in
-one directory with a manifest recording versions, seeds, card hashes, cross
-sections and event counts, is planned as well.
+sections below cover the available ones. Each stage is a command that runs in
+a job's directory and records what it did in the job's manifest; `omphjc
+generate` is the first (see [Running a job](#running-a-job)).
 
 New to MadGraph, Pythia or Delphes? [The guide](docs/guide.md) explains what
 each program does, the syntax of the files it reads, and where each catalogue
@@ -285,6 +285,45 @@ omphjc delphes compare config/references/jetclass/delphes_card.tcl \
 ```
 
 Reading a card uses the Tcl interpreter that comes with Python (`tkinter`).
+
+## Running a job
+
+A job is one process and one job number in a directory of its own,
+`<out>/<process>/job_<n>/`. Each stage of the pipeline is a command that runs
+in that directory and records what it did in the job's manifest. MadGraph
+generation is the only stage so far; the shower follows.
+
+```
+omphjc generate HToBB --job 1 --events 1000 --outdir runs/dev
+omphjc generate HToBB --job 1 --events 1000 --outdir runs/dev --cores 8 --timeout 7200
+omphjc generate HToBB --job 1 --events 1000 --outdir runs/dev --force    # run it again
+```
+
+```
+runs/dev/HToBB/job_1/
+├── manifest.json          what ran, with what, and what came out
+└── madgraph/              the MadGraph working directory, MadGraph's own layout inside
+    ├── cards/             the cards MadGraph ran with, hashed in the manifest
+    ├── madgraph.log
+    └── HToBB/Events/run_01/unweighted_events.lhe.gz
+```
+
+The job number gives the seed of every program the job runs
+(`seed_offset + job`, see [Seeds](#seeds)), so a job is reproducible from its
+process and number alone. The manifest records the process, the job number,
+the omphjc version, and for each stage its status, its start and end times,
+the parameters it was asked for (the event count and the seed, for
+generation), the metadata of what it made (for generation: the MadGraph
+version, the events, the cross section with its error, and the SHA-256 of each
+card), its outputs and its log.
+
+Running a stage again keeps a result recorded as done whose outputs are
+present and whose parameters match, runs again a stage that failed or was
+interrupted, replacing what it left, and refuses other parameters, a changed
+seed included, unless `--force` is given. A job that receives `SIGTERM`, as from a batch system's
+time limit, stops its running program and records the failure before it
+exits. MadGraph's directory is kept; the shower stage will read the event file
+from it.
 
 ## Acknowledgements
 

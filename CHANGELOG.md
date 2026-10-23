@@ -16,8 +16,8 @@
   including the MLM matching block for matched processes. (#2)
 - `Banner.read` returns the version, event count, cross section and run card
   recorded in a MadGraph event or banner file. (#2)
-- `derive_seeds` gives a job one seed for MadGraph, Pythia and Delphes from its
-  process's offset and its job number. (#2)
+- A job's seed, shared by MadGraph, Pythia and Delphes, is its process's offset
+  plus its job number (`omphjc.jobs.job_seed`). (#2)
 - A process is one catalogue entry needing only `label`, `description`, `model`
   and `processes`; `check-cards` lists entries without `reference_cards` as not
   checked. (#3)
@@ -41,3 +41,7 @@
 - `omphjc.madgraph.generate_events` runs MadGraph for one process in a working
   directory of its own, on a chosen number of cores and within an optional time
   limit, and returns the event file with its banner. (#9)
+- `omphjc generate PROCESS --job N --events E --outdir DIR` runs the MadGraph
+  stage of one job in `<out>/<process>/job_<N>/` and records its parameters,
+  the MadGraph version, the cards, the event count and the cross section in the
+  job's `manifest.json`. (#10)

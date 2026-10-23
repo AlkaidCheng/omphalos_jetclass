@@ -103,3 +103,28 @@ def test_pythia_show_prints_a_command_file() -> None:
         CliRunner().invoke(cli, ["pythia", "show", "HToBB", "--set", "x"]).exit_code
         != 0
     )
+
+
+def test_generate_runs_a_job_and_keeps_a_finished_one(
+    mg5: Path, tmp_path: Path
+) -> None:
+    arguments = ["generate", "HToBB", "--job", "1", "--outdir", str(tmp_path)]
+    result = CliRunner().invoke(cli, [*arguments, "--events", "10", "--mg5", str(mg5)])
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines()[0].endswith("HToBB/job_1")
+    assert "madgraph: done, 10000 events, 1.05282 pb" in result.output
+    manifest = tmp_path / "HToBB" / "job_1" / "manifest.json"
+    assert manifest.is_file()
+    written = manifest.read_text()
+    again = CliRunner().invoke(cli, [*arguments, "--events", "10", "--mg5", str(mg5)])
+    assert again.exit_code == 0, again.output
+    assert "madgraph: done, 10000 events, 1.05282 pb" in again.output
+    assert manifest.read_text() == written
+
+    other_count = CliRunner().invoke(cli, [*arguments, "--events", "20"])
+    assert other_count.exit_code != 0
+    assert "ran with {'events': 10, 'seed': 10000001}" in other_count.output
+    assert (
+        CliRunner().invoke(cli, [*arguments, "--events", "10", "--job", "0"]).exit_code
+        != 0
+    )
