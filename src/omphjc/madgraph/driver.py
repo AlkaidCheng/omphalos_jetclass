@@ -45,9 +45,10 @@ Nothing else in the directory is ever touched.
 
 import dataclasses
 import shutil
-import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from omphjc.madgraph.banner import Banner
 from omphjc.madgraph.cards import (
@@ -56,9 +57,9 @@ from omphjc.madgraph.cards import (
     proc_card_commands,
 )
 from omphjc.processes.catalogue import ProcessSpec
-from omphjc.programs import ProgramError, available_cores, log_tail, run_program
-from omphjc.safe_paths import inside, occupied, working_directory
-from omphjc.stamps import clear_artifacts, read_stamp, seal, write_stamp
+from omphjc.programs import ProgramError, available_cores
+from omphjc.safe_paths import inside, occupied
+from omphjc.workspace import Workspace
 
 # MadGraph's command-line program, bin/mg5_aMC of an installation.
 _MG5_EXECUTABLE = "mg5_aMC"
@@ -122,28 +123,6 @@ class MadGraphRun:
     banner: Banner
     log_file: Path
     set_aside: Path | None = None
-
-
-def _find_mg5(executable: Path | None) -> Path:
-    """Return `executable`, or the ``mg5_aMC`` on PATH when it is ``None``.
-
-    Raises
-    ------
-    FileNotFoundError
-        If `executable` is not a file, or none is given and PATH has no
-        ``mg5_aMC``.
-    """
-    if executable is not None:
-        if not executable.is_file():
-            raise FileNotFoundError(f"MadGraph program {str(executable)!r} not found")
-        return executable
-    found = shutil.which(_MG5_EXECUTABLE)
-    if found is None:
-        raise FileNotFoundError(
-            f"{_MG5_EXECUTABLE} is not on PATH; give the path of MadGraph's "
-            f"bin/{_MG5_EXECUTABLE}"
-        )
-    return Path(found)
 
 
 def generate_events(
@@ -234,7 +213,7 @@ def generate_events(
         spec, process_dir=workspace.process_dir, n_events=n_events, seed=seed
     )
 
-    set_aside = workspace.clear_earlier_run()
+    set_aside = workspace.prepare()
     local_spec = workspace.copy_model()
     try:
         workspace.run_script(
@@ -260,12 +239,12 @@ def generate_events(
     )
 
 
-class MadGraphWorkspace:
+class MadGraphWorkspace(Workspace):
     """The working directory of one process's runs, and the steps a run takes in it.
 
     :func:`generate_events` drives a workspace from start to finish; a caller
     that needs the steps one at a time constructs one and calls them in the
-    same order: :meth:`clear_earlier_run`, :meth:`copy_model`,
+    same order: :meth:`prepare`, :meth:`copy_model`,
     :meth:`run_script` for the process script, :meth:`write_cards`,
     :meth:`run_script` for the launch script, then :meth:`seal_artifacts` in
     a ``finally``.
@@ -288,8 +267,8 @@ class MadGraphWorkspace:
     spec : ProcessSpec
     directory : Path
         The working directory, normalized.
-    executable : Path
-        The ``mg5_aMC`` program the run uses.
+    program_path : Path
+        The ``mg5_aMC`` program file the run uses.
     deadline : float or None
         ``time.monotonic`` value at which a running script is stopped.
 
@@ -302,6 +281,8 @@ class MadGraphWorkspace:
         If `mg5` is not a file, or none is given and PATH has no ``mg5_aMC``.
     """
 
+    error_type: ClassVar[type[ProgramError]] = MadGraphError
+
     def __init__(
         self,
         spec: ProcessSpec,
@@ -310,25 +291,25 @@ class MadGraphWorkspace:
         mg5: Path | None = None,
         timeout: float | None = None,
     ) -> None:
-        if timeout is not None and timeout <= 0:
-            raise ValueError(f"timeout must be positive, got {timeout}")
-        self.spec = spec
-        self.directory = working_directory(directory)
+        super().__init__(
+            directory,
+            program=_MG5_EXECUTABLE,
+            program_path=mg5,
+            description=f"MadGraph's bin/{_MG5_EXECUTABLE}",
+            purpose=_RUN_PURPOSE,
+            details={"process": spec.name},
+            log_name=_LOG_FILE,
+            timeout=timeout,
+        )
         if any(character.isspace() for character in str(self.directory)):
             raise ValueError(
                 f"MadGraph cannot run in a path with whitespace: {self.directory}"
             )
-        self.executable = _find_mg5(mg5)
-        self.deadline = None if timeout is None else time.monotonic() + timeout
+        self.spec = spec
 
     @property
     def process_dir(self) -> Path:
         return inside(self.directory, self.spec.name)
-
-    @property
-    def log_file(self) -> Path:
-        """MadGraph's output for both scripts."""
-        return self.directory / _LOG_FILE
 
     @property
     def model_copy(self) -> Path | None:
@@ -351,12 +332,13 @@ class MadGraphWorkspace:
         run = _DECAYED_RUN if self.spec.madspin else _FIRST_RUN
         return self.process_dir / "Events" / run / _EVENT_FILE
 
-    def clear_earlier_run(self) -> Path | None:
-        """Clear what an earlier run left in the directory, and stamp the directory.
+    def clear_earlier_run(self, *, doubtful: Iterable[str] = ()) -> Path | None:
+        """Clear what an earlier run left in the directory, and nothing else.
 
         A process directory without MadGraph's process card is not what a run
-        leaves, so it is moved aside however it was sealed. Returns the folder
-        holding what was moved aside, ``None`` when nothing was.
+        leaves, so it is moved aside however it was sealed, as is anything
+        named in `doubtful`. Returns the folder holding what was moved aside,
+        ``None`` when nothing was.
 
         Raises
         ------
@@ -371,21 +353,11 @@ class MadGraphWorkspace:
                     f"The model copy {copy} would overlap the model folder "
                     f"{self.spec.model_path}"
                 )
-        doubtful = []
+        doubtful = list(doubtful)
         process_dir = self.process_dir
         if process_dir.is_dir() and not (process_dir / "Cards" / _PROC_CARD).is_file():
             doubtful.append(self.spec.name)
-        set_aside = clear_artifacts(
-            self.directory,
-            self.artifacts,
-            _RUN_PURPOSE,
-            details={"process": self.spec.name},
-            doubtful=doubtful,
-        )
-        self.directory.mkdir(parents=True, exist_ok=True)
-        if read_stamp(self.directory) is None:
-            write_stamp(self.directory, _RUN_PURPOSE, {"process": self.spec.name})
-        return set_aside
+        return super().clear_earlier_run(doubtful=doubtful)
 
     def copy_model(self) -> ProcessSpec:
         """Return the spec importing a copy of its model made in the directory."""
@@ -410,20 +382,7 @@ class MadGraphWorkspace:
         """
         script = self.directory / name
         script.write_text("\n".join(commands) + "\n", encoding="utf-8")
-        timeout = (
-            None
-            if self.deadline is None
-            else max(self.deadline - time.monotonic(), 0.0)
-        )
-        try:
-            run_program(
-                [self.executable, script],
-                cwd=self.directory,
-                log=self.log_file,
-                timeout=timeout,
-            )
-        except ProgramError as error:
-            raise MadGraphError(f"MadGraph failed running {name}: {error}") from error
+        self.run([self.program_path, script], failure=f"MadGraph failed running {name}")
 
     def write_cards(self, n_cores: int) -> None:
         """Append the core count to MadGraph's configuration; write the MadSpin card.
@@ -442,11 +401,3 @@ class MadGraphWorkspace:
             (cards / _MADSPIN_CARD).write_text(
                 madspin_card_text(self.spec), encoding="utf-8"
             )
-
-    def seal_artifacts(self) -> None:
-        """Record in the stamp what this run made, for later runs to compare with."""
-        seal(self.directory, self.artifacts)
-
-    def error(self, message: str) -> MadGraphError:
-        """Return a :class:`MadGraphError` carrying `message` and the end of the log."""
-        return MadGraphError(f"{message}\n{log_tail(self.log_file)}")

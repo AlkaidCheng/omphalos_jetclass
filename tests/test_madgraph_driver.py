@@ -160,10 +160,10 @@ def test_a_run_killed_before_sealing_is_set_aside(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import omphjc.madgraph.driver as driver
+    import omphjc.workspace as workspace
 
     with monkeypatch.context() as killed_before_sealing:
-        killed_before_sealing.setattr(driver, "seal", lambda *_: None)
+        killed_before_sealing.setattr(workspace, "seal", lambda *_: None)
         generate_events(specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
     run = generate_events(
         specs["HToBB"], workdir=tmp_path, n_events=10, seed=2, overwrite=True, mg5=mg5
@@ -414,9 +414,9 @@ def test_a_workspace_finds_mg5_on_path_or_takes_the_given_one(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     spec = specs["HToBB"]
-    assert MadGraphWorkspace(spec, tmp_path, mg5=mg5).executable == mg5
+    assert MadGraphWorkspace(spec, tmp_path, mg5=mg5).program_path == mg5
     monkeypatch.setenv("PATH", str(mg5.parent))
-    assert MadGraphWorkspace(spec, tmp_path).executable == mg5
+    assert MadGraphWorkspace(spec, tmp_path).program_path == mg5
     monkeypatch.setenv("PATH", "")
     with pytest.raises(FileNotFoundError, match="not on PATH"):
         MadGraphWorkspace(spec, tmp_path)
