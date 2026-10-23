@@ -111,14 +111,22 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
     arguments = ["generate", "HToBB", "--job", "1", "--outdir", str(tmp_path)]
     result = CliRunner().invoke(cli, [*arguments, "--events", "10", "--mg5", str(mg5)])
     assert result.exit_code == 0, result.output
-    assert result.output.splitlines()[0].endswith("HToBB/job_1")
-    assert "madgraph: done, 10000 events, 1.05282 pb" in result.output
+    lines = result.output.splitlines()
+    assert lines[0].startswith("HToBB job 1: ") and lines[0].endswith("HToBB/job_1")
+    assert lines[1] == "MadGraph generation: done"
+    assert lines[2] == "  MadGraph 3.5.7, seed 10000001"
+    assert lines[3] == "  events requested  10"
+    assert lines[4] == "  events generated  10000"
+    assert lines[5] == "  cross section     1.05282 +- 0.0024 pb"
+    assert lines[6].startswith("  event file        madgraph/HToBB/Events/")
+    assert lines[7] == "  log               madgraph/madgraph.log"
+    assert lines[8] == "  cards             madgraph/cards/"
     manifest = tmp_path / "HToBB" / "job_1" / "manifest.json"
     assert manifest.is_file()
     written = manifest.read_text()
     again = CliRunner().invoke(cli, [*arguments, "--events", "10", "--mg5", str(mg5)])
     assert again.exit_code == 0, again.output
-    assert "madgraph: done, 10000 events, 1.05282 pb" in again.output
+    assert "MadGraph generation: done, kept from an earlier run" in again.output
     assert manifest.read_text() == written
 
     other_count = CliRunner().invoke(cli, [*arguments, "--events", "20"])

@@ -11,6 +11,7 @@ from omphjc.delphes import DelphesCard, compare_cards, load_card, reference_card
 from omphjc.jobs import (
     MADGRAPH,
     Job,
+    StageRecord,
     TerminationError,
     exception_on_termination,
     generate,
@@ -153,6 +154,7 @@ def generate_job(
     spec = _lookup(specs, name)
     try:
         job = Job(spec, outdir, job_id)
+        earlier = job.manifest.stages.get(MADGRAPH)
         with exception_on_termination():
             record = generate(
                 job,
@@ -171,12 +173,27 @@ def generate_job(
         TerminationError,
     ) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(str(job.root))
+    _report_generation(job, record, kept=record is earlier)
+
+
+def _report_generation(job: Job, record: StageRecord, *, kept: bool) -> None:
+    """Print what the MadGraph stage of `job` ran with and what it made."""
     metadata = record.metadata
+    outcome = "done, kept from an earlier run" if kept else "done"
+    click.echo(f"{job.spec.name} job {job.job_id}: {job.root}")
+    click.echo(f"MadGraph generation: {outcome}")
     click.echo(
-        f"{MADGRAPH}: {record.status}, {metadata['events']} events, "
-        f"{metadata['cross_section_pb']:g} pb"
+        f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
     )
+    click.echo(f"  events requested  {record.parameters['events']}")
+    click.echo(f"  events generated  {metadata['events']}")
+    click.echo(
+        f"  cross section     {metadata['cross_section_pb']:g}"
+        f" +- {metadata['cross_section_error_pb']:.3g} pb"
+    )
+    click.echo(f"  event file        {record.outputs[0]}")
+    click.echo(f"  log               {record.log}")
+    click.echo(f"  cards             {job.relative(job.stage_dir(MADGRAPH))}/cards/")
 
 
 @cli.group()
