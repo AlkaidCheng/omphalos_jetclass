@@ -169,7 +169,7 @@ def generate_events(
         `workdir`. By default an existing one is an error, so that a run never
         deletes results by accident. It is replaced only after every other
         check has passed: deleted when the earlier run sealed it and nothing
-        in it changed since, otherwise, as after a failed or interrupted run,
+        in it changed since, otherwise, as after a run killed before sealing,
         moved aside (see `MadGraphRun.set_aside`).
     mg5_path : Path or None, optional
         MadGraph's ``bin/mg5_aMC``; by default the one on PATH.
@@ -217,8 +217,8 @@ def generate_events(
     )
 
     set_aside = workspace.prepare()
-    local_spec = workspace.copy_model()
     try:
+        local_spec = workspace.copy_model()
         workspace.run_script(
             _PROCESS_SCRIPT,
             proc_card_commands(local_spec, output_dir=workspace.process_dir),
