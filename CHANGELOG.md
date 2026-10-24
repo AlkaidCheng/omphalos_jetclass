@@ -56,3 +56,7 @@
 - Every argument and attribute of the drivers, run records, stages and CLI that
   holds a file path ends in `_path` and every one that holds a directory in
   `_dir`. (#16)
+- Python names follow one verb per idea and say what they return, for example
+  `read_card`, `parse_statistics`, `format_duration`, `uses_madspin`,
+  `is_occupied` and `make_error`; `madgraph.verify` is `madgraph.reference` and
+  `madgraph.runcard` is `madgraph.run_card`. (#17)

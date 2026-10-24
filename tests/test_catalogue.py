@@ -32,7 +32,7 @@ def test_only_zjets_is_matched_and_only_tops_use_madspin(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     assert [name for name, spec in specs.items() if spec.matching] == ["ZJetsToNuNu"]
-    assert [name for name, spec in specs.items() if spec.madspin] == [
+    assert [name for name, spec in specs.items() if spec.uses_madspin] == [
         "TTBar",
         "TTBarLep",
     ]
@@ -189,7 +189,7 @@ def test_an_entry_needs_only_its_physics(tmp_path: Path) -> None:
     spec = read_catalogue(path)["Z"]
     assert spec.run_card == {"ebeam1": 6800.0}
     assert spec.definitions == ()
-    assert (spec.seed_offset, spec.matching, spec.madspin) == (0, False, False)
+    assert (spec.seed_offset, spec.matching, spec.uses_madspin) == (0, False, False)
 
 
 def test_paths_may_be_absolute(tmp_path: Path) -> None:

@@ -134,7 +134,7 @@ def test_unsealed_and_doubtful_artifacts_are_set_aside(run: Path) -> None:
     (run / "later").mkdir()
     (run / "later" / "partial.dat").write_text("partial")
     folder = clear_artifacts(
-        run, ["output", "run.log", "later"], "testing", doubtful=["run.log"]
+        run, ["output", "run.log", "later"], "testing", unconfirmed=["run.log"]
     )
     assert folder is not None
     assert (folder / "later" / "partial.dat").read_text() == "partial"

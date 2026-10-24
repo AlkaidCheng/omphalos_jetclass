@@ -65,7 +65,7 @@ def processes(context: click.Context) -> None:
     for spec in specs.values():
         click.echo(
             f"{spec.name:<12} {spec.label:<6} {spec.model:<22} "
-            f"{_yes_no(spec.matching):<8} {_yes_no(spec.madspin)}"
+            f"{_yes_no(spec.matching):<8} {_yes_no(spec.uses_madspin)}"
         )
 
 
@@ -200,7 +200,9 @@ def _report_generation(job: Job, record: StageRecord, *, kept: bool) -> None:
     )
     click.echo(f"  event file        {record.outputs[0]}")
     click.echo(f"  log               {record.log}")
-    click.echo(f"  cards             {job.relative(job.stage_dir(MADGRAPH))}/cards/")
+    click.echo(
+        f"  cards             {job.relative_path(job.stage_dir(MADGRAPH))}/cards/"
+    )
     click.echo(f"  took              {format_usage(record.usage)}")
     _report_set_aside(job)
 
@@ -446,7 +448,7 @@ def clean_job(
     )
     for folder, folder_size in zip(folders, sizes, strict=True):
         click.echo(
-            f"  {job.relative(folder.path):<56} "
+            f"  {job.relative_path(folder.path):<56} "
             f"{folder.created:%Y-%m-%d %H:%M} UTC  {format_size(folder_size):>9}"
         )
 

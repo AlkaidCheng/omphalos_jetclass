@@ -143,7 +143,7 @@ class ProcessSpec:
         return self.model.partition("-")[2]
 
     @property
-    def madspin(self) -> bool:
+    def uses_madspin(self) -> bool:
         """Whether MadSpin decays the heavy resonances."""
         return self.madspin_card is not None
 

@@ -53,7 +53,7 @@ from omphjc.delphes.card import particles_card_text
 from omphjc.processes.catalogue import ProcessSpec, SettingValue
 from omphjc.programs import ProgramError, ProgramUsage
 from omphjc.pythia.cmnd import format_cmnd, shower_settings
-from omphjc.safe_paths import occupied
+from omphjc.safe_paths import is_occupied
 from omphjc.workspace import Workspace
 
 # Delphes's program combining Pythia 8 and the detector simulation.
@@ -233,7 +233,7 @@ def shower_events(
     workspace = ShowerWorkspace(
         spec, workdir, delphes_pythia8_path=delphes_pythia8_path, timeout=timeout
     )
-    if occupied(workspace.output_path) and not overwrite:
+    if is_occupied(workspace.output_path) and not overwrite:
         raise FileExistsError(
             f"Output file {workspace.output_path} already exists; pass overwrite=True "
             "to replace it"
@@ -259,17 +259,17 @@ def shower_events(
 
     log_text = workspace.log_path.read_text(encoding="utf-8", errors="replace")
     if _ABORTED in log_text:
-        raise workspace.error(
+        raise workspace.make_error(
             "DelphesPythia8 gave up after too many failed events (Main:timesAllowErrors)"
         )
     if not workspace.output_path.is_file():
-        raise workspace.error(
+        raise workspace.make_error(
             f"DelphesPythia8 wrote no output file {workspace.output_path}"
         )
     try:
         statistics = parse_statistics(log_text)
     except ValueError as error:
-        raise workspace.error(f"DelphesPythia8 did not finish: {error}") from None
+        raise workspace.make_error(f"DelphesPythia8 did not finish: {error}") from None
     return ShowerRun(
         output_path=workspace.output_path,
         cmnd_path=workspace.cmnd_path,
@@ -374,7 +374,7 @@ class ShowerWorkspace(Workspace):
         """
         self.run(
             [self.program_path, _CARD_FILE, _CMND_FILE, _OUTPUT_FILE],
-            failure="DelphesPythia8 failed",
+            failure_message="DelphesPythia8 failed",
         )
 
 

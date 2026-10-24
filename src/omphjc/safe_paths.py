@@ -64,7 +64,7 @@ def working_directory(path: str | os.PathLike[str]) -> Path:
     return directory
 
 
-def occupied(path: Path) -> bool:
+def is_occupied(path: Path) -> bool:
     """Return whether something, a broken symbolic link included, is at `path`."""
     return path.exists() or path.is_symlink()
 

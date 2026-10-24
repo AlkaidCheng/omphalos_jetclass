@@ -80,11 +80,11 @@ def simulate(
         return StageOutcome(
             metadata={
                 "events": shower_record.metadata.get("events_accepted"),
-                "card": {job.relative(run.card_path): sha256(run.card_path)},
+                "card": {job.relative_path(run.card_path): sha256(run.card_path)},
             },
             outputs=[run.output_path],
             log_path=run.log_path,
-            usage=run.usage.recorded(),
+            usage=run.usage.as_record(),
             set_aside=run.set_aside,
         )
 

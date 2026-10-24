@@ -116,7 +116,7 @@ def test_new_process_needs_only_a_catalogue_entry(
     assert (
         model_import_target(spec) == f"{study.parent / 'models' / 'zprime'}-restricted"
     )
-    assert spec.madspin and spec.reference_cards is None
+    assert spec.uses_madspin and spec.reference_cards is None
     assert proc_card_commands(spec, output_dir=Path("out"))[1:5] == [
         "define p = p b b~",
         "define j = j b b~",

@@ -58,7 +58,7 @@ from omphjc.madgraph.cards import (
 )
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import ProgramError, ProgramUsage, available_cores
-from omphjc.safe_paths import inside, occupied
+from omphjc.safe_paths import inside, is_occupied
 from omphjc.workspace import Workspace
 
 # MadGraph's command-line program, bin/mg5_aMC of an installation.
@@ -205,7 +205,7 @@ def generate_events(
     if n_cores < 1:
         raise ValueError(f"n_cores must be positive, got {n_cores}")
     workspace = MadGraphWorkspace(spec, workdir, mg5_path=mg5_path, timeout=timeout)
-    if occupied(workspace.process_dir) and not overwrite:
+    if is_occupied(workspace.process_dir) and not overwrite:
         raise FileExistsError(
             f"Process directory {workspace.process_dir} already exists; "
             "pass overwrite=True to replace it"
@@ -232,7 +232,7 @@ def generate_events(
 
     events_path = workspace.events_path
     if not events_path.is_file():
-        raise workspace.error(f"MadGraph wrote no event file {events_path}")
+        raise workspace.make_error(f"MadGraph wrote no event file {events_path}")
     return MadGraphRun(
         process_dir=workspace.process_dir,
         events_path=events_path,
@@ -333,15 +333,15 @@ class MadGraphWorkspace(Workspace):
     @property
     def events_path(self) -> Path:
         """The event file MadGraph writes: the decayed sample after MadSpin."""
-        run = _DECAYED_RUN if self.spec.madspin else _FIRST_RUN
+        run = _DECAYED_RUN if self.spec.uses_madspin else _FIRST_RUN
         return self.process_dir / "Events" / run / _EVENT_FILE
 
-    def clear_earlier_run(self, *, doubtful: Iterable[str] = ()) -> Path | None:
+    def clear_earlier_run(self, *, unconfirmed: Iterable[str] = ()) -> Path | None:
         """Clear what an earlier run left in the directory, and nothing else.
 
         A process directory without MadGraph's process card is not what a run
         leaves, so it is moved aside however it was sealed, as is anything
-        named in `doubtful`. Returns the folder holding what was moved aside,
+        named in `unconfirmed`. Returns the folder holding what was moved aside,
         ``None`` when nothing was.
 
         Raises
@@ -362,11 +362,11 @@ class MadGraphWorkspace(Workspace):
                     f"The model copy {copy_dir} would overlap the model folder "
                     f"{self.spec.model_dir}"
                 )
-        doubtful = list(doubtful)
+        unconfirmed = list(unconfirmed)
         process_dir = self.process_dir
         if process_dir.is_dir() and not (process_dir / "Cards" / _PROC_CARD).is_file():
-            doubtful.append(self.spec.name)
-        return super().clear_earlier_run(doubtful=doubtful)
+            unconfirmed.append(self.spec.name)
+        return super().clear_earlier_run(unconfirmed=unconfirmed)
 
     def copy_model(self) -> ProcessSpec:
         """Return the spec importing a copy of its model made in the directory."""
@@ -392,7 +392,8 @@ class MadGraphWorkspace(Workspace):
         script_path = self.workdir / name
         script_path.write_text("\n".join(commands) + "\n", encoding="utf-8")
         self.run(
-            [self.program_path, script_path], failure=f"MadGraph failed running {name}"
+            [self.program_path, script_path],
+            failure_message=f"MadGraph failed running {name}",
         )
 
     def write_cards(self, n_cores: int) -> None:
@@ -405,10 +406,12 @@ class MadGraphWorkspace(Workspace):
         """
         cards_dir = self.process_dir / "Cards"
         if not cards_dir.is_dir():
-            raise self.error(f"MadGraph wrote no process directory {self.process_dir}")
+            raise self.make_error(
+                f"MadGraph wrote no process directory {self.process_dir}"
+            )
         with (cards_dir / _ME5_CONFIGURATION).open("a", encoding="utf-8") as stream:
             stream.write(f"\nrun_mode = {_MULTICORE_RUN_MODE}\nnb_core = {n_cores}\n")
-        if self.spec.madspin:
+        if self.spec.uses_madspin:
             (cards_dir / _MADSPIN_CARD).write_text(
                 madspin_card_text(self.spec), encoding="utf-8"
             )

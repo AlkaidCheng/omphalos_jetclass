@@ -32,8 +32,8 @@ from pathlib import Path
 from typing import Any
 
 from omphjc import __version__
-from omphjc.filetree import latest_change, tree_size
-from omphjc.safe_paths import inside, occupied, remove_inside
+from omphjc.filetree import latest_change_ns, tree_size
+from omphjc.safe_paths import inside, is_occupied, remove_inside
 
 STAMP_FILE = "omphjc-stamp.json"
 SET_ASIDE_DIR = "omphjc-set-aside"
@@ -163,9 +163,9 @@ def seal(directory: Path, artifacts: Iterable[str]) -> Stamp:
     sealed = replace(
         stamp,
         artifacts={
-            name: latest_change(path)
+            name: latest_change_ns(path)
             for name in artifacts
-            if occupied(path := _artifact_path(directory, name))
+            if is_occupied(path := _artifact_path(directory, name))
         },
     )
     _replace_stamp(directory, sealed)
@@ -178,14 +178,14 @@ def clear_artifacts(
     purpose: str,
     *,
     details: Mapping[str, str] | None = None,
-    doubtful: Iterable[str] = (),
+    unconfirmed: Iterable[str] = (),
 ) -> Path | None:
     """Clear the `artifacts` an earlier run left in `directory`, and nothing else.
 
     `directory` must carry the stamp for `purpose` and `details`. An artifact
     that was sealed and shows no change since is deleted. Any other artifact
     present, unsealed (as after a run killed before sealing), changed since
-    sealing, a symbolic link, or named in `doubtful`, is moved with its
+    sealing, a symbolic link, or named in `unconfirmed`, is moved with its
     contents into a new folder under ``omphjc-set-aside/`` in `directory`.
     Every check runs before anything is moved or deleted, and the stamp
     forgets the cleared artifacts.
@@ -201,7 +201,7 @@ def clear_artifacts(
         The purpose the stamp must record.
     details : Mapping[str, str] or None, optional
         Details the stamp must record.
-    doubtful : iterable of str, optional
+    unconfirmed : iterable of str, optional
         Artifacts to set aside even when sealed and unchanged, for example
         because they lack a sign the caller expects.
 
@@ -221,7 +221,7 @@ def clear_artifacts(
     present = {
         name: path
         for name in artifacts
-        if occupied(path := _artifact_path(directory, name))
+        if is_occupied(path := _artifact_path(directory, name))
     }
     stamp = read_stamp(directory)
     if stamp is None:
@@ -232,20 +232,20 @@ def clear_artifacts(
             )
         return None
     _check_stamp(stamp, directory, purpose, details or {})
-    doubts = set(doubtful)
+    unconfirmed_names = set(unconfirmed)
     confirmed = {
         name: path
         for name, path in present.items()
-        if name not in doubts
+        if name not in unconfirmed_names
         and not path.is_symlink()
         and name in stamp.artifacts
-        and latest_change(path) <= stamp.artifacts[name]
+        and latest_change_ns(path) <= stamp.artifacts[name]
     }
-    unconfirmed = {
+    to_set_aside = {
         name: path for name, path in present.items() if name not in confirmed
     }
     remove_inside(directory, confirmed.values())
-    set_aside = _set_aside(directory, unconfirmed) if unconfirmed else None
+    set_aside = _set_aside(directory, to_set_aside) if to_set_aside else None
     remaining = {
         name: change for name, change in stamp.artifacts.items() if name not in present
     }
