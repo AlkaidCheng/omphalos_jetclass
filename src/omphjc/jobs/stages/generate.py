@@ -80,7 +80,7 @@ def generate(
                 "cross_section_error_pb": run.banner.cross_section_error_pb,
                 "cards": cards,
             },
-            outputs=[run.events_path],
+            outputs=[run.output_path],
             log_path=run.log_path,
             usage=run.usage.as_record(),
             set_aside=run.set_aside,

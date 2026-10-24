@@ -106,10 +106,10 @@ class MadGraphRun:
     ----------
     process_dir : Path
         MadGraph's process directory.
-    events_path : Path
+    output_path : Path
         The gzipped LHE file of the sample; after MadSpin, the decayed one.
     banner : Banner
-        The banner of `events_path`: version, event count, cross section, run card.
+        The banner of `output_path`: version, event count, cross section, run card.
     log_path : Path
         MadGraph's output for the run.
     usage : ProgramUsage
@@ -121,7 +121,7 @@ class MadGraphRun:
     """
 
     process_dir: Path
-    events_path: Path
+    output_path: Path
     banner: Banner
     log_path: Path
     usage: ProgramUsage
@@ -230,13 +230,13 @@ def generate_events(
         # later run can tell whether anyone changed it since.
         workspace.seal_artifacts()
 
-    events_path = workspace.events_path
-    if not events_path.is_file():
-        raise workspace.make_error(f"MadGraph wrote no event file {events_path}")
+    output_path = workspace.output_path
+    if not output_path.is_file():
+        raise workspace.make_error(f"MadGraph wrote no event file {output_path}")
     return MadGraphRun(
         process_dir=workspace.process_dir,
-        events_path=events_path,
-        banner=Banner.read(events_path),
+        output_path=output_path,
+        banner=Banner.read(output_path),
         log_path=workspace.log_path,
         usage=workspace.usage,
         set_aside=set_aside,
@@ -331,7 +331,7 @@ class MadGraphWorkspace(Workspace):
         return names
 
     @property
-    def events_path(self) -> Path:
+    def output_path(self) -> Path:
         """The event file MadGraph writes: the decayed sample after MadSpin."""
         run = _DECAYED_RUN if self.spec.uses_madspin else _FIRST_RUN
         return self.process_dir / "Events" / run / _EVENT_FILE
