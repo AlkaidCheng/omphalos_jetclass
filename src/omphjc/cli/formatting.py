@@ -10,8 +10,8 @@ def format_usage(usage: Mapping[str, float]) -> str:
         parts.append(f"{format_duration(usage['wall_seconds'])} wall")
     if "cpu_seconds" in usage:
         parts.append(f"{format_duration(usage['cpu_seconds'])} CPU")
-    if "max_memory_mb" in usage:
-        parts.append(f"{usage['max_memory_mb']:.0f} MiB peak")
+    if "peak_memory_mib" in usage:
+        parts.append(f"{usage['peak_memory_mib']:.0f} MiB peak")
     return ", ".join(parts) if parts else "not recorded"
 
 

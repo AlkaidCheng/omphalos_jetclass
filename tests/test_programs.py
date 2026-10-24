@@ -55,11 +55,11 @@ def test_a_run_reports_its_wall_time_cpu_time_and_memory(tmp_path: Path) -> None
     usage = run_program(python(code), cwd=tmp_path, log_path=tmp_path / "run.log")
     assert usage.wall_seconds >= 0.2
     assert usage.cpu_seconds is not None and usage.cpu_seconds >= 0.15
-    assert usage.max_memory_mb is not None and usage.max_memory_mb > 1
-    assert set(usage.as_record()) == {"cpu_seconds", "max_memory_mb"}
+    assert usage.peak_memory_mib is not None and usage.peak_memory_mib > 1
+    assert set(usage.as_record()) == {"cpu_seconds", "peak_memory_mib"}
     both = usage.combined_with(ProgramUsage(1.0, None, None))
     assert both.wall_seconds == usage.wall_seconds + 1.0
-    assert both.cpu_seconds is None and both.max_memory_mb == usage.max_memory_mb
+    assert both.cpu_seconds is None and both.peak_memory_mib == usage.peak_memory_mib
 
 
 def test_a_failing_status_raises_with_the_end_of_the_log(tmp_path: Path) -> None:

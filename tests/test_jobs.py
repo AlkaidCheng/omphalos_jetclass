@@ -198,7 +198,7 @@ def test_generate_records_what_madgraph_made(
     assert record.metadata["cross_section_pb"] == pytest.approx(1.052824254921272)
     assert record.metadata["cross_section_error_pb"] == pytest.approx(2.3983749989e-3)
     assert record.usage["wall_seconds"] > 0
-    assert record.usage["cpu_seconds"] >= 0 and record.usage["max_memory_mb"] > 0
+    assert record.usage["cpu_seconds"] >= 0 and record.usage["peak_memory_mib"] > 0
     assert record.outputs == [
         "generate/TTBar/Events/run_01_decayed_1/unweighted_events.lhe.gz"
     ]

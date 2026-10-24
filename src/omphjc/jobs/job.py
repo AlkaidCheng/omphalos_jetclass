@@ -58,7 +58,7 @@ class StageOutcome:
         The stage's log, inside the job directory.
     usage : dict[str, float]
         What the stage's program took beyond the wall time the job measures
-        itself, such as ``cpu_seconds`` and ``max_memory_mb``.
+        itself, such as ``cpu_seconds`` and ``peak_memory_mib``.
     set_aside : Path or None
         The folder into which the run moved what an earlier run left and it
         could not confirm as that run's, inside the job directory; ``None``

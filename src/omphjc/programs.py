@@ -89,7 +89,7 @@ class ProgramUsage:
         User and system CPU time of the program and of every process it
         waited for, so MadGraph's parallel jobs count; ``None`` where the
         platform does not report it.
-    max_memory_mb : float or None
+    peak_memory_mib : float or None
         Peak resident memory, in MiB, of the largest process this Python
         process has waited for so far, this program's or an earlier one's;
         ``None`` where the platform does not report it.
@@ -97,7 +97,7 @@ class ProgramUsage:
 
     wall_seconds: float
     cpu_seconds: float | None
-    max_memory_mb: float | None
+    peak_memory_mib: float | None
 
     def combined_with(self, other: "ProgramUsage") -> "ProgramUsage":
         """Return the usage of this run and `other` together."""
@@ -107,12 +107,12 @@ class ProgramUsage:
             else self.cpu_seconds + other.cpu_seconds
         )
         memories = [
-            m for m in (self.max_memory_mb, other.max_memory_mb) if m is not None
+            m for m in (self.peak_memory_mib, other.peak_memory_mib) if m is not None
         ]
         return ProgramUsage(
             wall_seconds=self.wall_seconds + other.wall_seconds,
             cpu_seconds=cpu,
-            max_memory_mb=max(memories) if memories else None,
+            peak_memory_mib=max(memories) if memories else None,
         )
 
     def as_record(self) -> dict[str, float]:
@@ -120,8 +120,8 @@ class ProgramUsage:
         record = {}
         if self.cpu_seconds is not None:
             record["cpu_seconds"] = round(self.cpu_seconds, 3)
-        if self.max_memory_mb is not None:
-            record["max_memory_mb"] = round(self.max_memory_mb, 1)
+        if self.peak_memory_mib is not None:
+            record["peak_memory_mib"] = round(self.peak_memory_mib, 1)
         return record
 
 
@@ -201,11 +201,11 @@ def run_program(
     wall = time.monotonic() - started
     after = _children_usage()
     if before is None or after is None:
-        return ProgramUsage(wall_seconds=wall, cpu_seconds=None, max_memory_mb=None)
+        return ProgramUsage(wall_seconds=wall, cpu_seconds=None, peak_memory_mib=None)
     return ProgramUsage(
         wall_seconds=wall,
         cpu_seconds=after[0] - before[0],
-        max_memory_mb=after[1] * _MAXRSS_BYTES / 2**20,
+        peak_memory_mib=after[1] * _MAXRSS_BYTES / 2**20,
     )
 
 

@@ -23,7 +23,7 @@ created the job, and one record per stage::
           },
           "outputs": ["generate/HToBB/Events/run_01/unweighted_events.lhe.gz"],
           "log": "generate/madgraph.log",
-          "usage": {"wall_seconds": 1203.4, "cpu_seconds": 9012.7, "max_memory_mb": 812.5},
+          "usage": {"wall_seconds": 1203.4, "cpu_seconds": 9012.7, "peak_memory_mib": 812.5},
           "set_aside": null,
           "error": null
         }
