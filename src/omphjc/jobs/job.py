@@ -29,7 +29,7 @@ from omphjc.jobs.manifest import (
     RUNNING,
     Manifest,
     StageRecord,
-    now,
+    timestamp,
 )
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.pythia.cmnd import PYTHIA_SEED_LIMIT
@@ -150,7 +150,7 @@ class Job:
         """Return the directory of `stage`, ``<root>/<stage>``."""
         return inside(self.root_dir, stage)
 
-    def relative(self, path: Path) -> str:
+    def relative_path(self, path: Path) -> str:
         """Return `path` as a POSIX path relative to the job directory."""
         return path.relative_to(self.root_dir).as_posix()
 
@@ -213,7 +213,7 @@ class Job:
             if self.is_done(stage):
                 return earlier
         overwrite = force or earlier is not None
-        started = now()
+        started = timestamp()
         clock = time.monotonic()
         self.manifest.stages[stage] = StageRecord(
             status=RUNNING, started=started, parameters=parameters
@@ -225,7 +225,7 @@ class Job:
             self.manifest.stages[stage] = StageRecord(
                 status=FAILED,
                 started=started,
-                finished=now(),
+                finished=timestamp(),
                 parameters=parameters,
                 error=str(error),
             )
@@ -234,17 +234,23 @@ class Job:
         record = StageRecord(
             status=DONE,
             started=started,
-            finished=now(),
+            finished=timestamp(),
             parameters=parameters,
             metadata=outcome.metadata,
-            outputs=[self.relative(output) for output in outcome.outputs],
-            log=None if outcome.log_path is None else self.relative(outcome.log_path),
+            outputs=[self.relative_path(output) for output in outcome.outputs],
+            log=(
+                None
+                if outcome.log_path is None
+                else self.relative_path(outcome.log_path)
+            ),
             usage={
                 "wall_seconds": round(time.monotonic() - clock, 3),
                 **outcome.usage,
             },
             set_aside=(
-                None if outcome.set_aside is None else self.relative(outcome.set_aside)
+                None
+                if outcome.set_aside is None
+                else self.relative_path(outcome.set_aside)
             ),
         )
         self.manifest.stages[stage] = record
@@ -264,7 +270,7 @@ class Job:
             for stage in self.manifest.stages
             for folder in set_aside_folders(self.stage_dir(stage))
         ]
-        return sorted(found, key=lambda folder: (folder.moment, folder.path))
+        return sorted(found, key=lambda folder: (folder.created, folder.path))
 
     def clear_set_aside_folders(self) -> list[SetAsideFolder]:
         """Delete what earlier runs of the job's stages set aside; return it.
@@ -280,7 +286,7 @@ class Job:
             for stage in self.manifest.stages
             for folder in clear_set_aside_folders(self.stage_dir(stage))
         ]
-        return sorted(removed, key=lambda folder: (folder.moment, folder.path))
+        return sorted(removed, key=lambda folder: (folder.created, folder.path))
 
     def _load_manifest(self) -> Manifest:
         if not self.manifest_path.exists():

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 
-def latest_change(path: Path) -> int:
+def latest_change_ns(path: Path) -> int:
     """Return the latest ``ctime`` of `path` and of every folder in it, in ns.
 
     Adding, removing or renaming an entry changes the folder holding it, so

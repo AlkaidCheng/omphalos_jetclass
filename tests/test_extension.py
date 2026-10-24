@@ -17,7 +17,7 @@ from omphjc.madgraph import (
     proc_card_commands,
     reference_run_settings,
 )
-from omphjc.processes import ProcessSpec, load_catalogue
+from omphjc.processes import ProcessSpec, read_catalogue
 from omphjc.pythia import shower_settings
 
 CATALOGUE = """\
@@ -105,7 +105,7 @@ def study(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def specs(study: Path) -> Mapping[str, ProcessSpec]:
-    return load_catalogue(study)
+    return read_catalogue(study)
 
 
 def test_new_process_needs_only_a_catalogue_entry(
@@ -116,7 +116,7 @@ def test_new_process_needs_only_a_catalogue_entry(
     assert (
         model_import_target(spec) == f"{study.parent / 'models' / 'zprime'}-restricted"
     )
-    assert spec.madspin and spec.reference_cards is None
+    assert spec.uses_madspin and spec.reference_cards is None
     assert proc_card_commands(spec, output_dir=Path("out"))[1:5] == [
         "define p = p b b~",
         "define j = j b b~",
@@ -144,7 +144,7 @@ def test_matched_process_needs_the_matching_block(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="JetMatching:merge"):
-        load_catalogue(path)
+        read_catalogue(path)
 
 
 def test_processes_without_reference_cards_are_not_checked(

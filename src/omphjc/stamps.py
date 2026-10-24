@@ -32,14 +32,14 @@ from pathlib import Path
 from typing import Any
 
 from omphjc import __version__
-from omphjc.filetree import latest_change, tree_size
-from omphjc.safe_paths import inside, occupied, remove_inside
+from omphjc.filetree import latest_change_ns, tree_size
+from omphjc.safe_paths import inside, is_occupied, remove_inside
 
 STAMP_FILE = "omphjc-stamp.json"
 SET_ASIDE_DIR = "omphjc-set-aside"
 _PRODUCER = "omphjc"
-_MOMENT_FORMAT = "%Y%m%dT%H%M%SZ"
-# A folder _set_aside makes: the moment, then the suffix tempfile.mkdtemp adds.
+_CREATED_FORMAT = "%Y%m%dT%H%M%SZ"
+# A folder _set_aside makes: the creation time, then the suffix tempfile.mkdtemp adds.
 _SET_ASIDE_FOLDER = re.compile(r"([0-9]{8}T[0-9]{6}Z)-[A-Za-z0-9_]+")
 
 
@@ -150,7 +150,7 @@ def seal(directory: Path, artifacts: Iterable[str]) -> Stamp:
     """Seal the `artifacts` now in the stamped `directory`; forget the others.
 
     Each artifact is a POSIX path relative to `directory` whose components
-    are plain names (:func:`omphjc.safe_paths.plain_name`).
+    are plain names (:func:`omphjc.safe_paths.require_plain_name`).
 
     Raises
     ------
@@ -163,9 +163,9 @@ def seal(directory: Path, artifacts: Iterable[str]) -> Stamp:
     sealed = replace(
         stamp,
         artifacts={
-            name: latest_change(path)
+            name: latest_change_ns(path)
             for name in artifacts
-            if occupied(path := _artifact_path(directory, name))
+            if is_occupied(path := _artifact_path(directory, name))
         },
     )
     _replace_stamp(directory, sealed)
@@ -178,14 +178,14 @@ def clear_artifacts(
     purpose: str,
     *,
     details: Mapping[str, str] | None = None,
-    doubtful: Iterable[str] = (),
+    unconfirmed: Iterable[str] = (),
 ) -> Path | None:
     """Clear the `artifacts` an earlier run left in `directory`, and nothing else.
 
     `directory` must carry the stamp for `purpose` and `details`. An artifact
     that was sealed and shows no change since is deleted. Any other artifact
     present, unsealed (as after a run killed before sealing), changed since
-    sealing, a symbolic link, or named in `doubtful`, is moved with its
+    sealing, a symbolic link, or named in `unconfirmed`, is moved with its
     contents into a new folder under ``omphjc-set-aside/`` in `directory`.
     Every check runs before anything is moved or deleted, and the stamp
     forgets the cleared artifacts.
@@ -196,12 +196,12 @@ def clear_artifacts(
         The stamped directory.
     artifacts : iterable of str
         What a run makes in `directory`: POSIX paths relative to it whose
-        components are plain names (:func:`omphjc.safe_paths.plain_name`).
+        components are plain names (:func:`omphjc.safe_paths.require_plain_name`).
     purpose : str
         The purpose the stamp must record.
     details : Mapping[str, str] or None, optional
         Details the stamp must record.
-    doubtful : iterable of str, optional
+    unconfirmed : iterable of str, optional
         Artifacts to set aside even when sealed and unchanged, for example
         because they lack a sign the caller expects.
 
@@ -221,7 +221,7 @@ def clear_artifacts(
     present = {
         name: path
         for name in artifacts
-        if occupied(path := _artifact_path(directory, name))
+        if is_occupied(path := _artifact_path(directory, name))
     }
     stamp = read_stamp(directory)
     if stamp is None:
@@ -232,20 +232,20 @@ def clear_artifacts(
             )
         return None
     _check_stamp(stamp, directory, purpose, details or {})
-    doubts = set(doubtful)
+    unconfirmed_names = set(unconfirmed)
     confirmed = {
         name: path
         for name, path in present.items()
-        if name not in doubts
+        if name not in unconfirmed_names
         and not path.is_symlink()
         and name in stamp.artifacts
-        and latest_change(path) <= stamp.artifacts[name]
+        and latest_change_ns(path) <= stamp.artifacts[name]
     }
-    unconfirmed = {
+    to_set_aside = {
         name: path for name, path in present.items() if name not in confirmed
     }
     remove_inside(directory, confirmed.values())
-    set_aside = _set_aside(directory, unconfirmed) if unconfirmed else None
+    set_aside = _set_aside(directory, to_set_aside) if to_set_aside else None
     remaining = {
         name: change for name, change in stamp.artifacts.items() if name not in present
     }
@@ -276,12 +276,12 @@ class SetAsideFolder:
     ----------
     path : Path
         The folder, under ``omphjc-set-aside/``.
-    moment : datetime
+    created : datetime
         When the artifacts were set aside, in UTC, read from the folder's name.
     """
 
     path: Path
-    moment: datetime
+    created: datetime
 
     def size(self) -> int:
         """Return the bytes held by the files in the folder, walking it once.
@@ -307,10 +307,10 @@ def set_aside_folders(directory: Path) -> list[SetAsideFolder]:
             match = _SET_ASIDE_FOLDER.fullmatch(entry.name)
             if match is None or not entry.is_dir(follow_symlinks=False):
                 continue
-            moment = datetime.strptime(match.group(1), _MOMENT_FORMAT)
+            created = datetime.strptime(match.group(1), _CREATED_FORMAT)
             found.append(
                 SetAsideFolder(
-                    path=Path(entry.path), moment=moment.replace(tzinfo=timezone.utc)
+                    path=Path(entry.path), created=created.replace(tzinfo=timezone.utc)
                 )
             )
     return sorted(found, key=lambda folder: folder.path.name)
@@ -347,8 +347,8 @@ def _set_aside(directory: Path, artifacts: Mapping[str, Path]) -> Path:
     """Move `artifacts` into a new folder under ``omphjc-set-aside/``; return it."""
     set_aside_dir = inside(directory, SET_ASIDE_DIR)
     set_aside_dir.mkdir(exist_ok=True)
-    moment = datetime.now(timezone.utc).strftime(_MOMENT_FORMAT)
-    folder = Path(tempfile.mkdtemp(dir=set_aside_dir, prefix=f"{moment}-"))
+    created = datetime.now(timezone.utc).strftime(_CREATED_FORMAT)
+    folder = Path(tempfile.mkdtemp(dir=set_aside_dir, prefix=f"{created}-"))
     for name, path in artifacts.items():
         target_path = folder / name
         target_path.parent.mkdir(parents=True, exist_ok=True)

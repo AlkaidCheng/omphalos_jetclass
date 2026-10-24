@@ -34,7 +34,7 @@ from typing import ClassVar
 from omphjc.delphes.card import reference_card_text, with_random_seed
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import ProgramError, ProgramUsage
-from omphjc.safe_paths import normalize_path, occupied
+from omphjc.safe_paths import is_occupied, normalize_path
 from omphjc.workspace import Workspace
 
 # Delphes's program running a card on the generator record of a Delphes ROOT file.
@@ -173,7 +173,7 @@ def simulate_events(
     workspace = SimulationWorkspace(
         spec, workdir, delphes_root_path=delphes_root_path, timeout=timeout
     )
-    if occupied(workspace.output_path) and not overwrite:
+    if is_occupied(workspace.output_path) and not overwrite:
         raise FileExistsError(
             f"Output file {workspace.output_path} already exists; pass overwrite=True "
             "to replace it"
@@ -194,7 +194,7 @@ def simulate_events(
         workspace.seal_artifacts()
 
     if not workspace.output_path.is_file():
-        raise workspace.error(
+        raise workspace.make_error(
             f"DelphesROOT wrote no output file {workspace.output_path}"
         )
     return SimulationRun(
@@ -285,5 +285,5 @@ class SimulationWorkspace(Workspace):
         """
         self.run(
             [self.program_path, _CARD_FILE, _OUTPUT_FILE, normalize_path(events_path)],
-            failure="DelphesROOT failed",
+            failure_message="DelphesROOT failed",
         )

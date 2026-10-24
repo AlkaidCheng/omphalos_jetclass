@@ -18,7 +18,7 @@ def test_banner_of_a_decayed_sample() -> None:
     assert banner.seed == 42
     assert banner.run_card["ebeam1"] == 6500.0
     assert banner.run_card["pt_min_pdg"] == {6: 450.0}
-    assert banner.madspin is True
+    assert banner.uses_madspin is True
 
 
 def test_banner_file_without_init_block_has_no_error() -> None:
@@ -28,7 +28,7 @@ def test_banner_file_without_init_block_has_no_error() -> None:
     banner = Banner.from_text(text)
     assert banner.cross_section_pb == pytest.approx(1.052824254921272)
     assert banner.cross_section_error_pb is None
-    assert banner.madspin is False
+    assert banner.uses_madspin is False
 
 
 def test_gzipped_event_file_is_read_up_to_the_first_event(tmp_path: Path) -> None:

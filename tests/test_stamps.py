@@ -134,7 +134,7 @@ def test_unsealed_and_doubtful_artifacts_are_set_aside(run: Path) -> None:
     (run / "later").mkdir()
     (run / "later" / "partial.dat").write_text("partial")
     folder = clear_artifacts(
-        run, ["output", "run.log", "later"], "testing", doubtful=["run.log"]
+        run, ["output", "run.log", "later"], "testing", unconfirmed=["run.log"]
     )
     assert folder is not None
     assert (folder / "later" / "partial.dat").read_text() == "partial"
@@ -237,8 +237,8 @@ def test_set_aside_folders_are_listed_oldest_first_with_their_size(
     (run / SET_ASIDE_DIR / "20200101T000000Z-link").symlink_to(run / "notes.txt")
     folders = set_aside_folders(run)
     assert sorted(folder.size() for folder in folders) == [5, 7]
-    assert folders[0].moment <= folders[1].moment
-    assert folders[0].moment.tzinfo is not None
+    assert folders[0].created <= folders[1].created
+    assert folders[0].created.tzinfo is not None
     assert all(folder.path.parent == run / SET_ASIDE_DIR for folder in folders)
 
 

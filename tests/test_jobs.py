@@ -42,7 +42,7 @@ def test_a_job_has_a_directory_per_process_and_number(
     assert job.root_dir == (tmp_path / "runs").resolve() / "HToBB" / "job_7"
     assert job.manifest_path == job.root_dir / "manifest.json"
     assert job.stage_dir("madgraph") == job.root_dir / "madgraph"
-    assert job.relative(job.root_dir / "madgraph" / "x.log") == "madgraph/x.log"
+    assert job.relative_path(job.root_dir / "madgraph" / "x.log") == "madgraph/x.log"
     assert job.seed == 10000007
     assert job.manifest == Manifest(process="HToBB", job=7)
     assert not job.root_dir.exists()
@@ -389,7 +389,7 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
     assert record.set_aside is not None
     assert record.set_aside.startswith("madgraph/omphjc-set-aside/")
     folders = job.set_aside_folders()
-    assert [job.relative(folder.path) for folder in folders] == [record.set_aside]
+    assert [job.relative_path(folder.path) for folder in folders] == [record.set_aside]
     assert folders[0].size() > 0
     assert job.clear_set_aside_folders() == folders
     assert job.set_aside_folders() == []

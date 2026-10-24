@@ -131,6 +131,6 @@ class Manifest:
             raise ValueError(f"{path} is not a manifest: {error}") from None
 
 
-def now() -> str:
+def timestamp() -> str:
     """The current time in the manifest's format, ISO 8601 UTC to the second."""
     return datetime.now(timezone.utc).isoformat(timespec="seconds")

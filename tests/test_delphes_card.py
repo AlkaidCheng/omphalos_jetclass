@@ -5,8 +5,8 @@ import pytest
 from omphjc.config_paths import config_dir
 from omphjc.delphes import (
     compare_cards,
-    load_card,
     parse_card,
+    read_card,
     reference_card,
     reference_card_text,
     with_random_seed,
@@ -105,11 +105,11 @@ def test_invalid_tcl_is_rejected() -> None:
 def test_the_card_a_run_reads_starts_as_the_official_one() -> None:
     card = get_process("HToBB").delphes_card
     assert card is not None
-    assert compare_cards(load_card(card), reference_card()) == []
+    assert compare_cards(read_card(card), reference_card()) == []
 
 
 def test_the_jetclass_card_adapts_the_delphes_cms_card() -> None:
-    cms = load_card(config_dir() / "references" / "delphes" / "delphes_card_CMS.tcl")
+    cms = read_card(config_dir() / "references" / "delphes" / "delphes_card_CMS.tcl")
     differences = compare_cards(reference_card(), cms)
     modules = {d.item: d.actual for d in differences if d.item.startswith("module ")}
     removed = {item for item, actual in modules.items() if actual == "absent"}

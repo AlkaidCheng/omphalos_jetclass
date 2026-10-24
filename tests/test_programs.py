@@ -56,8 +56,8 @@ def test_a_run_reports_its_wall_time_cpu_time_and_memory(tmp_path: Path) -> None
     assert usage.wall_seconds >= 0.2
     assert usage.cpu_seconds is not None and usage.cpu_seconds >= 0.15
     assert usage.max_memory_mb is not None and usage.max_memory_mb > 1
-    assert set(usage.recorded()) == {"cpu_seconds", "max_memory_mb"}
-    both = usage.combined(ProgramUsage(1.0, None, None))
+    assert set(usage.as_record()) == {"cpu_seconds", "max_memory_mb"}
+    both = usage.combined_with(ProgramUsage(1.0, None, None))
     assert both.wall_seconds == usage.wall_seconds + 1.0
     assert both.cpu_seconds is None and both.max_memory_mb == usage.max_memory_mb
 

@@ -17,7 +17,7 @@ from omphjc.pythia.driver import (
     ShowerRun,
     ShowerStatistics,
     ShowerWorkspace,
-    read_statistics,
+    parse_statistics,
     shower_events,
 )
 
@@ -35,7 +35,7 @@ __all__ = [
     "matching_scale",
     "max_matched_jets",
     "parse_cmnd",
-    "read_statistics",
+    "parse_statistics",
     "shower_events",
     "shower_settings",
 ]

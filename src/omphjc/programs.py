@@ -99,7 +99,7 @@ class ProgramUsage:
     cpu_seconds: float | None
     max_memory_mb: float | None
 
-    def combined(self, other: "ProgramUsage") -> "ProgramUsage":
+    def combined_with(self, other: "ProgramUsage") -> "ProgramUsage":
         """Return the usage of this run and `other` together."""
         cpu = (
             None
@@ -115,7 +115,7 @@ class ProgramUsage:
             max_memory_mb=max(memories) if memories else None,
         )
 
-    def recorded(self) -> dict[str, float]:
+    def as_record(self) -> dict[str, float]:
         """Return the CPU time and peak memory as manifest values, the unknown left out."""
         record = {}
         if self.cpu_seconds is not None:

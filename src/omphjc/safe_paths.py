@@ -18,7 +18,7 @@ from pathlib import Path
 _PLAIN_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 
 
-def plain_name(name: str, *, what: str = "Name") -> str:
+def require_plain_name(name: str, *, what: str = "Name") -> str:
     """Return `name` if it is safe as a single path component.
 
     A plain name consists of letters, digits, ``_``, ``.`` and ``-`` and starts
@@ -64,7 +64,7 @@ def working_directory(path: str | os.PathLike[str]) -> Path:
     return directory
 
 
-def occupied(path: Path) -> bool:
+def is_occupied(path: Path) -> bool:
     """Return whether something, a broken symbolic link included, is at `path`."""
     return path.exists() or path.is_symlink()
 
@@ -79,7 +79,7 @@ def inside(root_dir: Path, *names: str) -> Path:
     """
     path = root_dir
     for name in names:
-        path = path / plain_name(name, what="Path component")
+        path = path / require_plain_name(name, what="Path component")
     return path
 
 

@@ -82,7 +82,7 @@ def generate(
             },
             outputs=[run.events_path],
             log_path=run.log_path,
-            usage=run.usage.recorded(),
+            usage=run.usage.as_record(),
             set_aside=run.set_aside,
         )
 
@@ -100,5 +100,5 @@ def _copy_cards(source_dir: Path, target_dir: Path, job: Job) -> dict[str, str]:
             continue
         target_path = target_dir / name
         shutil.copyfile(card_path, target_path)
-        hashes[job.relative(target_path)] = sha256(target_path)
+        hashes[job.relative_path(target_path)] = sha256(target_path)
     return hashes

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, overload
 
-from omphjc.madgraph.runcard import parse_run_card
+from omphjc.madgraph.run_card import parse_run_card
 from omphjc.processes.catalogue import RunCardValue
 
 # Blocks of the banner, captured without their tags.
@@ -59,7 +59,7 @@ class Banner:
         of the ``<init>`` block; ``None`` when the text has no such block.
     run_card : dict[str, RunCardValue]
         The run card as MadGraph used it.
-    madspin : bool
+    uses_madspin : bool
         Whether MadSpin decayed the events.
     """
 
@@ -68,7 +68,7 @@ class Banner:
     cross_section_pb: float
     cross_section_error_pb: float | None
     run_card: dict[str, RunCardValue]
-    madspin: bool
+    uses_madspin: bool
 
     @property
     def seed(self) -> int:
@@ -125,7 +125,7 @@ class Banner:
             run_card=parse_run_card(
                 _capture(_RUN_CARD_BLOCK_PATTERN, text, missing="MGRunCard block")
             ),
-            madspin="<madspin>" in text,
+            uses_madspin="<madspin>" in text,
         )
 
 

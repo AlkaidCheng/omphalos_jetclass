@@ -8,7 +8,7 @@ values). The MadSpin card is the file the catalogue names.
 
 from pathlib import Path
 
-from omphjc.madgraph.runcard import format_value
+from omphjc.madgraph.run_card import format_value
 from omphjc.processes.catalogue import ProcessSpec
 
 
@@ -80,7 +80,7 @@ def launch_commands(
         f"launch {process_dir}",
         "shower=OFF",
         "detector=OFF",
-        "madspin=ON" if spec.madspin else "madspin=OFF",
+        "madspin=ON" if spec.uses_madspin else "madspin=OFF",
         "done",
         f"set nevents {n_events}",
         f"set iseed {0 if seed is None else seed}",

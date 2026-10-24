@@ -14,7 +14,7 @@ from pathlib import Path
 
 from omphjc.madgraph.cards import madspin_card_text, proc_card_commands
 from omphjc.madgraph.madspin import compare_madspin_cards, parse_madspin_card
-from omphjc.madgraph.runcard import (
+from omphjc.madgraph.run_card import (
     format_value,
     parse_launch_overrides,
     parse_run_card,
@@ -230,13 +230,16 @@ def _compare_proc_card(spec: ProcessSpec) -> list[Mismatch]:
 
 def _compare_madspin(spec: ProcessSpec) -> list[Mismatch]:
     reference_card = _reference_dir(spec) / "madspin_card.dat"
-    if reference_card.is_file() != spec.madspin:
+    if reference_card.is_file() != spec.uses_madspin:
         return [
             Mismatch(
-                spec.name, "madspin", str(reference_card.is_file()), str(spec.madspin)
+                spec.name,
+                "madspin",
+                str(reference_card.is_file()),
+                str(spec.uses_madspin),
             )
         ]
-    if not spec.madspin:
+    if not spec.uses_madspin:
         return []
     reference = parse_madspin_card(reference_card.read_text("utf-8"))
     card = parse_madspin_card(madspin_card_text(spec))

@@ -13,7 +13,7 @@ from omphjc.madgraph import (
     launch_commands,
     madspin_card_text,
 )
-from omphjc.processes import ProcessSpec, load_catalogue
+from omphjc.processes import ProcessSpec, read_catalogue
 from omphjc.programs import available_cores
 from omphjc.stamps import StampError, read_stamp
 
@@ -446,7 +446,7 @@ def test_a_run_in_the_catalogue_folder_leaves_its_model_alone(
     mg5_path: Path, tmp_path: Path
 ) -> None:
     config = export_config(tmp_path / "config")
-    spec = load_catalogue(config / "jetclass.yaml")["HToWW4Q"]
+    spec = read_catalogue(config / "jetclass.yaml")["HToWW4Q"]
     original = sorted(path.name for path in (config / "models" / "heft").iterdir())
     with pytest.raises(ValueError, match="would overlap the model folder"):
         generate_events(spec, workdir=config, n_events=10, seed=1, mg5_path=mg5_path)

@@ -108,7 +108,7 @@ class Workspace:
         """The program's output for the run."""
         return self.workdir / self._log_name
 
-    def prepare(self, *, doubtful: Iterable[str] = ()) -> Path | None:
+    def prepare(self, *, unconfirmed: Iterable[str] = ()) -> Path | None:
         """Make the directory ready for a run.
 
         Clears what an earlier run left (:meth:`clear_earlier_run`) first, so
@@ -118,7 +118,7 @@ class Workspace:
 
         Parameters
         ----------
-        doubtful : iterable of str, optional
+        unconfirmed : iterable of str, optional
             Passed to :meth:`clear_earlier_run`.
 
         Returns
@@ -131,18 +131,18 @@ class Workspace:
         StampError
             As :meth:`clear_earlier_run`; nothing is created in that case.
         """
-        set_aside = self.clear_earlier_run(doubtful=doubtful)
+        set_aside = self.clear_earlier_run(unconfirmed=unconfirmed)
         self.workdir.mkdir(parents=True, exist_ok=True)
         if read_stamp(self.workdir) is None:
             write_stamp(self.workdir, self.purpose, self.details)
         return set_aside
 
-    def clear_earlier_run(self, *, doubtful: Iterable[str] = ()) -> Path | None:
+    def clear_earlier_run(self, *, unconfirmed: Iterable[str] = ()) -> Path | None:
         """Clear what an earlier run left in the directory, and nothing else.
 
         Parameters
         ----------
-        doubtful : iterable of str, optional
+        unconfirmed : iterable of str, optional
             Artifacts to move aside however they were sealed, because they
             lack a sign the program's run leaves.
 
@@ -163,11 +163,11 @@ class Workspace:
             self.artifacts,
             self.purpose,
             details=self.details,
-            doubtful=doubtful,
+            unconfirmed=unconfirmed,
         )
 
     def run(
-        self, command: Sequence[str | os.PathLike[str]], *, failure: str
+        self, command: Sequence[str | os.PathLike[str]], *, failure_message: str
     ) -> ProgramUsage:
         """Run `command` in the directory, appending its output to the log.
 
@@ -175,7 +175,7 @@ class Workspace:
         ----------
         command : sequence of str or path-like
             The program and its arguments.
-        failure : str
+        failure_message : str
             How a failure is described, for example ``"MadGraph failed
             running launch.mg5"``; the program's error follows it.
 
@@ -203,14 +203,14 @@ class Workspace:
                 timeout=timeout,
             )
         except ProgramError as error:
-            raise self.error_type(f"{failure}: {error}") from error
-        self.usage = self.usage.combined(usage)
+            raise self.error_type(f"{failure_message}: {error}") from error
+        self.usage = self.usage.combined_with(usage)
         return usage
 
     def seal_artifacts(self) -> None:
         """Record in the stamp what this run made, for later runs to compare with."""
         seal(self.workdir, self.artifacts)
 
-    def error(self, message: str) -> ProgramError:
+    def make_error(self, message: str) -> ProgramError:
         """Return an error of the workspace's type carrying `message` and the log's end."""
         return self.error_type(f"{message}\n{log_tail(self.log_path)}")

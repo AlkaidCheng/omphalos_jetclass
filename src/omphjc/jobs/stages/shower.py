@@ -84,8 +84,8 @@ def shower(
             "events_read": statistics.events_read,
             "events_accepted": statistics.events_accepted,
             "settings": {
-                job.relative(run.cmnd_path): sha256(run.cmnd_path),
-                job.relative(run.card_path): sha256(run.card_path),
+                job.relative_path(run.cmnd_path): sha256(run.cmnd_path),
+                job.relative_path(run.card_path): sha256(run.card_path),
             },
         }
         if job.spec.matching and statistics.events_read > 0:
@@ -96,7 +96,7 @@ def shower(
             metadata=metadata,
             outputs=[run.output_path],
             log_path=run.log_path,
-            usage=run.usage.recorded(),
+            usage=run.usage.as_record(),
             set_aside=run.set_aside,
         )
 
