@@ -10,11 +10,16 @@ contents. Nothing else in the directory is ever touched.
 A subclass names the program, the purpose, the log and the artifacts a run
 makes, and adds the steps of its program's run;
 :class:`omphjc.madgraph.MadGraphWorkspace` is one.
+
+A run returns a record deriving from :class:`Run`, or from :class:`ProgramRun`
+when an external program ran, which carry the fields every run shares; a
+driver's record adds its own.
 """
 
 import os
 import time
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
@@ -27,6 +32,44 @@ from omphjc.programs import (
 )
 from omphjc.safe_paths import working_directory
 from omphjc.stamps import clear_artifacts, read_stamp, seal, write_stamp
+
+
+@dataclass(frozen=True, kw_only=True)
+class Run:
+    """The output of one run: the file it is for and what it set aside.
+
+    A driver's run record derives from this class, or from :class:`ProgramRun`
+    when the run is of an external program, and adds its own fields.
+
+    Parameters
+    ----------
+    output_path : Path
+        The file the run is for.
+    set_aside : Path or None
+        Folder in the working directory holding what an earlier run left and
+        this run could not confirm as its own, moved there rather than deleted;
+        ``None`` when nothing was set aside.
+    """
+
+    output_path: Path
+    set_aside: Path | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProgramRun(Run):
+    """The output of one run of an external program, with its log and usage.
+
+    Parameters
+    ----------
+    log_path : Path
+        The program's output for the run.
+    usage : ProgramUsage
+        Wall time, CPU time and peak memory of the program's runs in the working
+        directory, combined.
+    """
+
+    log_path: Path
+    usage: ProgramUsage
 
 
 class Workspace:

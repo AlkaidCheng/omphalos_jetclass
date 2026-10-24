@@ -57,9 +57,9 @@ from omphjc.madgraph.cards import (
     proc_card_commands,
 )
 from omphjc.processes.catalogue import ProcessSpec
-from omphjc.programs import ProgramError, ProgramUsage, available_cores
+from omphjc.programs import ProgramError, available_cores
 from omphjc.safe_paths import inside, is_occupied
-from omphjc.workspace import Workspace
+from omphjc.workspace import ProgramRun, Workspace
 
 # MadGraph's command-line program, bin/mg5_aMC of an installation.
 _MG5_EXECUTABLE = "mg5_aMC"
@@ -98,9 +98,12 @@ class MadGraphError(ProgramError):
     """MadGraph failed, ran past its time limit or did not write its output."""
 
 
-@dataclass(frozen=True)
-class MadGraphRun:
+@dataclass(frozen=True, kw_only=True)
+class MadGraphRun(ProgramRun):
     """The output of one MadGraph run.
+
+    The log, the usage and the folder set aside are
+    :class:`omphjc.workspace.ProgramRun`'s.
 
     Parameters
     ----------
@@ -110,22 +113,10 @@ class MadGraphRun:
         The gzipped LHE file of the sample; after MadSpin, the decayed one.
     banner : Banner
         The banner of `output_path`: version, event count, cross section, run card.
-    log_path : Path
-        MadGraph's output for the run.
-    usage : ProgramUsage
-        Wall time, CPU time and peak memory of MadGraph's two scripts together.
-    set_aside : Path or None
-        Folder in the working directory holding what an earlier run left and
-        this run could not confirm as its own, moved there rather than deleted;
-        ``None`` when nothing was set aside.
     """
 
     process_dir: Path
-    output_path: Path
     banner: Banner
-    log_path: Path
-    usage: ProgramUsage
-    set_aside: Path | None = None
 
 
 def generate_events(

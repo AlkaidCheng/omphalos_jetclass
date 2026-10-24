@@ -66,6 +66,9 @@
 - `compare_process` and `compare_all` report `omphjc.comparison.Difference`
   records like the Pythia and Delphes comparisons, `compare_all` keyed by
   process name; `Mismatch` is gone. (#19)
+- Run records derive from `omphjc.workspace.Run` and `ProgramRun`, which carry
+  the fields every run shares, and MadGraph's event file is `output_path` like
+  the other runs' outputs. (#21)
 
 ### Fixed
 
