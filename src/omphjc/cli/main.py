@@ -12,12 +12,14 @@ from omphjc.delphes import DelphesCard, compare_cards, load_card, reference_card
 from omphjc.jobs import (
     MADGRAPH,
     SHOWER,
+    SIMULATE,
     Job,
     StageRecord,
     TerminationError,
     exception_on_termination,
     generate,
     shower,
+    simulate,
 )
 from omphjc.madgraph import (
     compare_all,
@@ -299,6 +301,90 @@ def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
     click.echo(f"  output            {record.outputs[0]}")
     click.echo(f"  log               {record.log}")
     click.echo(f"  settings          {', '.join(metadata['settings'])}")
+    click.echo(f"  took              {describe_usage(record.usage)}")
+    _report_set_aside(job)
+
+
+@cli.command("simulate")
+@click.argument("name")
+@click.option(
+    "--job",
+    "job_id",
+    type=int,
+    required=True,
+    help="Job number; the seed of every program follows from it.",
+)
+@click.option(
+    "--outdir",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Directory holding the jobs of every process.",
+)
+@click.option(
+    "--card",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Detector card to run instead of the process's.",
+)
+@click.option(
+    "--timeout", type=float, default=None, help="Seconds DelphesROOT may take."
+)
+@click.option(
+    "--force", is_flag=True, help="Run the stage again, replacing its outputs."
+)
+@click.option(
+    "--delphes-root",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Delphes's DelphesROOT (default: the one on PATH).",
+)
+@click.pass_obj
+def simulate_job(
+    specs: Catalogue,
+    name: str,
+    job_id: int,
+    outdir: Path,
+    card: Path | None,
+    timeout: float | None,
+    force: bool,
+    delphes_root: Path | None,
+) -> None:
+    """Simulate the detector on one job's showered events with Delphes."""
+    spec = _lookup(specs, name)
+    try:
+        job = Job(spec, outdir, job_id)
+        earlier = job.manifest.stages.get(SIMULATE)
+        with exception_on_termination():
+            record = simulate(
+                job,
+                card=card,
+                timeout=timeout,
+                force=force,
+                delphes_root=delphes_root,
+            )
+    except (
+        ValueError,
+        FileExistsError,
+        FileNotFoundError,
+        StampError,
+        ProgramError,
+        TerminationError,
+    ) as error:
+        raise click.ClickException(str(error)) from error
+    _report_simulation(job, record, kept=record is earlier)
+
+
+def _report_simulation(job: Job, record: StageRecord, *, kept: bool) -> None:
+    """Print what the simulation stage of `job` ran with and what it made."""
+    metadata = record.metadata
+    outcome = "done, kept from an earlier run" if kept else "done"
+    click.echo(f"{job.spec.name} job {job.job_id}: {job.root}")
+    click.echo(f"Delphes simulation: {outcome}")
+    click.echo(f"  card              {', '.join(metadata['card'])}")
+    click.echo(f"  seed              {record.parameters['seed']}")
+    click.echo(f"  events            {metadata['events']}")
+    click.echo(f"  output            {record.outputs[0]}")
+    click.echo(f"  log               {record.log}")
     click.echo(f"  took              {describe_usage(record.usage)}")
     _report_set_aside(job)
 

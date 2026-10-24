@@ -22,7 +22,7 @@ stable-particle convention.
 | Process catalogue | Defines each process: model, process lines, run-card cuts, MadSpin card, matching, seed offset | `config/jetclass.yaml`, `config/models/`, `config/madspin/` | the MadGraph scripts and Pythia settings of every later step |
 | MadGraph5_aMC@NLO | Generates the hard process (and MadSpin decays) at parton level | process and launch scripts written from the catalogue | `events.lhe.gz`, the banner (cross section, seed, run card as used) |
 | Pythia 8 shower | Showers and hadronises with Pythia 8 inside `DelphesPythia8`, so MLM matching runs where the catalogue asks for it; the card writes the generator record and simulates nothing | `pythia.cmnd` (from `common.pythia`, the matching block and the run's seed), the record-only card the package writes | `particles.root` with the full generator record in its `Particle` branch |
-| Delphes simulation *(planned)* | Runs the detector card on the showered events with `DelphesROOT` | `config/delphes/delphes_card_JetClass.tcl` (`common.delphes_card`), seeded | `delphes.root` |
+| Delphes simulation | Runs the detector card on the showered events with `DelphesROOT`; several cards can run on one shower | `config/delphes/delphes_card_JetClass.tcl` (`common.delphes_card`) or `--card`, seeded | `delphes.root` |
 | extract *(planned)* | Reads the generator record out of the Delphes file | — | `simulation.parquet`: every particle with mothers, daughters and vertices |
 | convert *(planned)* | Applies Parnassus's stable-particle convention (cτ > 10 mm) | — | `parnassus.parquet`, or `.hepmc3` for the current Parnassus reader |
 | ntuple *(planned)* | Builds the JetClass jet table (jets, labels, constituents) from the Delphes output | — | `jetclass.parquet` |
@@ -298,10 +298,11 @@ Reading a card uses the Tcl interpreter that comes with Python (`tkinter`).
 A job is one process and one job number in a directory of its own,
 `<outdir>/<process>/job_<n>/`. Each stage of the pipeline is a command that
 runs in that directory and records what it did in the job's manifest:
-`generate` runs MadGraph, and `shower` runs Pythia 8 on the generated events
+`generate` runs MadGraph, `shower` runs Pythia 8 on the generated events
 through `DelphesPythia8`, keeping the generator record of every showered event
-and simulating nothing. The detector simulation, extraction and conversion
-follow.
+and simulating nothing, and `simulate` runs the detector card on that record
+through `DelphesROOT`. A job may stop after `shower` when only the showered
+events are wanted. Extraction and conversion follow.
 
 ```
 omphjc generate HToBB --job 1 --events 1000 --outdir runs/dev
@@ -309,6 +310,8 @@ omphjc generate HToBB --job 1 --events 1000 --outdir runs/dev --cores 8 --timeou
 omphjc shower HToBB --job 1 --outdir runs/dev
 omphjc shower HToBB --job 1 --outdir runs/dev --set Main:timesAllowErrors=100
 omphjc shower HToBB --job 1 --outdir runs/dev --force    # run it again
+omphjc simulate HToBB --job 1 --outdir runs/dev
+omphjc simulate HToBB --job 1 --outdir runs/dev --card my_detector.tcl --force
 omphjc clean HToBB --job 1 --outdir runs/dev --set-aside  # drop what reruns set aside
 ```
 
@@ -319,12 +322,16 @@ runs/dev/HToBB/job_1/
 │   ├── cards/             the cards MadGraph ran with, hashed in the manifest
 │   ├── madgraph.log
 │   └── HToBB/Events/run_01/unweighted_events.lhe.gz
-└── shower/                the DelphesPythia8 working directory
-    ├── events.lhe         the generated events, uncompressed for DelphesPythia8
-    ├── pythia.cmnd        the Pythia settings as run, hashed in the manifest
-    ├── particles_card.tcl the card that writes the record and simulates nothing, hashed
-    ├── shower.log         DelphesPythia8's output, Pythia's statistics included
-    └── particles.root     every showered event's generator record (Particle branch)
+├── shower/                the DelphesPythia8 working directory
+│   ├── events.lhe         the generated events, uncompressed for DelphesPythia8
+│   ├── pythia.cmnd        the Pythia settings as run, hashed in the manifest
+│   ├── particles_card.tcl the card that writes the record and simulates nothing, hashed
+│   ├── shower.log         DelphesPythia8's output, Pythia's statistics included
+│   └── particles.root     every showered event's generator record (Particle branch)
+└── simulate/              the DelphesROOT working directory
+    ├── delphes_card.tcl   the detector card as run, seeded, hashed in the manifest
+    ├── simulate.log       DelphesROOT's output
+    └── delphes.root
 ```
 
 The job number gives the seed of every program the job runs
@@ -340,7 +347,10 @@ error and the SHA-256 of each card. For the shower the parameters are the
 event count, the seed, the Pythia overrides and the cards the events were
 generated with, and the metadata the Pythia version, the events read and kept,
 the fraction kept by matching for a matched process, and the SHA-256 of the
-command file and the record-only card as run.
+command file and the record-only card as run. For the simulation the
+parameters are the seed, the SHA-256 of the detector card chosen and the
+settings the events were showered with, and the metadata the events simulated
+and the SHA-256 of the card as run.
 
 Running a stage again keeps a result recorded as done whose outputs are
 present and whose parameters match, runs again a stage that failed or was
@@ -353,7 +363,7 @@ or a change made to the files since, is moved into `<stage>/omphjc-set-aside/`
 instead and stays there. The stage's report counts those folders, the
 manifest names the folder each run made, and `omphjc clean --set-aside`
 deletes them (`--dry-run` lists them with their sizes first).
-MadGraph's directory is kept after the shower.
+MadGraph's directory and the showered events are kept after the simulation.
 
 ## Acknowledgements
 

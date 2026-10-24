@@ -2,12 +2,13 @@
 
 A stage takes the job and its own arguments, builds the parameters it runs
 with, and hands :meth:`omphjc.jobs.Job.run_stage` a body that returns what it
-made. MadGraph generation (:mod:`omphjc.jobs.stages.generate`) and the
-Pythia and Delphes shower (:mod:`omphjc.jobs.stages.shower`) are the stages
-so far.
+made. MadGraph generation (:mod:`omphjc.jobs.stages.generate`), the Pythia
+shower (:mod:`omphjc.jobs.stages.shower`) and the Delphes simulation
+(:mod:`omphjc.jobs.stages.simulate`) are the stages so far.
 """
 
 from omphjc.jobs.stages.generate import MADGRAPH, generate
 from omphjc.jobs.stages.shower import SHOWER, shower
+from omphjc.jobs.stages.simulate import SIMULATE, simulate
 
-__all__ = ["MADGRAPH", "SHOWER", "generate", "shower"]
+__all__ = ["MADGRAPH", "SHOWER", "SIMULATE", "generate", "shower", "simulate"]
