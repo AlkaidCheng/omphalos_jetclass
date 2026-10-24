@@ -133,3 +133,48 @@ def delphes_pythia8(tmp_path: Path) -> Path:
     program.write_text(FAKE_DELPHES_PYTHIA8.format(python=sys.executable))
     program.chmod(0o755)
     return program
+
+
+# Stands in for Delphes's DelphesROOT: it takes the card, the output file and
+# the input files, reads the card, requires every input to exist, and writes
+# the output. Like DelphesROOT it refuses an existing output file and exits
+# with status 1 when it cannot open a file. FAKE_DROOT_FAIL=exit fails with
+# status 1; FAKE_DROOT_FAIL=hang never finishes.
+FAKE_DELPHES_ROOT = """\
+#!{python}
+import os
+import sys
+import time
+from pathlib import Path
+
+if len(sys.argv) < 4:
+    print("Usage: DelphesROOT config_file output_file input_file(s)")
+    sys.exit(1)
+card, output, *inputs = sys.argv[1:]
+fail = os.environ.get("FAKE_DROOT_FAIL", "")
+if fail == "hang":
+    time.sleep(60)
+if fail == "exit":
+    print(f"** ERROR: can't open {{card}}", file=sys.stderr)
+    sys.exit(1)
+if Path(output).exists():
+    print(f"** ERROR: can't open {{output}}", file=sys.stderr)
+    sys.exit(1)
+Path(card).read_text()
+for name in inputs:
+    print(f"** Reading {{name}}")
+    if not Path(name).is_file():
+        print(f"** ERROR: can't open {{name}}", file=sys.stderr)
+        sys.exit(1)
+Path(output).write_bytes(b"ROOT fake")
+print("** Exiting...")
+"""
+
+
+@pytest.fixture
+def delphes_root(tmp_path: Path) -> Path:
+    program = tmp_path / "bin" / "DelphesROOT"
+    program.parent.mkdir(exist_ok=True)
+    program.write_text(FAKE_DELPHES_ROOT.format(python=sys.executable))
+    program.chmod(0o755)
+    return program
