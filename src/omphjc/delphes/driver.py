@@ -33,9 +33,9 @@ from typing import ClassVar
 
 from omphjc.delphes.card import reference_card_text, with_random_seed
 from omphjc.processes.catalogue import ProcessSpec
-from omphjc.programs import ProgramError, ProgramUsage
+from omphjc.programs import ProgramError
 from omphjc.safe_paths import is_occupied, normalize_path
-from omphjc.workspace import Workspace
+from omphjc.workspace import ProgramRun, Workspace
 
 # Delphes's program running a card on the generator record of a Delphes ROOT file.
 _DELPHES_ROOT = "DelphesROOT"
@@ -52,9 +52,12 @@ class SimulationError(ProgramError):
     """``DelphesROOT`` failed, ran past its time limit or wrote nothing."""
 
 
-@dataclass(frozen=True)
-class SimulationRun:
+@dataclass(frozen=True, kw_only=True)
+class SimulationRun(ProgramRun):
     """The output of one ``DelphesROOT`` run.
+
+    The log, the usage and the folder set aside are
+    :class:`omphjc.workspace.ProgramRun`'s.
 
     Parameters
     ----------
@@ -62,21 +65,9 @@ class SimulationRun:
         The Delphes ROOT file.
     card_path : Path
         The detector card as run.
-    log_path : Path
-        ``DelphesROOT``'s output for the run.
-    usage : ProgramUsage
-        Wall time, CPU time and peak memory of the ``DelphesROOT`` run.
-    set_aside : Path or None
-        Folder in the working directory holding what an earlier run left and
-        this run could not confirm as its own, moved there rather than deleted;
-        ``None`` when nothing was set aside.
     """
 
-    output_path: Path
     card_path: Path
-    log_path: Path
-    usage: ProgramUsage
-    set_aside: Path | None = None
 
 
 def detector_card_text(spec: ProcessSpec, card_path: Path | None = None) -> str:

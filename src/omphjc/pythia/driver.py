@@ -51,10 +51,10 @@ from typing import ClassVar
 
 from omphjc.delphes.card import particles_card_text
 from omphjc.processes.catalogue import ProcessSpec, SettingValue
-from omphjc.programs import ProgramError, ProgramUsage
+from omphjc.programs import ProgramError
 from omphjc.pythia.cmnd import format_cmnd, shower_settings
 from omphjc.safe_paths import is_occupied
-from omphjc.workspace import Workspace
+from omphjc.workspace import ProgramRun, Workspace
 
 # Delphes's program combining Pythia 8 and the detector simulation.
 _DELPHES_PYTHIA8 = "DelphesPythia8"
@@ -104,9 +104,12 @@ class ShowerStatistics:
     events_accepted: int
 
 
-@dataclass(frozen=True)
-class ShowerRun:
+@dataclass(frozen=True, kw_only=True)
+class ShowerRun(ProgramRun):
     """The output of one ``DelphesPythia8`` run.
+
+    The log, the usage and the folder set aside are
+    :class:`omphjc.workspace.ProgramRun`'s.
 
     Parameters
     ----------
@@ -117,25 +120,13 @@ class ShowerRun:
         The Pythia command file as run.
     card_path : Path
         The Delphes card as run, the one that writes the generator record.
-    log_path : Path
-        ``DelphesPythia8``'s output for the run.
     statistics : ShowerStatistics
         Pythia's version and event counts, read from the log.
-    usage : ProgramUsage
-        Wall time, CPU time and peak memory of the ``DelphesPythia8`` run.
-    set_aside : Path or None
-        Folder in the working directory holding what an earlier run left and
-        this run could not confirm as its own, moved there rather than deleted;
-        ``None`` when nothing was set aside.
     """
 
-    output_path: Path
     cmnd_path: Path
     card_path: Path
-    log_path: Path
     statistics: ShowerStatistics
-    usage: ProgramUsage
-    set_aside: Path | None = None
 
 
 def parse_statistics(log_text: str) -> ShowerStatistics:

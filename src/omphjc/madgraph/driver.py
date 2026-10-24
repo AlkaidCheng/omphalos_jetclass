@@ -57,9 +57,9 @@ from omphjc.madgraph.cards import (
     proc_card_commands,
 )
 from omphjc.processes.catalogue import ProcessSpec
-from omphjc.programs import ProgramError, ProgramUsage, available_cores
+from omphjc.programs import ProgramError, available_cores
 from omphjc.safe_paths import inside, is_occupied
-from omphjc.workspace import Workspace
+from omphjc.workspace import ProgramRun, Workspace
 
 # MadGraph's command-line program, bin/mg5_aMC of an installation.
 _MG5_EXECUTABLE = "mg5_aMC"
@@ -98,34 +98,25 @@ class MadGraphError(ProgramError):
     """MadGraph failed, ran past its time limit or did not write its output."""
 
 
-@dataclass(frozen=True)
-class MadGraphRun:
+@dataclass(frozen=True, kw_only=True)
+class MadGraphRun(ProgramRun):
     """The output of one MadGraph run.
+
+    The log, the usage and the folder set aside are
+    :class:`omphjc.workspace.ProgramRun`'s.
 
     Parameters
     ----------
     process_dir : Path
         MadGraph's process directory.
-    events_path : Path
+    output_path : Path
         The gzipped LHE file of the sample; after MadSpin, the decayed one.
     banner : Banner
-        The banner of `events_path`: version, event count, cross section, run card.
-    log_path : Path
-        MadGraph's output for the run.
-    usage : ProgramUsage
-        Wall time, CPU time and peak memory of MadGraph's two scripts together.
-    set_aside : Path or None
-        Folder in the working directory holding what an earlier run left and
-        this run could not confirm as its own, moved there rather than deleted;
-        ``None`` when nothing was set aside.
+        The banner of `output_path`: version, event count, cross section, run card.
     """
 
     process_dir: Path
-    events_path: Path
     banner: Banner
-    log_path: Path
-    usage: ProgramUsage
-    set_aside: Path | None = None
 
 
 def generate_events(
@@ -230,13 +221,13 @@ def generate_events(
         # later run can tell whether anyone changed it since.
         workspace.seal_artifacts()
 
-    events_path = workspace.events_path
-    if not events_path.is_file():
-        raise workspace.make_error(f"MadGraph wrote no event file {events_path}")
+    output_path = workspace.output_path
+    if not output_path.is_file():
+        raise workspace.make_error(f"MadGraph wrote no event file {output_path}")
     return MadGraphRun(
         process_dir=workspace.process_dir,
-        events_path=events_path,
-        banner=Banner.read(events_path),
+        output_path=output_path,
+        banner=Banner.read(output_path),
         log_path=workspace.log_path,
         usage=workspace.usage,
         set_aside=set_aside,
@@ -331,7 +322,7 @@ class MadGraphWorkspace(Workspace):
         return names
 
     @property
-    def events_path(self) -> Path:
+    def output_path(self) -> Path:
         """The event file MadGraph writes: the decayed sample after MadSpin."""
         run = _DECAYED_RUN if self.spec.uses_madspin else _FIRST_RUN
         return self.process_dir / "Events" / run / _EVENT_FILE

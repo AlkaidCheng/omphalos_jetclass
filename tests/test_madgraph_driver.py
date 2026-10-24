@@ -30,7 +30,7 @@ def test_a_process_runs_in_its_own_working_directory(
         mg5_path=mg5_path,
     )
     assert run.process_dir == workdir / "HToBB"
-    assert run.events_path == workdir / "HToBB/Events/run_01/unweighted_events.lhe.gz"
+    assert run.output_path == workdir / "HToBB/Events/run_01/unweighted_events.lhe.gz"
     assert run.banner.seed == 7
     launch = (workdir / "launch.mg5").read_text().splitlines()
     assert launch == launch_commands(
@@ -47,7 +47,7 @@ def test_madspin_events_are_the_decayed_sample(
     run = generate_events(
         spec, workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path
     )
-    assert run.events_path.parent.name == "run_01_decayed_1"
+    assert run.output_path.parent.name == "run_01_decayed_1"
     card = run.process_dir / "Cards" / "madspin_card.dat"
     assert card.read_text() == madspin_card_text(spec)
 
@@ -360,7 +360,7 @@ def test_an_invalid_request_leaves_an_earlier_run_in_place(
             overwrite=True,
             mg5_path=mg5_path,
         )
-    assert run.events_path.is_file()
+    assert run.output_path.is_file()
     assert run.log_path.is_file()
 
 
@@ -425,7 +425,7 @@ def test_a_directory_of_another_process_is_refused(
             mg5_path=mg5_path,
         )
     assert run.log_path.read_text() == log
-    assert run.events_path.is_file()
+    assert run.output_path.is_file()
 
 
 @pytest.mark.parametrize(
@@ -598,9 +598,9 @@ def test_a_workspace_derives_every_path_a_run_writes(
         "madgraph.log",
         "models/heft",
     ]
-    assert workspace.events_path.parent.name == "run_01"
+    assert workspace.output_path.parent.name == "run_01"
     decayed = MadGraphWorkspace(specs["TTBar"], tmp_path, mg5_path=mg5_path)
-    assert decayed.events_path.parent.name == "run_01_decayed_1"
+    assert decayed.output_path.parent.name == "run_01_decayed_1"
 
 
 @pytest.mark.integration
@@ -613,4 +613,4 @@ def test_madgraph_generates_a_small_sample(
     run = generate_events(specs["HToBB"], workdir=tmp_path, n_events=20, seed=1)
     assert run.banner.n_events == 20
     assert run.banner.seed == 1
-    assert os.path.getsize(run.events_path) > 0
+    assert os.path.getsize(run.output_path) > 0
