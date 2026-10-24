@@ -152,10 +152,10 @@ def test_processes_without_reference_cards_are_not_checked(
 ) -> None:
     with pytest.raises(ValueError, match="no reference cards"):
         reference_run_settings(specs["ZPrimeToTT"])
-    mismatches = compare_all(specs.values())
-    assert [(m.process, m.item) for m in mismatches] == [
-        ("HToBBStudy", "run_card.misset")
-    ]
+    differences = compare_all(specs.values())
+    assert {name: [d.item for d in found] for name, found in differences.items()} == {
+        "HToBBStudy": ["run_card.misset"]
+    }
 
 
 def test_cli_runs_on_the_study_catalogue(study: Path) -> None:

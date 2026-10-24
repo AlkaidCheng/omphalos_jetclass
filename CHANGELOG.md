@@ -63,3 +63,6 @@
 - The first stage's directory and manifest record are named `generate` after
   its command, the job number is `--job-id` on the command line and `job_id` in
   the manifest, and the peak memory is `peak_memory_mib`. (#18)
+- `compare_process` and `compare_all` report `omphjc.comparison.Difference`
+  records like the Pythia and Delphes comparisons, `compare_all` keyed by
+  process name; `Mismatch` is gone. (#19)

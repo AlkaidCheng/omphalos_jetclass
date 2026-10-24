@@ -99,12 +99,13 @@ def check_cards(specs: Catalogue) -> None:
     unchecked = [spec.name for spec in specs.values() if spec.reference_cards is None]
     if unchecked:
         click.echo(f"Without reference cards, not checked: {', '.join(unchecked)}")
-    mismatches = compare_all(checked)
-    if not mismatches:
+    differences = compare_all(checked)
+    if not differences:
         click.echo(f"{len(checked)} processes match their reference cards.")
         return
-    for mismatch in mismatches:
-        click.echo(str(mismatch), err=True)
+    for name, process_differences in differences.items():
+        for difference in process_differences:
+            click.echo(f"{name}: {difference}", err=True)
     raise SystemExit(1)
 
 
