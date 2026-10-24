@@ -17,6 +17,7 @@ from omphjc.jobs import (
     exception_on_termination,
     generate,
     job_seed,
+    shower,
 )
 from omphjc.madgraph import MadGraphError
 from omphjc.processes import ProcessSpec, get_process
@@ -244,6 +245,85 @@ def test_a_failed_madgraph_run_is_recorded_and_retried(
     monkeypatch.delenv("FAKE_MG5_FAIL")
     done = generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5=mg5)
     assert done.status == "done"
+
+
+def test_shower_needs_a_finished_madgraph_stage(
+    specs: Mapping[str, ProcessSpec], delphes_pythia8: Path, tmp_path: Path
+) -> None:
+    with pytest.raises(ValueError, match="run omphjc generate first"):
+        shower(Job(specs["HToBB"], tmp_path, 1), delphes_pythia8=delphes_pythia8)
+    assert not (tmp_path / "HToBB").exists()
+
+
+def test_shower_records_what_it_made_and_keeps_it(
+    specs: Mapping[str, ProcessSpec], mg5: Path, delphes_pythia8: Path, tmp_path: Path
+) -> None:
+    generated = generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5=mg5)
+    job = Job(specs["HToBB"], tmp_path, 1)
+    record = shower(job, delphes_pythia8=delphes_pythia8)
+    assert Manifest.read(job.manifest_path).stages["shower"] == record
+    assert record.status == "done"
+    assert record.parameters == {
+        "events": 10000,
+        "seed": 10000001,
+        "pythia": {},
+        "generated_with": generated.metadata["cards"],
+    }
+    assert record.metadata["pythia_version"] == "8.318"
+    assert record.metadata["events_read"] == 1
+    assert record.metadata["events_accepted"] == 1
+    assert "matching_efficiency" not in record.metadata
+    assert set(record.metadata["settings"]) == {
+        "shower/pythia.cmnd",
+        "shower/particles_card.tcl",
+    }
+    assert record.outputs == ["shower/particles.root"]
+    assert (job.root / "shower" / "particles.root").is_file()
+    assert record.log == "shower/shower.log"
+    cmnd = (job.root / "shower" / "pythia.cmnd").read_text()
+    assert "Random:seed = 10000001" in cmnd and "Main:numberOfEvents = 10000" in cmnd
+    card = (job.root / "shower" / "particles_card.tcl").read_text()
+    assert "TreeWriter" in card and "RandomSeed" not in card
+
+    kept = shower(Job(specs["HToBB"], tmp_path, 1), delphes_pythia8=delphes_pythia8)
+    assert kept == record
+    overrides = {"Main:timesAllowErrors": 5}
+    with pytest.raises(ValueError, match="ran with"):
+        shower(
+            Job(specs["HToBB"], tmp_path, 1),
+            overrides=overrides,
+            delphes_pythia8=delphes_pythia8,
+        )
+    forced = shower(
+        Job(specs["HToBB"], tmp_path, 1),
+        overrides=overrides,
+        force=True,
+        delphes_pythia8=delphes_pythia8,
+    )
+    assert forced.parameters["pythia"] == overrides
+    assert (
+        "Main:timesAllowErrors = 5" in (job.root / "shower" / "pythia.cmnd").read_text()
+    )
+
+    generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5=mg5, force=True)
+    regenerated = shower(
+        Job(specs["HToBB"], tmp_path, 1),
+        overrides=overrides,
+        delphes_pythia8=delphes_pythia8,
+    )
+    assert regenerated == forced
+
+
+def test_shower_records_the_matching_efficiency_of_a_matched_process(
+    specs: Mapping[str, ProcessSpec], mg5: Path, delphes_pythia8: Path, tmp_path: Path
+) -> None:
+    generate(Job(specs["ZJetsToNuNu"], tmp_path, 2), n_events=10, mg5=mg5)
+    record = shower(
+        Job(specs["ZJetsToNuNu"], tmp_path, 2), delphes_pythia8=delphes_pythia8
+    )
+    assert record.metadata["matching_efficiency"] == 1.0
+    cmnd = (tmp_path / "ZJetsToNuNu" / "job_2" / "shower" / "pythia.cmnd").read_text()
+    assert "JetMatching:merge = on" in cmnd
 
 
 def test_sigterm_becomes_an_exception_inside_the_block() -> None:

@@ -67,7 +67,69 @@ print("MadGraph done")
 @pytest.fixture
 def mg5(tmp_path: Path) -> Path:
     program = tmp_path / "bin" / "mg5_aMC"
-    program.parent.mkdir()
+    program.parent.mkdir(exist_ok=True)
     program.write_text(FAKE_MG5.format(python=sys.executable, banner=BANNER))
+    program.chmod(0o755)
+    return program
+
+
+# Stands in for Delphes's DelphesPythia8: it takes the card, the Pythia command
+# file and the output file, reads the LHE file the command file names as text,
+# prints Pythia's banner and event statistics, and writes the output. Like
+# DelphesPythia8 it refuses an existing output file and, with
+# FAKE_DP8_FAIL=abort, gives up with exit status 0. FAKE_DP8_FAIL=exit fails
+# with status 1; FAKE_DP8_FAIL=hang never finishes.
+FAKE_DELPHES_PYTHIA8 = """\
+#!{python}
+import os
+import sys
+import time
+from pathlib import Path
+
+if len(sys.argv) != 4:
+    print("Usage: DelphesPythia8 config_file pythia_card output_file")
+    sys.exit(1)
+card, cmnd, output = sys.argv[1:]
+fail = os.environ.get("FAKE_DP8_FAIL", "")
+if fail == "hang":
+    time.sleep(60)
+if fail == "exit":
+    print("** ERROR: can't read Pythia8 configuration file", file=sys.stderr)
+    sys.exit(1)
+if Path(output).exists():
+    print(f"** ERROR: can't create output file {{output}}", file=sys.stderr)
+    sys.exit(1)
+settings = {{}}
+for line in Path(cmnd).read_text().splitlines():
+    line = line.split("!")[0].strip()
+    if "=" in line:
+        key, _, value = line.partition("=")
+        settings[key.strip().lower()] = value.strip()
+Path(card).read_text()
+print(" |  |    This is PYTHIA version 8.318      |  | ")
+lhe = Path(settings["beams:lhef"])
+if not lhe.is_file():
+    sys.exit("Abort from Pythia::init: Les Houches Event File not found")
+events = lhe.read_text().count("<event>")
+tried = min(events, int(settings["main:numberofevents"]))
+if fail == "abort":
+    print("Event generation aborted prematurely, owing to error!")
+    sys.exit(0)
+matched = settings.get("jetmatching:merge", "off") == "on"
+accepted = tried - tried // 2 if matched else tried
+Path(output).write_bytes(b"ROOT fake")
+print(" *-------  PYTHIA Event and Cross Section Statistics  -----*")
+print(f" | Les Houches User Process(es)                  9999 | {{tried:11d}} {{tried:10d}} {{accepted:10d}} |   1.000e-09  0.000e+00 |")
+print(f" | {{'sum':<50}} | {{tried:11d}} {{tried:10d}} {{accepted:10d}} |   1.000e-09  0.000e+00 |")
+print(" *-------  End PYTHIA Event and Cross Section Statistics -----*")
+print("** Exiting...")
+"""
+
+
+@pytest.fixture
+def delphes_pythia8(tmp_path: Path) -> Path:
+    program = tmp_path / "bin" / "DelphesPythia8"
+    program.parent.mkdir(exist_ok=True)
+    program.write_text(FAKE_DELPHES_PYTHIA8.format(python=sys.executable))
     program.chmod(0o755)
     return program

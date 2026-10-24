@@ -39,9 +39,8 @@
 - A catalogue entry whose process or model name is not a plain name (letters,
   digits, `_`, `.` and `-`) is rejected when the catalogue loads. (#8)
 - `omphjc.madgraph.generate_events` runs MadGraph for one process in a working
-  directory of its own, on a chosen number of cores and within an optional time
-  limit, and returns the event file with its banner. (#9)
-- `omphjc generate PROCESS --job N --events E --outdir DIR` runs the MadGraph
-  stage of one job in `<out>/<process>/job_<N>/` and records its parameters,
-  the MadGraph version, the cards, the event count and the cross section in the
-  job's `manifest.json`. (#10)
+  directory of its own and returns the event file with its banner. (#9)
+- `omphjc generate` runs the MadGraph stage of one job in
+  `<outdir>/<process>/job_<N>/` and records the run in its `manifest.json`. (#10)
+- `omphjc shower` runs Pythia 8 on a job's generated events through
+  `DelphesPythia8` and keeps the generator record of every showered event. (#12)

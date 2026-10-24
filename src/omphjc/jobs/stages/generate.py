@@ -1,10 +1,9 @@
 """The generation stage: parton-level events from MadGraph."""
 
-import hashlib
 import shutil
 from pathlib import Path
 
-from omphjc.jobs.job import Job, StageOutcome
+from omphjc.jobs.job import Job, StageOutcome, sha256
 from omphjc.jobs.manifest import StageRecord
 from omphjc.madgraph.driver import generate_events
 
@@ -99,5 +98,5 @@ def _copy_cards(source: Path, target_dir: Path, job: Job) -> dict[str, str]:
             continue
         target = target_dir / name
         shutil.copyfile(card, target)
-        hashes[job.relative(target)] = hashlib.sha256(target.read_bytes()).hexdigest()
+        hashes[job.relative(target)] = sha256(target)
     return hashes

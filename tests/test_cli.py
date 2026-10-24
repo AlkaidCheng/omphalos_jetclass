@@ -136,3 +136,33 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
         CliRunner().invoke(cli, [*arguments, "--events", "10", "--job", "0"]).exit_code
         != 0
     )
+
+
+def test_shower_runs_after_generate_and_reports(
+    mg5: Path, delphes_pythia8: Path, tmp_path: Path
+) -> None:
+    job = ["HToBB", "--job", "1", "--outdir", str(tmp_path)]
+    shower = ["shower", *job, "--delphes-pythia8", str(delphes_pythia8)]
+    missing = CliRunner().invoke(cli, shower)
+    assert missing.exit_code != 0
+    assert "run omphjc generate first" in missing.output
+    generated = CliRunner().invoke(
+        cli, ["generate", *job, "--events", "10", "--mg5", str(mg5)]
+    )
+    assert generated.exit_code == 0, generated.output
+    result = CliRunner().invoke(cli, shower)
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert lines[0].startswith("HToBB job 1: ")
+    assert lines[1] == "Pythia shower: done"
+    assert lines[2] == "  Pythia 8.318, seed 10000001"
+    assert lines[3] == "  events read       1"
+    assert lines[4] == "  events kept       1"
+    assert lines[5] == "  output            shower/particles.root"
+    assert lines[6] == "  log               shower/shower.log"
+    assert (
+        lines[7] == "  settings          shower/pythia.cmnd, shower/particles_card.tcl"
+    )
+    again = CliRunner().invoke(cli, shower)
+    assert again.exit_code == 0, again.output
+    assert "Pythia shower: done, kept from an earlier run" in again.output
