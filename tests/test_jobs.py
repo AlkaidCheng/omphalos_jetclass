@@ -39,13 +39,13 @@ def test_a_job_has_a_directory_per_process_and_number(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path / "runs", 7)
-    assert job.root == (tmp_path / "runs").resolve() / "HToBB" / "job_7"
-    assert job.manifest_path == job.root / "manifest.json"
-    assert job.stage_dir("madgraph") == job.root / "madgraph"
-    assert job.relative(job.root / "madgraph" / "x.log") == "madgraph/x.log"
+    assert job.root_dir == (tmp_path / "runs").resolve() / "HToBB" / "job_7"
+    assert job.manifest_path == job.root_dir / "manifest.json"
+    assert job.stage_dir("madgraph") == job.root_dir / "madgraph"
+    assert job.relative(job.root_dir / "madgraph" / "x.log") == "madgraph/x.log"
     assert job.seed == 10000007
     assert job.manifest == Manifest(process="HToBB", job=7)
-    assert not job.root.exists()
+    assert not job.root_dir.exists()
     with pytest.raises(ValueError, match="job_id"):
         Job(specs["HToBB"], tmp_path, 0)
     with pytest.raises(ValueError, match="filesystem root"):
@@ -138,7 +138,7 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
 
     job = Job(specs["HToBB"], tmp_path, 1)
     job.run_stage("x", {}, body)
-    (job.root / "x" / "out.txt").unlink()
+    (job.root_dir / "x" / "out.txt").unlink()
     job = Job(specs["HToBB"], tmp_path, 1)
     assert not job.is_done("x")
     job.run_stage("x", {}, body)
@@ -179,17 +179,17 @@ def test_a_manifest_of_another_job_is_refused(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.root.mkdir(parents=True)
+    job.root_dir.mkdir(parents=True)
     Manifest(process="HToGG", job=1).write(job.manifest_path)
     with pytest.raises(ValueError, match="belongs to HToGG job 1"):
         Job(specs["HToBB"], tmp_path, 1)
 
 
 def test_generate_records_what_madgraph_made(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     job = Job(specs["TTBar"], tmp_path, 3)
-    record = generate(job, n_events=10, mg5=mg5)
+    record = generate(job, n_events=10, mg5_path=mg5_path)
     assert Manifest.read(job.manifest_path).stages["madgraph"] == record
     assert record.status == "done"
     assert record.parameters == {"events": 10, "seed": 3}
@@ -202,31 +202,36 @@ def test_generate_records_what_madgraph_made(
     assert record.outputs == [
         "madgraph/TTBar/Events/run_01_decayed_1/unweighted_events.lhe.gz"
     ]
-    assert (job.root / record.outputs[0]).is_file()
+    assert (job.root_dir / record.outputs[0]).is_file()
     assert record.log == "madgraph/madgraph.log"
-    card = job.root / "madgraph" / "cards" / "proc_card_mg5.dat"
+    card = job.root_dir / "madgraph" / "cards" / "proc_card_mg5.dat"
     assert card.is_file()
     assert record.metadata["cards"]["madgraph/cards/proc_card_mg5.dat"] == (
         hashlib.sha256(card.read_bytes()).hexdigest()
     )
     assert (card.parent / "madspin_card.dat").is_file()
-    assert "set iseed 3" in (job.root / "madgraph" / "launch.mg5").read_text()
+    assert "set iseed 3" in (job.root_dir / "madgraph" / "launch.mg5").read_text()
 
 
 def test_generate_keeps_a_finished_run_unless_forced(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
-    first = generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5=mg5)
+    first = generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
     log = tmp_path / "HToBB" / "job_1" / "madgraph" / "madgraph.log"
     runs = log.read_text().count("$ ")
-    assert generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5=mg5) == first
+    assert (
+        generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
+        == first
+    )
     assert log.read_text().count("$ ") == runs
     with pytest.raises(ValueError, match="ran with"):
-        generate(Job(specs["HToBB"], tmp_path, 1), n_events=20, mg5=mg5)
+        generate(Job(specs["HToBB"], tmp_path, 1), n_events=20, mg5_path=mg5_path)
     shifted = replace(specs["HToBB"], seed_offset=20_000_000)
     with pytest.raises(ValueError, match="'seed': 10000001.*'seed': 20000001"):
-        generate(Job(shifted, tmp_path, 1), n_events=10, mg5=mg5)
-    again = generate(Job(specs["HToBB"], tmp_path, 1), n_events=20, mg5=mg5, force=True)
+        generate(Job(shifted, tmp_path, 1), n_events=10, mg5_path=mg5_path)
+    again = generate(
+        Job(specs["HToBB"], tmp_path, 1), n_events=20, mg5_path=mg5_path, force=True
+    )
     assert again.status == "done"
     assert again.parameters == {"events": 20, "seed": 10000001}
     assert log.read_text().count("$ ") == runs
@@ -234,36 +239,43 @@ def test_generate_keeps_a_finished_run_unless_forced(
 
 def test_a_failed_madgraph_run_is_recorded_and_retried(
     specs: Mapping[str, ProcessSpec],
-    mg5: Path,
+    mg5_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("FAKE_MG5_FAIL", "launch")
     with pytest.raises(MadGraphError):
-        generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5=mg5)
+        generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
     manifest = Manifest.read(tmp_path / "HToBB" / "job_1" / "manifest.json")
     record = manifest.stages["madgraph"]
     assert record.status == "failed" and record.finished is not None
     assert record.error is not None and "launch.mg5" in record.error
     monkeypatch.delenv("FAKE_MG5_FAIL")
-    done = generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5=mg5)
+    done = generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
     assert done.status == "done"
 
 
 def test_shower_needs_a_finished_madgraph_stage(
-    specs: Mapping[str, ProcessSpec], delphes_pythia8: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], delphes_pythia8_path: Path, tmp_path: Path
 ) -> None:
     with pytest.raises(ValueError, match="run omphjc generate first"):
-        shower(Job(specs["HToBB"], tmp_path, 1), delphes_pythia8=delphes_pythia8)
+        shower(
+            Job(specs["HToBB"], tmp_path, 1), delphes_pythia8_path=delphes_pythia8_path
+        )
     assert not (tmp_path / "HToBB").exists()
 
 
 def test_shower_records_what_it_made_and_keeps_it(
-    specs: Mapping[str, ProcessSpec], mg5: Path, delphes_pythia8: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec],
+    mg5_path: Path,
+    delphes_pythia8_path: Path,
+    tmp_path: Path,
 ) -> None:
-    generated = generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5=mg5)
+    generated = generate(
+        Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path
+    )
     job = Job(specs["HToBB"], tmp_path, 1)
-    record = shower(job, delphes_pythia8=delphes_pythia8)
+    record = shower(job, delphes_pythia8_path=delphes_pythia8_path)
     assert Manifest.read(job.manifest_path).stages["shower"] == record
     assert record.status == "done"
     assert record.parameters == {
@@ -281,48 +293,57 @@ def test_shower_records_what_it_made_and_keeps_it(
         "shower/particles_card.tcl",
     }
     assert record.outputs == ["shower/particles.root"]
-    assert (job.root / "shower" / "particles.root").is_file()
+    assert (job.root_dir / "shower" / "particles.root").is_file()
     assert record.log == "shower/shower.log"
-    cmnd = (job.root / "shower" / "pythia.cmnd").read_text()
+    cmnd = (job.root_dir / "shower" / "pythia.cmnd").read_text()
     assert "Random:seed = 10000001" in cmnd and "Main:numberOfEvents = 10000" in cmnd
-    card = (job.root / "shower" / "particles_card.tcl").read_text()
+    card = (job.root_dir / "shower" / "particles_card.tcl").read_text()
     assert "TreeWriter" in card and "RandomSeed" not in card
 
-    kept = shower(Job(specs["HToBB"], tmp_path, 1), delphes_pythia8=delphes_pythia8)
+    kept = shower(
+        Job(specs["HToBB"], tmp_path, 1), delphes_pythia8_path=delphes_pythia8_path
+    )
     assert kept == record
     overrides = {"Main:timesAllowErrors": 5}
     with pytest.raises(ValueError, match="ran with"):
         shower(
             Job(specs["HToBB"], tmp_path, 1),
             overrides=overrides,
-            delphes_pythia8=delphes_pythia8,
+            delphes_pythia8_path=delphes_pythia8_path,
         )
     forced = shower(
         Job(specs["HToBB"], tmp_path, 1),
         overrides=overrides,
         force=True,
-        delphes_pythia8=delphes_pythia8,
+        delphes_pythia8_path=delphes_pythia8_path,
     )
     assert forced.parameters["pythia"] == overrides
     assert (
-        "Main:timesAllowErrors = 5" in (job.root / "shower" / "pythia.cmnd").read_text()
+        "Main:timesAllowErrors = 5"
+        in (job.root_dir / "shower" / "pythia.cmnd").read_text()
     )
 
-    generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5=mg5, force=True)
+    generate(
+        Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path, force=True
+    )
     regenerated = shower(
         Job(specs["HToBB"], tmp_path, 1),
         overrides=overrides,
-        delphes_pythia8=delphes_pythia8,
+        delphes_pythia8_path=delphes_pythia8_path,
     )
     assert regenerated == forced
 
 
 def test_shower_records_the_matching_efficiency_of_a_matched_process(
-    specs: Mapping[str, ProcessSpec], mg5: Path, delphes_pythia8: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec],
+    mg5_path: Path,
+    delphes_pythia8_path: Path,
+    tmp_path: Path,
 ) -> None:
-    generate(Job(specs["ZJetsToNuNu"], tmp_path, 2), n_events=10, mg5=mg5)
+    generate(Job(specs["ZJetsToNuNu"], tmp_path, 2), n_events=10, mg5_path=mg5_path)
     record = shower(
-        Job(specs["ZJetsToNuNu"], tmp_path, 2), delphes_pythia8=delphes_pythia8
+        Job(specs["ZJetsToNuNu"], tmp_path, 2),
+        delphes_pythia8_path=delphes_pythia8_path,
     )
     assert record.metadata["matching_efficiency"] == 1.0
     cmnd = (tmp_path / "ZJetsToNuNu" / "job_2" / "shower" / "pythia.cmnd").read_text()
@@ -353,7 +374,7 @@ def test_a_stage_records_the_folder_its_run_set_aside(
 
 def test_a_job_lists_and_clears_what_its_stages_set_aside(
     specs: Mapping[str, ProcessSpec],
-    mg5: Path,
+    mg5_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -361,10 +382,10 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
 
     with monkeypatch.context() as killed_before_sealing:
         killed_before_sealing.setattr(workspace, "seal", lambda *_: None)
-        generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5=mg5)
+        generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
     job = Job(specs["HToBB"], tmp_path, 1)
     assert job.set_aside_folders() == []
-    record = generate(job, n_events=10, force=True, mg5=mg5)
+    record = generate(job, n_events=10, force=True, mg5_path=mg5_path)
     assert record.set_aside is not None
     assert record.set_aside.startswith("madgraph/omphjc-set-aside/")
     folders = job.set_aside_folders()
@@ -377,24 +398,24 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
 
 
 def test_simulate_needs_a_finished_shower_stage(
-    specs: Mapping[str, ProcessSpec], delphes_root: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], delphes_root_path: Path, tmp_path: Path
 ) -> None:
     with pytest.raises(ValueError, match="run omphjc shower first"):
-        simulate(Job(specs["HToBB"], tmp_path, 1), delphes_root=delphes_root)
+        simulate(Job(specs["HToBB"], tmp_path, 1), delphes_root_path=delphes_root_path)
     assert not (tmp_path / "HToBB" / "job_1" / "simulate").exists()
 
 
 def test_simulate_records_what_it_made_and_keeps_it(
     specs: Mapping[str, ProcessSpec],
-    mg5: Path,
-    delphes_pythia8: Path,
-    delphes_root: Path,
+    mg5_path: Path,
+    delphes_pythia8_path: Path,
+    delphes_root_path: Path,
     tmp_path: Path,
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    generate(job, n_events=10, mg5=mg5)
-    showered = shower(job, delphes_pythia8=delphes_pythia8)
-    record = simulate(job, delphes_root=delphes_root)
+    generate(job, n_events=10, mg5_path=mg5_path)
+    showered = shower(job, delphes_pythia8_path=delphes_pythia8_path)
+    record = simulate(job, delphes_root_path=delphes_root_path)
     assert record.status == "done"
     assert record.parameters["seed"] == job.seed
     assert record.parameters["showered_with"] == showered.metadata["settings"]
@@ -402,33 +423,37 @@ def test_simulate_records_what_it_made_and_keeps_it(
     assert record.metadata["events"] == showered.metadata["events_accepted"]
     assert list(record.metadata["card"]) == ["simulate/delphes_card.tcl"]
     assert record.outputs == ["simulate/delphes.root"]
-    assert (job.root / "simulate" / "delphes.root").is_file()
+    assert (job.root_dir / "simulate" / "delphes.root").is_file()
     assert record.log == "simulate/simulate.log"
-    card = (job.root / "simulate" / "delphes_card.tcl").read_text()
+    card = (job.root_dir / "simulate" / "delphes_card.tcl").read_text()
     assert card.startswith("set RandomSeed 10000001\n")
-    log = (job.root / "simulate" / "simulate.log").read_text()
-    assert f"** Reading {job.root / 'shower' / 'particles.root'}" in log
+    log = (job.root_dir / "simulate" / "simulate.log").read_text()
+    assert f"** Reading {job.root_dir / 'shower' / 'particles.root'}" in log
 
-    kept = simulate(Job(specs["HToBB"], tmp_path, 1), delphes_root=delphes_root)
+    kept = simulate(
+        Job(specs["HToBB"], tmp_path, 1), delphes_root_path=delphes_root_path
+    )
     assert kept == record
     other = tmp_path / "other.tcl"
     other.write_text("set ExecutionPath {\n  TreeWriter\n}\n")
     with pytest.raises(ValueError, match="ran with"):
         simulate(
-            Job(specs["HToBB"], tmp_path, 1), card=other, delphes_root=delphes_root
+            Job(specs["HToBB"], tmp_path, 1),
+            card_path=other,
+            delphes_root_path=delphes_root_path,
         )
     forced = simulate(
         Job(specs["HToBB"], tmp_path, 1),
-        card=other,
+        card_path=other,
         force=True,
-        delphes_root=delphes_root,
+        delphes_root_path=delphes_root_path,
     )
     assert (
         forced.status == "done"
         and forced.parameters["card"] != record.parameters["card"]
     )
     assert (
-        (job.root / "simulate" / "delphes_card.tcl")
+        (job.root_dir / "simulate" / "delphes_card.tcl")
         .read_text()
         .endswith(other.read_text())
     )

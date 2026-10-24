@@ -7,7 +7,7 @@ import click
 
 from omphjc import __version__
 from omphjc.cli.formatting import count, describe_usage, size
-from omphjc.config_paths import config_root, export_config
+from omphjc.config_paths import config_dir, export_config
 from omphjc.delphes import DelphesCard, compare_cards, load_card, reference_card
 from omphjc.jobs import (
     MADGRAPH,
@@ -39,18 +39,18 @@ Catalogue = Mapping[str, ProcessSpec]
 @click.version_option(__version__, prog_name="omphjc")
 @click.option(
     "--catalogue",
-    "catalogue_file",
+    "catalogue_path",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     envvar="OMPHJC_CATALOGUE",
     help="Process catalogue to use instead of the default config/jetclass.yaml.",
 )
 @click.pass_context
-def cli(context: click.Context, catalogue_file: Path | None) -> None:
+def cli(context: click.Context, catalogue_path: Path | None) -> None:
     """Generate JetClass samples for Delphes and Parnassus."""
     context.obj = (
         default_catalogue()
-        if catalogue_file is None
-        else load_catalogue(catalogue_file)
+        if catalogue_path is None
+        else load_catalogue(catalogue_path)
     )
 
 
@@ -122,6 +122,7 @@ def check_cards(specs: Catalogue) -> None:
 )
 @click.option(
     "--outdir",
+    "outdir",
     type=click.Path(path_type=Path),
     required=True,
     help="Directory holding the jobs of every process.",
@@ -139,6 +140,7 @@ def check_cards(specs: Catalogue) -> None:
 )
 @click.option(
     "--mg5",
+    "mg5_path",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
     help="MadGraph's bin/mg5_aMC (default: the one on PATH).",
@@ -153,7 +155,7 @@ def generate_job(
     n_cores: int | None,
     timeout: float | None,
     force: bool,
-    mg5: Path | None,
+    mg5_path: Path | None,
 ) -> None:
     """Generate the parton-level events of one job of a process with MadGraph."""
     spec = _lookup(specs, name)
@@ -167,7 +169,7 @@ def generate_job(
                 n_cores=n_cores,
                 timeout=timeout,
                 force=force,
-                mg5=mg5,
+                mg5_path=mg5_path,
             )
     except (
         ValueError,
@@ -185,7 +187,7 @@ def _report_generation(job: Job, record: StageRecord, *, kept: bool) -> None:
     """Print what the MadGraph stage of `job` ran with and what it made."""
     metadata = record.metadata
     outcome = "done, kept from an earlier run" if kept else "done"
-    click.echo(f"{job.spec.name} job {job.job_id}: {job.root}")
+    click.echo(f"{job.spec.name} job {job.job_id}: {job.root_dir}")
     click.echo(f"MadGraph generation: {outcome}")
     click.echo(
         f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
@@ -225,6 +227,7 @@ def _report_set_aside(job: Job) -> None:
 )
 @click.option(
     "--outdir",
+    "outdir",
     type=click.Path(path_type=Path),
     required=True,
     help="Directory holding the jobs of every process.",
@@ -244,6 +247,7 @@ def _report_set_aside(job: Job) -> None:
 )
 @click.option(
     "--delphes-pythia8",
+    "delphes_pythia8_path",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
     help="Delphes's DelphesPythia8 (default: the one on PATH).",
@@ -257,7 +261,7 @@ def shower_job(
     assignments: tuple[str, ...],
     timeout: float | None,
     force: bool,
-    delphes_pythia8: Path | None,
+    delphes_pythia8_path: Path | None,
 ) -> None:
     """Shower one job's generated events with Pythia 8; the detector comes later."""
     spec = _lookup(specs, name)
@@ -271,7 +275,7 @@ def shower_job(
                 overrides=overrides,
                 timeout=timeout,
                 force=force,
-                delphes_pythia8=delphes_pythia8,
+                delphes_pythia8_path=delphes_pythia8_path,
             )
     except (
         ValueError,
@@ -289,7 +293,7 @@ def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
     """Print what the shower stage of `job` ran with and what it made."""
     metadata = record.metadata
     outcome = "done, kept from an earlier run" if kept else "done"
-    click.echo(f"{job.spec.name} job {job.job_id}: {job.root}")
+    click.echo(f"{job.spec.name} job {job.job_id}: {job.root_dir}")
     click.echo(f"Pythia shower: {outcome}")
     click.echo(
         f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
@@ -316,12 +320,14 @@ def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
 )
 @click.option(
     "--outdir",
+    "outdir",
     type=click.Path(path_type=Path),
     required=True,
     help="Directory holding the jobs of every process.",
 )
 @click.option(
     "--card",
+    "card_path",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
     help="Detector card to run instead of the process's.",
@@ -334,6 +340,7 @@ def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
 )
 @click.option(
     "--delphes-root",
+    "delphes_root_path",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
     help="Delphes's DelphesROOT (default: the one on PATH).",
@@ -344,10 +351,10 @@ def simulate_job(
     name: str,
     job_id: int,
     outdir: Path,
-    card: Path | None,
+    card_path: Path | None,
     timeout: float | None,
     force: bool,
-    delphes_root: Path | None,
+    delphes_root_path: Path | None,
 ) -> None:
     """Simulate the detector on one job's showered events with Delphes."""
     spec = _lookup(specs, name)
@@ -357,10 +364,10 @@ def simulate_job(
         with exception_on_termination():
             record = simulate(
                 job,
-                card=card,
+                card_path=card_path,
                 timeout=timeout,
                 force=force,
-                delphes_root=delphes_root,
+                delphes_root_path=delphes_root_path,
             )
     except (
         ValueError,
@@ -378,7 +385,7 @@ def _report_simulation(job: Job, record: StageRecord, *, kept: bool) -> None:
     """Print what the simulation stage of `job` ran with and what it made."""
     metadata = record.metadata
     outcome = "done, kept from an earlier run" if kept else "done"
-    click.echo(f"{job.spec.name} job {job.job_id}: {job.root}")
+    click.echo(f"{job.spec.name} job {job.job_id}: {job.root_dir}")
     click.echo(f"Delphes simulation: {outcome}")
     click.echo(f"  card              {', '.join(metadata['card'])}")
     click.echo(f"  seed              {record.parameters['seed']}")
@@ -394,6 +401,7 @@ def _report_simulation(job: Job, record: StageRecord, *, kept: bool) -> None:
 @click.option("--job", "job_id", type=int, required=True, help="Job number.")
 @click.option(
     "--outdir",
+    "outdir",
     type=click.Path(path_type=Path),
     required=True,
     help="Directory holding the jobs of every process.",
@@ -428,7 +436,7 @@ def clean_job(
             job.clear_set_aside_folders()
     except (ValueError, StampError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(f"{job.spec.name} job {job.job_id}: {job.root}")
+    click.echo(f"{job.spec.name} job {job.job_id}: {job.root_dir}")
     if not folders:
         click.echo("set aside: nothing")
         return
@@ -449,18 +457,20 @@ def config() -> None:
 @config.command("path")
 def config_path() -> None:
     """Print the directory of the package's configuration."""
-    click.echo(str(config_root()))
+    click.echo(str(config_dir()))
 
 
 @config.command("export")
-@click.argument("destination", type=click.Path(path_type=Path))
-def config_export(destination: Path) -> None:
+@click.argument(
+    "destination_dir", metavar="DESTINATION", type=click.Path(path_type=Path)
+)
+def config_export(destination_dir: Path) -> None:
     """Copy the package's configuration to DESTINATION for editing."""
     try:
-        export_config(destination)
+        export_config(destination_dir)
     except FileExistsError as error:
         raise click.ClickException(str(error)) from error
-    click.echo(f"Configuration copied to {destination}")
+    click.echo(f"Configuration copied to {destination_dir}")
 
 
 @cli.group()
@@ -483,6 +493,7 @@ def pythia() -> None:
 )
 @click.option(
     "--lhe",
+    "lhe_path",
     type=click.Path(path_type=Path),
     default=Path("events.lhe"),
     show_default=True,
@@ -501,14 +512,14 @@ def pythia_show(
     name: str,
     n_events: int,
     seed: int | None,
-    lhe: Path,
+    lhe_path: Path,
     assignments: tuple[str, ...],
 ) -> None:
     """Print the Pythia command file written for one process."""
     spec = _lookup(specs, name)
     overrides = dict(_assignment(item) for item in assignments)
     settings = shower_settings(
-        spec, lhe_path=lhe, n_events=n_events, seed=seed, overrides=overrides
+        spec, lhe_path=lhe_path, n_events=n_events, seed=seed, overrides=overrides
     )
     click.echo(format_cmnd(settings, title=spec.name), nl=False)
 
@@ -520,11 +531,14 @@ def delphes() -> None:
 
 @delphes.command("show")
 @click.argument(
-    "card", type=click.Path(exists=True, dir_okay=False, path_type=Path), required=False
+    "card_path",
+    metavar="CARD",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=False,
 )
-def delphes_show(card: Path | None) -> None:
+def delphes_show(card_path: Path | None) -> None:
     """Print the evaluated configuration of a card (default: the official one)."""
-    configuration = reference_card() if card is None else load_card(card)
+    configuration = reference_card() if card_path is None else load_card(card_path)
     click.echo("ExecutionPath:")
     for name in configuration.execution_path:
         click.echo(f"  {name}")
@@ -537,18 +551,23 @@ def delphes_show(card: Path | None) -> None:
 
 
 @delphes.command("compare")
-@click.argument("card", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument(
+    "card_path",
+    metavar="CARD",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
 @click.option(
     "--reference",
+    "reference_path",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help="Card to compare against (default: the official JetClass card).",
 )
-def delphes_compare(card: Path, reference: Path | None) -> None:
+def delphes_compare(card_path: Path, reference_path: Path | None) -> None:
     """Report configuration differences between a card and a reference."""
     reference_configuration: DelphesCard = (
-        reference_card() if reference is None else load_card(reference)
+        reference_card() if reference_path is None else load_card(reference_path)
     )
-    differences = compare_cards(load_card(card), reference_configuration)
+    differences = compare_cards(load_card(card_path), reference_configuration)
     if not differences:
         click.echo("The cards configure Delphes identically.")
         return

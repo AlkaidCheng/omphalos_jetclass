@@ -81,13 +81,13 @@ def test_vendored_models_are_resolved_and_standard_models_are_not(
 ) -> None:
     for spec in specs.values():
         if spec.model_base in {"heft", "heft_c_mass_jetclass"}:
-            assert spec.model_path is not None, spec.name
-            assert spec.model_path.name == spec.model_base
-            assert (spec.model_path / "__init__.py").is_file()
-            assert (spec.model_path / "restrict_default.dat").is_file()
+            assert spec.model_dir is not None, spec.name
+            assert spec.model_dir.name == spec.model_base
+            assert (spec.model_dir / "__init__.py").is_file()
+            assert (spec.model_dir / "restrict_default.dat").is_file()
         else:
-            assert spec.model_path is None, spec.name
-    heft = specs["HToWW4Q"].model_path
+            assert spec.model_dir is None, spec.name
+    heft = specs["HToWW4Q"].model_dir
     assert heft is not None and (heft / "restrict_ckm.dat").is_file()
 
 
@@ -206,7 +206,7 @@ def test_paths_may_be_absolute(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     spec = load_catalogue(path)["T"]
-    assert spec.model_path == config / "models" / "heft"
+    assert spec.model_dir == config / "models" / "heft"
     assert spec.delphes_card == config / "delphes" / "delphes_card_JetClass.tcl"
     assert spec.madspin_card == config / "madspin" / "TTBar.dat"
     assert spec.reference_cards == config / "references" / "jetclass" / "TTBar"

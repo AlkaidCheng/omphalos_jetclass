@@ -33,7 +33,7 @@ def test_the_command_and_its_output_go_to_the_log(tmp_path: Path) -> None:
     log = tmp_path / "run.log"
     log.write_text("earlier run\n")
     code = "import sys; print('to stdout', flush=True); print('to stderr', file=sys.stderr)"
-    run_program(python(code), cwd=tmp_path, log=log)
+    run_program(python(code), cwd=tmp_path, log_path=log)
     lines = log.read_text().splitlines()
     assert lines[0] == "earlier run"
     assert lines[1].startswith("$ ") and "to stdout" in lines[1]
@@ -45,14 +45,14 @@ def test_the_program_runs_in_the_given_directory_without_input(tmp_path: Path) -
     run_program(
         python("import os, sys; print(os.getcwd()); print(repr(sys.stdin.read()))"),
         cwd=tmp_path,
-        log=log,
+        log_path=log,
     )
     assert log.read_text().splitlines()[1:] == [str(tmp_path.resolve()), "''"]
 
 
 def test_a_run_reports_its_wall_time_cpu_time_and_memory(tmp_path: Path) -> None:
     code = "import time; s = time.process_time()\nwhile time.process_time() - s < 0.2: pass"
-    usage = run_program(python(code), cwd=tmp_path, log=tmp_path / "run.log")
+    usage = run_program(python(code), cwd=tmp_path, log_path=tmp_path / "run.log")
     assert usage.wall_seconds >= 0.2
     assert usage.cpu_seconds is not None and usage.cpu_seconds >= 0.15
     assert usage.max_memory_mb is not None and usage.max_memory_mb > 1
@@ -66,7 +66,7 @@ def test_a_failing_status_raises_with_the_end_of_the_log(tmp_path: Path) -> None
     log = tmp_path / "run.log"
     command = python("import sys; print('last words'); sys.exit(3)")
     with pytest.raises(ProgramError, match="exited with status 3") as error:
-        run_program(command, cwd=tmp_path, log=log)
+        run_program(command, cwd=tmp_path, log_path=log)
     assert str(error.value).endswith("last words")
 
 
@@ -75,7 +75,7 @@ def test_the_time_limit_stops_the_program_and_its_jobs(tmp_path: Path) -> None:
         run_program(
             python(STARTS_A_JOB_AND_WAITS),
             cwd=tmp_path,
-            log=tmp_path / "run.log",
+            log_path=tmp_path / "run.log",
             timeout=1,
         )
     assert _ends_within(int((tmp_path / "job.pid").read_text()), seconds=5)
@@ -101,7 +101,7 @@ def test_an_interrupt_stops_the_program_and_its_jobs(
     monkeypatch.setattr(subprocess.Popen, "wait", wait_interrupted_once_the_job_runs)
     with pytest.raises(KeyboardInterrupt):
         run_program(
-            python(STARTS_A_JOB_AND_WAITS), cwd=tmp_path, log=tmp_path / "run.log"
+            python(STARTS_A_JOB_AND_WAITS), cwd=tmp_path, log_path=tmp_path / "run.log"
         )
     assert _ends_within(int(job_file.read_text()), seconds=5)
 
@@ -114,7 +114,9 @@ def test_a_process_outside_a_group_of_its_own_is_stopped() -> None:
 
 def test_a_negative_time_limit_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="timeout"):
-        run_program(python("pass"), cwd=tmp_path, log=tmp_path / "run.log", timeout=-1)
+        run_program(
+            python("pass"), cwd=tmp_path, log_path=tmp_path / "run.log", timeout=-1
+        )
 
 
 def test_log_tail_gives_the_last_lines_after_the_path(tmp_path: Path) -> None:

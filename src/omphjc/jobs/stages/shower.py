@@ -19,7 +19,7 @@ def shower(
     overrides: Mapping[str, SettingValue] | None = None,
     timeout: float | None = None,
     force: bool = False,
-    delphes_pythia8: Path | None = None,
+    delphes_pythia8_path: Path | None = None,
 ) -> StageRecord:
     """Shower the generated events of `job` with Pythia 8.
 
@@ -42,7 +42,7 @@ def shower(
         Seconds the stage may take; ``None`` for no limit.
     force : bool, optional
         Run the stage again even when its result could be kept.
-    delphes_pythia8 : Path or None, optional
+    delphes_pythia8_path : Path or None, optional
         Delphes's ``DelphesPythia8``; ``None`` for the one on PATH.
 
     Returns
@@ -58,25 +58,25 @@ def shower(
     generated = job.manifest.stages.get(MADGRAPH)
     if generated is None or not job.is_done(MADGRAPH):
         raise ValueError(
-            f"The MadGraph stage of {job.root} has not run to completion; run "
+            f"The MadGraph stage of {job.root_dir} has not run to completion; run "
             "omphjc generate first"
         )
-    lhe = job.root / generated.outputs[0]
+    lhe_path = job.root_dir / generated.outputs[0]
     n_events = int(generated.metadata["events"])
-    directory = job.stage_dir(SHOWER)
+    stage_dir = job.stage_dir(SHOWER)
     pythia_overrides = dict(overrides or {})
 
     def body(overwrite: bool) -> StageOutcome:
         run = shower_events(
             job.spec,
-            lhe=lhe,
-            workdir=directory,
+            lhe_path=lhe_path,
+            workdir=stage_dir,
             n_events=n_events,
             seed=job.seed,
             overrides=pythia_overrides,
             timeout=timeout,
             overwrite=overwrite,
-            delphes_pythia8=delphes_pythia8,
+            delphes_pythia8_path=delphes_pythia8_path,
         )
         statistics = run.statistics
         metadata = {
@@ -84,8 +84,8 @@ def shower(
             "events_read": statistics.events_read,
             "events_accepted": statistics.events_accepted,
             "settings": {
-                job.relative(run.cmnd): sha256(run.cmnd),
-                job.relative(run.card): sha256(run.card),
+                job.relative(run.cmnd_path): sha256(run.cmnd_path),
+                job.relative(run.card_path): sha256(run.card_path),
             },
         }
         if job.spec.matching and statistics.events_read > 0:
@@ -94,8 +94,8 @@ def shower(
             )
         return StageOutcome(
             metadata=metadata,
-            outputs=[run.output],
-            log=run.log_file,
+            outputs=[run.output_path],
+            log_path=run.log_path,
             usage=run.usage.recorded(),
             set_aside=run.set_aside,
         )

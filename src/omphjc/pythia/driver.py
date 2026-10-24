@@ -110,14 +110,14 @@ class ShowerRun:
 
     Parameters
     ----------
-    output : Path
+    output_path : Path
         The showered events: a Delphes ROOT file holding the generator record
         of every event in its ``Particle`` branch.
-    cmnd : Path
+    cmnd_path : Path
         The Pythia command file as run.
-    card : Path
+    card_path : Path
         The Delphes card as run, the one that writes the generator record.
-    log_file : Path
+    log_path : Path
         ``DelphesPythia8``'s output for the run.
     statistics : ShowerStatistics
         Pythia's version and event counts, read from the log.
@@ -129,10 +129,10 @@ class ShowerRun:
         ``None`` when nothing was set aside.
     """
 
-    output: Path
-    cmnd: Path
-    card: Path
-    log_file: Path
+    output_path: Path
+    cmnd_path: Path
+    card_path: Path
+    log_path: Path
     statistics: ShowerStatistics
     usage: ProgramUsage
     set_aside: Path | None = None
@@ -164,23 +164,23 @@ def read_statistics(log_text: str) -> ShowerStatistics:
 def shower_events(
     spec: ProcessSpec,
     *,
-    lhe: Path,
+    lhe_path: Path,
     workdir: Path,
     n_events: int,
     seed: int | None,
     overrides: Mapping[str, SettingValue] | None = None,
     timeout: float | None = None,
     overwrite: bool = False,
-    delphes_pythia8: Path | None = None,
+    delphes_pythia8_path: Path | None = None,
 ) -> ShowerRun:
-    """Shower the events in `lhe` with Pythia 8 through ``DelphesPythia8``, simulating nothing.
+    """Shower the events in `lhe_path` with Pythia 8 through ``DelphesPythia8``, simulating nothing.
 
     Parameters
     ----------
     spec : ProcessSpec
         The process the events belong to; its Pythia settings and matching
         block come from the catalogue.
-    lhe : Path
+    lhe_path : Path
         The LHE file, gzipped or plain; it is decompressed into `workdir`.
     workdir : Path
         Directory of the run, created when missing; it must not hold a run of
@@ -201,7 +201,7 @@ def shower_events(
         results by accident. It is replaced only after every other check has
         passed: deleted when the earlier run sealed it and nothing in it
         changed since, otherwise moved aside (see `ShowerRun.set_aside`).
-    delphes_pythia8 : Path or None, optional
+    delphes_pythia8_path : Path or None, optional
         Delphes's ``DelphesPythia8``; by default the one on PATH.
 
     Returns
@@ -216,7 +216,7 @@ def shower_events(
         range, `workdir` is a filesystem root, or a file of an earlier run is a
         symbolic link.
     FileNotFoundError
-        If `lhe` is not a file or ``DelphesPythia8`` cannot be found.
+        If `lhe_path` is not a file or ``DelphesPythia8`` cannot be found.
     FileExistsError
         If `workdir` already holds an output file and `overwrite` is false.
     StampError
@@ -228,14 +228,14 @@ def shower_events(
         failed events, is still running at the time limit, or writes no
         output; the message ends with the last lines of its log.
     """
-    if not lhe.is_file():
-        raise FileNotFoundError(f"Event file {lhe} not found")
+    if not lhe_path.is_file():
+        raise FileNotFoundError(f"Event file {lhe_path} not found")
     workspace = ShowerWorkspace(
-        spec, workdir, delphes_pythia8=delphes_pythia8, timeout=timeout
+        spec, workdir, delphes_pythia8_path=delphes_pythia8_path, timeout=timeout
     )
-    if occupied(workspace.output) and not overwrite:
+    if occupied(workspace.output_path) and not overwrite:
         raise FileExistsError(
-            f"Output file {workspace.output} already exists; pass overwrite=True "
+            f"Output file {workspace.output_path} already exists; pass overwrite=True "
             "to replace it"
         )
     # Built before anything is removed, so that an invalid request fails at
@@ -250,29 +250,31 @@ def shower_events(
 
     set_aside = workspace.prepare()
     try:
-        workspace.write_inputs(lhe, settings)
+        workspace.write_inputs(lhe_path, settings)
         workspace.run_shower()
     finally:
         # Whatever the outcome, the stamp seals what this run made, so that a
         # later run can tell whether anyone changed it since.
         workspace.seal_artifacts()
 
-    log_text = workspace.log_file.read_text(encoding="utf-8", errors="replace")
+    log_text = workspace.log_path.read_text(encoding="utf-8", errors="replace")
     if _ABORTED in log_text:
         raise workspace.error(
             "DelphesPythia8 gave up after too many failed events (Main:timesAllowErrors)"
         )
-    if not workspace.output.is_file():
-        raise workspace.error(f"DelphesPythia8 wrote no output file {workspace.output}")
+    if not workspace.output_path.is_file():
+        raise workspace.error(
+            f"DelphesPythia8 wrote no output file {workspace.output_path}"
+        )
     try:
         statistics = read_statistics(log_text)
     except ValueError as error:
         raise workspace.error(f"DelphesPythia8 did not finish: {error}") from None
     return ShowerRun(
-        output=workspace.output,
-        cmnd=workspace.cmnd,
-        card=workspace.card,
-        log_file=workspace.log_file,
+        output_path=workspace.output_path,
+        cmnd_path=workspace.cmnd_path,
+        card_path=workspace.card_path,
+        log_path=workspace.log_path,
         statistics=statistics,
         usage=workspace.usage,
         set_aside=set_aside,
@@ -291,9 +293,9 @@ class ShowerWorkspace(Workspace):
     ----------
     spec : ProcessSpec
         The process whose runs the directory holds.
-    directory : Path
+    workdir : Path
         The working directory, created when missing; not a filesystem root.
-    delphes_pythia8 : Path or None, optional
+    delphes_pythia8_path : Path or None, optional
         Delphes's ``DelphesPythia8``; by default the one on PATH.
     timeout : float or None, optional
         Seconds the run may take from now; ``None`` sets no limit.
@@ -301,9 +303,9 @@ class ShowerWorkspace(Workspace):
     Raises
     ------
     ValueError
-        If `timeout` is not positive or `directory` is a filesystem root.
+        If `timeout` is not positive or `workdir` is a filesystem root.
     FileNotFoundError
-        If `delphes_pythia8` is not a file, or none is given and PATH has no
+        If `delphes_pythia8_path` is not a file, or none is given and PATH has no
         ``DelphesPythia8``.
     """
 
@@ -312,15 +314,15 @@ class ShowerWorkspace(Workspace):
     def __init__(
         self,
         spec: ProcessSpec,
-        directory: Path,
+        workdir: Path,
         *,
-        delphes_pythia8: Path | None = None,
+        delphes_pythia8_path: Path | None = None,
         timeout: float | None = None,
     ) -> None:
         super().__init__(
-            directory,
+            workdir,
             program=_DELPHES_PYTHIA8,
-            program_path=delphes_pythia8,
+            program_path=delphes_pythia8_path,
             description=f"Delphes's {_DELPHES_PYTHIA8}",
             purpose=_RUN_PURPOSE,
             details={"process": spec.name},
@@ -330,36 +332,36 @@ class ShowerWorkspace(Workspace):
         self.spec = spec
 
     @property
-    def events(self) -> Path:
+    def events_path(self) -> Path:
         """The uncompressed event file the run reads."""
-        return self.directory / _EVENTS_FILE
+        return self.workdir / _EVENTS_FILE
 
     @property
-    def cmnd(self) -> Path:
+    def cmnd_path(self) -> Path:
         """The Pythia command file of the run."""
-        return self.directory / _CMND_FILE
+        return self.workdir / _CMND_FILE
 
     @property
-    def card(self) -> Path:
+    def card_path(self) -> Path:
         """The Delphes card of the run, the one that writes the generator record."""
-        return self.directory / _CARD_FILE
+        return self.workdir / _CARD_FILE
 
     @property
-    def output(self) -> Path:
+    def output_path(self) -> Path:
         """The ROOT file of showered events the run writes."""
-        return self.directory / _OUTPUT_FILE
+        return self.workdir / _OUTPUT_FILE
 
     @property
     def artifacts(self) -> list[str]:
         return [_EVENTS_FILE, _CMND_FILE, _CARD_FILE, _OUTPUT_FILE, _LOG_FILE]
 
-    def write_inputs(self, lhe: Path, settings: Mapping[str, str]) -> None:
-        """Decompress `lhe` into the directory and write the command file and the card."""
-        _copy_events(lhe, self.events)
-        self.cmnd.write_text(
+    def write_inputs(self, lhe_path: Path, settings: Mapping[str, str]) -> None:
+        """Decompress `lhe_path` into the directory and write the command file and the card."""
+        _copy_events(lhe_path, self.events_path)
+        self.cmnd_path.write_text(
             format_cmnd(settings, title=self.spec.name), encoding="utf-8"
         )
-        self.card.write_text(particles_card_text(), encoding="utf-8")
+        self.card_path.write_text(particles_card_text(), encoding="utf-8")
 
     def run_shower(self) -> None:
         """Run ``DelphesPythia8`` on the card and command file in the directory.

@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from omphjc.config_paths import config_root
+from omphjc.config_paths import config_dir
 from omphjc.delphes import (
     compare_cards,
     load_card,
@@ -109,7 +109,7 @@ def test_the_card_a_run_reads_starts_as_the_official_one() -> None:
 
 
 def test_the_jetclass_card_adapts_the_delphes_cms_card() -> None:
-    cms = load_card(config_root() / "references" / "delphes" / "delphes_card_CMS.tcl")
+    cms = load_card(config_dir() / "references" / "delphes" / "delphes_card_CMS.tcl")
     differences = compare_cards(reference_card(), cms)
     modules = {d.item: d.actual for d in differences if d.item.startswith("module ")}
     removed = {item for item, actual in modules.items() if actual == "absent"}

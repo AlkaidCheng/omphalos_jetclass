@@ -70,18 +70,18 @@ def test_config_path_and_export(tmp_path: Path) -> None:
     assert shown.exit_code == 0
     assert Path(shown.output.strip()).is_dir()
 
-    destination = tmp_path / "config"
-    exported = CliRunner().invoke(cli, ["config", "export", str(destination)])
+    destination_dir = tmp_path / "config"
+    exported = CliRunner().invoke(cli, ["config", "export", str(destination_dir)])
     assert exported.exit_code == 0, exported.output
-    assert (destination / "jetclass.yaml").is_file()
+    assert (destination_dir / "jetclass.yaml").is_file()
     assert (
-        destination / "references" / "jetclass" / "HToBB" / "run_card.dat"
+        destination_dir / "references" / "jetclass" / "HToBB" / "run_card.dat"
     ).is_file()
-    assert (destination / "madspin" / "TTBar.dat").is_file()
-    assert (destination / "models" / "heft" / "restrict_ckm.dat").is_file()
-    assert not list(destination.rglob("__pycache__"))
+    assert (destination_dir / "madspin" / "TTBar.dat").is_file()
+    assert (destination_dir / "models" / "heft" / "restrict_ckm.dat").is_file()
+    assert not list(destination_dir.rglob("__pycache__"))
 
-    again = CliRunner().invoke(cli, ["config", "export", str(destination)])
+    again = CliRunner().invoke(cli, ["config", "export", str(destination_dir)])
     assert again.exit_code != 0
     assert "already exists" in again.output
 
@@ -107,10 +107,12 @@ def test_pythia_show_prints_a_command_file() -> None:
 
 
 def test_generate_runs_a_job_and_keeps_a_finished_one(
-    mg5: Path, tmp_path: Path
+    mg5_path: Path, tmp_path: Path
 ) -> None:
     arguments = ["generate", "HToBB", "--job", "1", "--outdir", str(tmp_path)]
-    result = CliRunner().invoke(cli, [*arguments, "--events", "10", "--mg5", str(mg5)])
+    result = CliRunner().invoke(
+        cli, [*arguments, "--events", "10", "--mg5", str(mg5_path)]
+    )
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
     assert lines[0].startswith("HToBB job 1: ") and lines[0].endswith("HToBB/job_1")
@@ -127,7 +129,9 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
     manifest = tmp_path / "HToBB" / "job_1" / "manifest.json"
     assert manifest.is_file()
     written = manifest.read_text()
-    again = CliRunner().invoke(cli, [*arguments, "--events", "10", "--mg5", str(mg5)])
+    again = CliRunner().invoke(
+        cli, [*arguments, "--events", "10", "--mg5", str(mg5_path)]
+    )
     assert again.exit_code == 0, again.output
     assert "MadGraph generation: done, kept from an earlier run" in again.output
     assert manifest.read_text() == written
@@ -142,15 +146,15 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
 
 
 def test_shower_runs_after_generate_and_reports(
-    mg5: Path, delphes_pythia8: Path, tmp_path: Path
+    mg5_path: Path, delphes_pythia8_path: Path, tmp_path: Path
 ) -> None:
     job = ["HToBB", "--job", "1", "--outdir", str(tmp_path)]
-    shower = ["shower", *job, "--delphes-pythia8", str(delphes_pythia8)]
+    shower = ["shower", *job, "--delphes-pythia8", str(delphes_pythia8_path)]
     missing = CliRunner().invoke(cli, shower)
     assert missing.exit_code != 0
     assert "run omphjc generate first" in missing.output
     generated = CliRunner().invoke(
-        cli, ["generate", *job, "--events", "10", "--mg5", str(mg5)]
+        cli, ["generate", *job, "--events", "10", "--mg5", str(mg5_path)]
     )
     assert generated.exit_code == 0, generated.output
     result = CliRunner().invoke(cli, shower)
@@ -173,12 +177,12 @@ def test_shower_runs_after_generate_and_reports(
 
 
 def test_clean_deletes_what_earlier_runs_set_aside(
-    mg5: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    mg5_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import omphjc.workspace as workspace
 
     job = ["HToBB", "--job", "1", "--outdir", str(tmp_path)]
-    generate = ["generate", *job, "--events", "10", "--mg5", str(mg5)]
+    generate = ["generate", *job, "--events", "10", "--mg5", str(mg5_path)]
     with monkeypatch.context() as killed_before_sealing:
         killed_before_sealing.setattr(workspace, "seal", lambda *_: None)
         assert CliRunner().invoke(cli, generate).exit_code == 0
@@ -203,22 +207,22 @@ def test_clean_deletes_what_earlier_runs_set_aside(
 
 
 def test_simulate_runs_after_shower_and_reports(
-    mg5: Path, delphes_pythia8: Path, delphes_root: Path, tmp_path: Path
+    mg5_path: Path, delphes_pythia8_path: Path, delphes_root_path: Path, tmp_path: Path
 ) -> None:
     job = ["HToBB", "--job", "1", "--outdir", str(tmp_path)]
-    simulate = ["simulate", *job, "--delphes-root", str(delphes_root)]
+    simulate = ["simulate", *job, "--delphes-root", str(delphes_root_path)]
     missing = CliRunner().invoke(cli, simulate)
     assert missing.exit_code != 0
     assert "run omphjc shower first" in missing.output
     assert (
         CliRunner()
-        .invoke(cli, ["generate", *job, "--events", "10", "--mg5", str(mg5)])
+        .invoke(cli, ["generate", *job, "--events", "10", "--mg5", str(mg5_path)])
         .exit_code
         == 0
     )
     assert (
         CliRunner()
-        .invoke(cli, ["shower", *job, "--delphes-pythia8", str(delphes_pythia8)])
+        .invoke(cli, ["shower", *job, "--delphes-pythia8", str(delphes_pythia8_path)])
         .exit_code
         == 0
     )

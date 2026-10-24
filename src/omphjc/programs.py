@@ -137,10 +137,10 @@ def run_program(
     command: Sequence[str | os.PathLike[str]],
     *,
     cwd: Path,
-    log: Path,
+    log_path: Path,
     timeout: float | None = None,
 ) -> ProgramUsage:
-    """Run `command` in `cwd`, appending a line naming it and its output to `log`.
+    """Run `command` in `cwd`, appending a line naming it and its output to `log_path`.
 
     Parameters
     ----------
@@ -148,7 +148,7 @@ def run_program(
         The program and its arguments.
     cwd : Path
         Directory the program runs in.
-    log : Path
+    log_path : Path
         File that receives the program's standard output and error.
     timeout : float or None, optional
         Seconds the program may run; ``None`` sets no limit. At the limit, the
@@ -165,7 +165,7 @@ def run_program(
         If `timeout` is negative.
     ProgramError
         If the program exits with a failing status or is still running at the
-        time limit; the message ends with the last lines of `log`.
+        time limit; the message ends with the last lines of `log_path`.
     """
     if timeout is not None and timeout < 0:
         raise ValueError(f"timeout must not be negative, got {timeout}")
@@ -173,7 +173,7 @@ def run_program(
     name = Path(arguments[0]).name
     started = time.monotonic()
     before = _children_usage()
-    with log.open("a", encoding="utf-8") as stream:
+    with log_path.open("a", encoding="utf-8") as stream:
         stream.write(f"$ {shlex.join(arguments)}\n")
         stream.flush()
         process = subprocess.Popen(
@@ -189,13 +189,15 @@ def run_program(
         except subprocess.TimeoutExpired:
             stop_process(process)
             raise ProgramError(
-                f"{name} was stopped at the time limit\n{log_tail(log)}"
+                f"{name} was stopped at the time limit\n{log_tail(log_path)}"
             ) from None
         except BaseException:
             stop_process(process)
             raise
     if returncode != 0:
-        raise ProgramError(f"{name} exited with status {returncode}\n{log_tail(log)}")
+        raise ProgramError(
+            f"{name} exited with status {returncode}\n{log_tail(log_path)}"
+        )
     wall = time.monotonic() - started
     after = _children_usage()
     if before is None or after is None:
@@ -220,7 +222,7 @@ def stop_process(process: subprocess.Popen[Any]) -> None:
     process.wait()
 
 
-def log_tail(log: Path, lines: int = _LOG_TAIL_LINES) -> str:
-    """Return the last `lines` lines of `log`, headed by its path."""
-    text = log.read_text(encoding="utf-8", errors="replace").splitlines()
-    return f"Last lines of {log}:\n" + "\n".join(text[-lines:])
+def log_tail(log_path: Path, lines: int = _LOG_TAIL_LINES) -> str:
+    """Return the last `lines` lines of `log_path`, headed by its path."""
+    text = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return f"Last lines of {log_path}:\n" + "\n".join(text[-lines:])

@@ -121,9 +121,9 @@ def reference_run_settings(spec: ProcessSpec) -> dict[str, RunCardValue]:
     ValueError
         If `spec` has no reference cards.
     """
-    directory = _reference_dir(spec)
-    settings = parse_run_card((directory / "run_card.dat").read_text("utf-8"))
-    for launcher in sorted(directory.glob("run_*.mg5")):
+    reference_dir = _reference_dir(spec)
+    settings = parse_run_card((reference_dir / "run_card.dat").read_text("utf-8"))
+    for launcher in sorted(reference_dir.glob("run_*.mg5")):
         settings.update(parse_launch_overrides(launcher.read_text("utf-8")))
     return settings
 

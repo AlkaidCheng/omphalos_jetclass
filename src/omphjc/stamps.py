@@ -298,11 +298,11 @@ def set_aside_folders(directory: Path) -> list[SetAsideFolder]:
     Only folders named as :func:`clear_artifacts` names them count; anything
     else under ``omphjc-set-aside/`` is left out.
     """
-    root = directory / SET_ASIDE_DIR
-    if root.is_symlink() or not root.is_dir():
+    set_aside_dir = directory / SET_ASIDE_DIR
+    if set_aside_dir.is_symlink() or not set_aside_dir.is_dir():
         return []
     found = []
-    with os.scandir(root) as entries:
+    with os.scandir(set_aside_dir) as entries:
         for entry in entries:
             match = _SET_ASIDE_FOLDER.fullmatch(entry.name)
             if match is None or not entry.is_dir(follow_symlinks=False):
@@ -337,22 +337,22 @@ def clear_set_aside_folders(directory: Path) -> list[SetAsideFolder]:
             "nothing is changed"
         )
     remove_inside(directory, [folder.path for folder in folders])
-    root = directory / SET_ASIDE_DIR
-    if not any(root.iterdir()):
-        root.rmdir()
+    set_aside_dir = directory / SET_ASIDE_DIR
+    if not any(set_aside_dir.iterdir()):
+        set_aside_dir.rmdir()
     return folders
 
 
 def _set_aside(directory: Path, artifacts: Mapping[str, Path]) -> Path:
     """Move `artifacts` into a new folder under ``omphjc-set-aside/``; return it."""
-    root = inside(directory, SET_ASIDE_DIR)
-    root.mkdir(exist_ok=True)
+    set_aside_dir = inside(directory, SET_ASIDE_DIR)
+    set_aside_dir.mkdir(exist_ok=True)
     moment = datetime.now(timezone.utc).strftime(_MOMENT_FORMAT)
-    folder = Path(tempfile.mkdtemp(dir=root, prefix=f"{moment}-"))
+    folder = Path(tempfile.mkdtemp(dir=set_aside_dir, prefix=f"{moment}-"))
     for name, path in artifacts.items():
-        target = folder / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        os.rename(path, target)
+        target_path = folder / name
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        os.rename(path, target_path)
     return folder
 
 

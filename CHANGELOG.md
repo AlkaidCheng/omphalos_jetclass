@@ -50,3 +50,9 @@
   stage reports now count. (#14)
 - `omphjc simulate` runs Delphes on a job's showered events through
   `DelphesROOT`, with the process's detector card or one given by `--card`. (#15)
+
+### Changed
+
+- Every argument and attribute of the drivers, run records, stages and CLI that
+  holds a file path ends in `_path` and every one that holds a directory in
+  `_dir`. (#16)
