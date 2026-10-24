@@ -65,7 +65,7 @@ print("MadGraph done")
 
 
 @pytest.fixture
-def mg5(tmp_path: Path) -> Path:
+def mg5_path(tmp_path: Path) -> Path:
     program = tmp_path / "bin" / "mg5_aMC"
     program.parent.mkdir(exist_ok=True)
     program.write_text(FAKE_MG5.format(python=sys.executable, banner=BANNER))
@@ -127,7 +127,7 @@ print("** Exiting...")
 
 
 @pytest.fixture
-def delphes_pythia8(tmp_path: Path) -> Path:
+def delphes_pythia8_path(tmp_path: Path) -> Path:
     program = tmp_path / "bin" / "DelphesPythia8"
     program.parent.mkdir(exist_ok=True)
     program.write_text(FAKE_DELPHES_PYTHIA8.format(python=sys.executable))
@@ -172,7 +172,7 @@ print("** Exiting...")
 
 
 @pytest.fixture
-def delphes_root(tmp_path: Path) -> Path:
+def delphes_root_path(tmp_path: Path) -> Path:
     program = tmp_path / "bin" / "DelphesROOT"
     program.parent.mkdir(exist_ok=True)
     program.write_text(FAKE_DELPHES_ROOT.format(python=sys.executable))

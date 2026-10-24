@@ -106,11 +106,11 @@ class MadGraphRun:
     ----------
     process_dir : Path
         MadGraph's process directory.
-    events : Path
+    events_path : Path
         The gzipped LHE file of the sample; after MadSpin, the decayed one.
     banner : Banner
-        The banner of `events`: version, event count, cross section, run card.
-    log_file : Path
+        The banner of `events_path`: version, event count, cross section, run card.
+    log_path : Path
         MadGraph's output for the run.
     usage : ProgramUsage
         Wall time, CPU time and peak memory of MadGraph's two scripts together.
@@ -121,9 +121,9 @@ class MadGraphRun:
     """
 
     process_dir: Path
-    events: Path
+    events_path: Path
     banner: Banner
-    log_file: Path
+    log_path: Path
     usage: ProgramUsage
     set_aside: Path | None = None
 
@@ -137,7 +137,7 @@ def generate_events(
     n_cores: int | None = None,
     timeout: float | None = None,
     overwrite: bool = False,
-    mg5: Path | None = None,
+    mg5_path: Path | None = None,
 ) -> MadGraphRun:
     """Generate parton-level events for `spec` with MadGraph.
 
@@ -171,7 +171,7 @@ def generate_events(
         check has passed: deleted when the earlier run sealed it and nothing
         in it changed since, otherwise, as after a failed or interrupted run,
         moved aside (see `MadGraphRun.set_aside`).
-    mg5 : Path or None, optional
+    mg5_path : Path or None, optional
         MadGraph's ``bin/mg5_aMC``; by default the one on PATH.
 
     Returns
@@ -204,7 +204,7 @@ def generate_events(
         n_cores = available_cores()
     if n_cores < 1:
         raise ValueError(f"n_cores must be positive, got {n_cores}")
-    workspace = MadGraphWorkspace(spec, workdir, mg5=mg5, timeout=timeout)
+    workspace = MadGraphWorkspace(spec, workdir, mg5_path=mg5_path, timeout=timeout)
     if occupied(workspace.process_dir) and not overwrite:
         raise FileExistsError(
             f"Process directory {workspace.process_dir} already exists; "
@@ -230,14 +230,14 @@ def generate_events(
         # later run can tell whether anyone changed it since.
         workspace.seal_artifacts()
 
-    events = workspace.events
-    if not events.is_file():
-        raise workspace.error(f"MadGraph wrote no event file {events}")
+    events_path = workspace.events_path
+    if not events_path.is_file():
+        raise workspace.error(f"MadGraph wrote no event file {events_path}")
     return MadGraphRun(
         process_dir=workspace.process_dir,
-        events=events,
-        banner=Banner.read(events),
-        log_file=workspace.log_file,
+        events_path=events_path,
+        banner=Banner.read(events_path),
+        log_path=workspace.log_path,
         usage=workspace.usage,
         set_aside=set_aside,
     )
@@ -257,11 +257,11 @@ class MadGraphWorkspace(Workspace):
     ----------
     spec : ProcessSpec
         The process whose runs the directory holds.
-    directory : Path
+    workdir : Path
         The working directory, created when missing. Its path must not contain
         whitespace, which MadGraph does not support, and must not be a
         filesystem root.
-    mg5 : Path or None, optional
+    mg5_path : Path or None, optional
         MadGraph's ``bin/mg5_aMC``; by default the one on PATH.
     timeout : float or None, optional
         Seconds the run may take from now; ``None`` sets no limit.
@@ -269,7 +269,7 @@ class MadGraphWorkspace(Workspace):
     Attributes
     ----------
     spec : ProcessSpec
-    directory : Path
+    workdir : Path
         The working directory, normalized.
     program_path : Path
         The ``mg5_aMC`` program file the run uses.
@@ -279,10 +279,10 @@ class MadGraphWorkspace(Workspace):
     Raises
     ------
     ValueError
-        If `timeout` is not positive, `directory` is a filesystem root or its
+        If `timeout` is not positive, `workdir` is a filesystem root or its
         path contains whitespace.
     FileNotFoundError
-        If `mg5` is not a file, or none is given and PATH has no ``mg5_aMC``.
+        If `mg5_path` is not a file, or none is given and PATH has no ``mg5_aMC``.
     """
 
     error_type: ClassVar[type[ProgramError]] = MadGraphError
@@ -290,48 +290,48 @@ class MadGraphWorkspace(Workspace):
     def __init__(
         self,
         spec: ProcessSpec,
-        directory: Path,
+        workdir: Path,
         *,
-        mg5: Path | None = None,
+        mg5_path: Path | None = None,
         timeout: float | None = None,
     ) -> None:
         super().__init__(
-            directory,
+            workdir,
             program=_MG5_EXECUTABLE,
-            program_path=mg5,
+            program_path=mg5_path,
             description=f"MadGraph's bin/{_MG5_EXECUTABLE}",
             purpose=_RUN_PURPOSE,
             details={"process": spec.name},
             log_name=_LOG_FILE,
             timeout=timeout,
         )
-        if any(character.isspace() for character in str(self.directory)):
+        if any(character.isspace() for character in str(self.workdir)):
             raise ValueError(
-                f"MadGraph cannot run in a path with whitespace: {self.directory}"
+                f"MadGraph cannot run in a path with whitespace: {self.workdir}"
             )
         self.spec = spec
 
     @property
     def process_dir(self) -> Path:
-        return inside(self.directory, self.spec.name)
+        return inside(self.workdir, self.spec.name)
 
     @property
-    def model_copy(self) -> Path | None:
+    def model_copy_dir(self) -> Path | None:
         """Where the catalogue's model is copied for the run; ``None`` without one."""
-        if self.spec.model_path is None:
+        if self.spec.model_dir is None:
             return None
-        return inside(self.directory, _MODELS_DIR, self.spec.model_base)
+        return inside(self.workdir, _MODELS_DIR, self.spec.model_base)
 
     @property
     def artifacts(self) -> list[str]:
         """What a run makes in the directory, as paths relative to it."""
         names = [self.spec.name, _PROCESS_SCRIPT, _LAUNCH_SCRIPT, _LOG_FILE]
-        if self.spec.model_path is not None:
+        if self.spec.model_dir is not None:
             names.append(f"{_MODELS_DIR}/{self.spec.model_base}")
         return names
 
     @property
-    def events(self) -> Path:
+    def events_path(self) -> Path:
         """The event file MadGraph writes: the decayed sample after MadSpin."""
         run = _DECAYED_RUN if self.spec.madspin else _FIRST_RUN
         return self.process_dir / "Events" / run / _EVENT_FILE
@@ -349,13 +349,18 @@ class MadGraphWorkspace(Workspace):
         ValueError
             If the model copy would overlap the catalogue's model folder.
         """
-        copy = self.model_copy
-        if self.spec.model_path is not None and copy is not None:
-            source, target = self.spec.model_path.resolve(), copy.resolve()
-            if target.is_relative_to(source) or source.is_relative_to(target):
+        copy_dir = self.model_copy_dir
+        if self.spec.model_dir is not None and copy_dir is not None:
+            source_dir, target_dir = (
+                self.spec.model_dir.resolve(),
+                copy_dir.resolve(),
+            )
+            if target_dir.is_relative_to(source_dir) or source_dir.is_relative_to(
+                target_dir
+            ):
                 raise ValueError(
-                    f"The model copy {copy} would overlap the model folder "
-                    f"{self.spec.model_path}"
+                    f"The model copy {copy_dir} would overlap the model folder "
+                    f"{self.spec.model_dir}"
                 )
         doubtful = list(doubtful)
         process_dir = self.process_dir
@@ -365,15 +370,15 @@ class MadGraphWorkspace(Workspace):
 
     def copy_model(self) -> ProcessSpec:
         """Return the spec importing a copy of its model made in the directory."""
-        copy = self.model_copy
-        if self.spec.model_path is None or copy is None:
+        copy_dir = self.model_copy_dir
+        if self.spec.model_dir is None or copy_dir is None:
             return self.spec
         shutil.copytree(
-            self.spec.model_path,
-            copy,
+            self.spec.model_dir,
+            copy_dir,
             ignore=shutil.ignore_patterns("__pycache__", "*.pkl"),
         )
-        return dataclasses.replace(self.spec, model_path=copy)
+        return dataclasses.replace(self.spec, model_dir=copy_dir)
 
     def run_script(self, name: str, commands: list[str]) -> None:
         """Write `commands` to the script `name` and run MadGraph on it.
@@ -384,9 +389,11 @@ class MadGraphWorkspace(Workspace):
             If MadGraph exits with a failing status or is still running at the
             deadline.
         """
-        script = self.directory / name
-        script.write_text("\n".join(commands) + "\n", encoding="utf-8")
-        self.run([self.program_path, script], failure=f"MadGraph failed running {name}")
+        script_path = self.workdir / name
+        script_path.write_text("\n".join(commands) + "\n", encoding="utf-8")
+        self.run(
+            [self.program_path, script_path], failure=f"MadGraph failed running {name}"
+        )
 
     def write_cards(self, n_cores: int) -> None:
         """Append the core count to MadGraph's configuration; write the MadSpin card.
@@ -396,12 +403,12 @@ class MadGraphWorkspace(Workspace):
         MadGraphError
             If MadGraph wrote no process directory.
         """
-        cards = self.process_dir / "Cards"
-        if not cards.is_dir():
+        cards_dir = self.process_dir / "Cards"
+        if not cards_dir.is_dir():
             raise self.error(f"MadGraph wrote no process directory {self.process_dir}")
-        with (cards / _ME5_CONFIGURATION).open("a", encoding="utf-8") as stream:
+        with (cards_dir / _ME5_CONFIGURATION).open("a", encoding="utf-8") as stream:
             stream.write(f"\nrun_mode = {_MULTICORE_RUN_MODE}\nnb_core = {n_cores}\n")
         if self.spec.madspin:
-            (cards / _MADSPIN_CARD).write_text(
+            (cards_dir / _MADSPIN_CARD).write_text(
                 madspin_card_text(self.spec), encoding="utf-8"
             )

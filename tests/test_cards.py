@@ -74,10 +74,10 @@ def test_proc_card_commands_for_a_matched_process(
 def test_vendored_models_are_imported_by_path(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
-    heft = specs["HToWW4Q"].model_path
+    heft = specs["HToWW4Q"].model_dir
     assert heft is not None
     assert model_import_target(specs["HToWW4Q"]) == f"{heft}-ckm"
-    assert model_import_target(specs["HToCC"]) == str(specs["HToCC"].model_path)
+    assert model_import_target(specs["HToCC"]) == str(specs["HToCC"].model_dir)
     assert model_import_target(specs["TTBar"]) == "sm-ckm"
 
 

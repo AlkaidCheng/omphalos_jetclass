@@ -27,7 +27,7 @@ def generate(
     n_cores: int | None = None,
     timeout: float | None = None,
     force: bool = False,
-    mg5: Path | None = None,
+    mg5_path: Path | None = None,
 ) -> StageRecord:
     """Generate the parton-level events of `job` with MadGraph.
 
@@ -50,7 +50,7 @@ def generate(
         Seconds the stage may take; ``None`` for no limit.
     force : bool, optional
         Run the stage again even when its result could be kept.
-    mg5 : Path or None, optional
+    mg5_path : Path or None, optional
         MadGraph's ``bin/mg5_aMC``; ``None`` for the one on PATH.
 
     Returns
@@ -58,20 +58,20 @@ def generate(
     StageRecord
         The stage's record, kept or new.
     """
-    directory = job.stage_dir(MADGRAPH)
+    stage_dir = job.stage_dir(MADGRAPH)
 
     def body(overwrite: bool) -> StageOutcome:
         run = generate_events(
             job.spec,
-            workdir=directory,
+            workdir=stage_dir,
             n_events=n_events,
             seed=job.seed,
             n_cores=n_cores,
             timeout=timeout,
             overwrite=overwrite,
-            mg5=mg5,
+            mg5_path=mg5_path,
         )
-        cards = _copy_cards(run.process_dir / "Cards", directory / _CARDS_DIR, job)
+        cards = _copy_cards(run.process_dir / "Cards", stage_dir / _CARDS_DIR, job)
         return StageOutcome(
             metadata={
                 "madgraph_version": run.banner.version,
@@ -80,8 +80,8 @@ def generate(
                 "cross_section_error_pb": run.banner.cross_section_error_pb,
                 "cards": cards,
             },
-            outputs=[run.events],
-            log=run.log_file,
+            outputs=[run.events_path],
+            log_path=run.log_path,
             usage=run.usage.recorded(),
             set_aside=run.set_aside,
         )
@@ -90,15 +90,15 @@ def generate(
     return job.run_stage(MADGRAPH, parameters, body, force=force)
 
 
-def _copy_cards(source: Path, target_dir: Path, job: Job) -> dict[str, str]:
-    """Copy the cards present in `source` into `target_dir`; return their SHA-256."""
+def _copy_cards(source_dir: Path, target_dir: Path, job: Job) -> dict[str, str]:
+    """Copy the cards present in `source_dir` into `target_dir`; return their SHA-256."""
     target_dir.mkdir(parents=True, exist_ok=True)
     hashes = {}
     for name in _MADGRAPH_CARDS:
-        card = source / name
-        if not card.is_file():
+        card_path = source_dir / name
+        if not card_path.is_file():
             continue
-        target = target_dir / name
-        shutil.copyfile(card, target)
-        hashes[job.relative(target)] = sha256(target)
+        target_path = target_dir / name
+        shutil.copyfile(card_path, target_path)
+        hashes[job.relative(target_path)] = sha256(target_path)
     return hashes

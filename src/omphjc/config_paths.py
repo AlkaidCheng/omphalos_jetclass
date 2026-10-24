@@ -15,27 +15,27 @@ from pathlib import Path
 _IGNORED_ON_EXPORT = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 
-def config_root() -> Path:
+def config_dir() -> Path:
     """Return the directory holding the package's configuration."""
     return Path(str(files("omphjc") / "config"))
 
 
 def catalogue_path() -> Path:
     """Return the path of the default process catalogue."""
-    return config_root() / "jetclass.yaml"
+    return config_dir() / "jetclass.yaml"
 
 
 def delphes_reference_card_path() -> Path:
     """Return the path of the official JetClass Delphes card."""
-    return config_root() / "references" / "jetclass" / "delphes_card.tcl"
+    return config_dir() / "references" / "jetclass" / "delphes_card.tcl"
 
 
-def export_config(destination: Path) -> Path:
-    """Copy the package's configuration to `destination` for editing.
+def export_config(destination_dir: Path) -> Path:
+    """Copy the package's configuration to `destination_dir` for editing.
 
     Parameters
     ----------
-    destination : Path
+    destination_dir : Path
         Directory to create. It must not exist yet.
 
     Returns
@@ -46,9 +46,9 @@ def export_config(destination: Path) -> Path:
     Raises
     ------
     FileExistsError
-        If `destination` already exists.
+        If `destination_dir` already exists.
     """
-    if destination.exists():
-        raise FileExistsError(f"{destination} already exists")
-    shutil.copytree(config_root(), destination, ignore=_IGNORED_ON_EXPORT)
-    return destination
+    if destination_dir.exists():
+        raise FileExistsError(f"{destination_dir} already exists")
+    shutil.copytree(config_dir(), destination_dir, ignore=_IGNORED_ON_EXPORT)
+    return destination_dir

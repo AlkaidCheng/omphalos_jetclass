@@ -1,13 +1,13 @@
 import hashlib
 import json
 
-from omphjc.config_paths import config_root
+from omphjc.config_paths import config_dir
 
 VENDORED_DIRECTORIES = ("delphes", "madspin", "models", "references")
 
 
 def test_every_vendored_file_matches_its_recorded_hash() -> None:
-    root = config_root()
+    root = config_dir()
     document = json.loads((root / "checksums.json").read_text(encoding="utf-8"))
     assert document["algorithm"] == "sha256"
     hashes = {

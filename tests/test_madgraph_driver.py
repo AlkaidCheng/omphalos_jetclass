@@ -19,60 +19,74 @@ from omphjc.stamps import StampError, read_stamp
 
 
 def test_a_process_runs_in_its_own_working_directory(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     workdir = tmp_path / "work"
-    run = generate_events(specs["HToBB"], workdir=workdir, n_events=10, seed=7, mg5=mg5)
+    run = generate_events(
+        specs["HToBB"],
+        workdir=workdir,
+        n_events=10,
+        seed=7,
+        mg5_path=mg5_path,
+    )
     assert run.process_dir == workdir / "HToBB"
-    assert run.events == workdir / "HToBB/Events/run_01/unweighted_events.lhe.gz"
+    assert run.events_path == workdir / "HToBB/Events/run_01/unweighted_events.lhe.gz"
     assert run.banner.seed == 7
     launch = (workdir / "launch.mg5").read_text().splitlines()
     assert launch == launch_commands(
         specs["HToBB"], process_dir=run.process_dir, n_events=10, seed=7
     )
-    log = run.log_file.read_text()
+    log = run.log_path.read_text()
     assert "process.mg5" in log and "launch.mg5" in log and "MadGraph done" in log
 
 
 def test_madspin_events_are_the_decayed_sample(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     spec = specs["TTBar"]
-    run = generate_events(spec, workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
-    assert run.events.parent.name == "run_01_decayed_1"
+    run = generate_events(
+        spec, workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path
+    )
+    assert run.events_path.parent.name == "run_01_decayed_1"
     card = run.process_dir / "Cards" / "madspin_card.dat"
     assert card.read_text() == madspin_card_text(spec)
 
 
 def test_a_vendored_model_is_imported_from_a_copy(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     spec = specs["HToWW4Q"]
-    assert spec.model_path is not None
-    original = sorted(path.name for path in spec.model_path.iterdir())
-    generate_events(spec, workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
+    assert spec.model_dir is not None
+    original = sorted(path.name for path in spec.model_dir.iterdir())
+    generate_events(spec, workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path)
     copy = tmp_path / "models" / "heft"
     assert f"import model {copy}-ckm" in (tmp_path / "process.mg5").read_text()
     assert (copy / "py3_model.pkl").is_file()
-    assert sorted(path.name for path in spec.model_path.iterdir()) == original
+    assert sorted(path.name for path in spec.model_dir.iterdir()) == original
 
 
 @pytest.mark.parametrize("failing", ["output", "launch"])
 def test_a_failed_command_raises_with_the_end_of_the_log(
     specs: Mapping[str, ProcessSpec],
-    mg5: Path,
+    mg5_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     failing: str,
 ) -> None:
     monkeypatch.setenv("FAKE_MG5_FAIL", failing)
     with pytest.raises(MadGraphError, match=f"Command {failing} interrupted"):
-        generate_events(specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
+        generate_events(
+            specs["HToBB"],
+            workdir=tmp_path,
+            n_events=10,
+            seed=1,
+            mg5_path=mg5_path,
+        )
 
 
 def test_a_failing_exit_status_raises(
     specs: Mapping[str, ProcessSpec],
-    mg5: Path,
+    mg5_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -80,15 +94,29 @@ def test_a_failing_exit_status_raises(
     with pytest.raises(
         MadGraphError, match="running process.mg5: mg5_aMC exited with status 3"
     ):
-        generate_events(specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
+        generate_events(
+            specs["HToBB"],
+            workdir=tmp_path,
+            n_events=10,
+            seed=1,
+            mg5_path=mg5_path,
+        )
 
 
 @pytest.mark.parametrize("n_cores", [3, None])
 def test_madgraph_runs_on_the_requested_cores(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path, n_cores: int | None
+    specs: Mapping[str, ProcessSpec],
+    mg5_path: Path,
+    tmp_path: Path,
+    n_cores: int | None,
 ) -> None:
     run = generate_events(
-        specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, n_cores=n_cores, mg5=mg5
+        specs["HToBB"],
+        workdir=tmp_path,
+        n_events=10,
+        seed=1,
+        n_cores=n_cores,
+        mg5_path=mg5_path,
     )
     configuration = (run.process_dir / "Cards" / "me5_configuration.txt").read_text()
     expected = available_cores() if n_cores is None else n_cores
@@ -97,7 +125,7 @@ def test_madgraph_runs_on_the_requested_cores(
 
 def test_a_run_past_its_time_limit_is_stopped(
     specs: Mapping[str, ProcessSpec],
-    mg5: Path,
+    mg5_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -106,39 +134,55 @@ def test_a_run_past_its_time_limit_is_stopped(
         MadGraphError, match="running process.mg5: mg5_aMC was stopped at the time"
     ):
         generate_events(
-            specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, timeout=1, mg5=mg5
+            specs["HToBB"],
+            workdir=tmp_path,
+            n_events=10,
+            seed=1,
+            timeout=1,
+            mg5_path=mg5_path,
         )
 
 
 def test_an_existing_process_directory_is_kept_by_default(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     (tmp_path / "HToBB").mkdir()
     with pytest.raises(FileExistsError, match="overwrite=True"):
-        generate_events(specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
+        generate_events(
+            specs["HToBB"],
+            workdir=tmp_path,
+            n_events=10,
+            seed=1,
+            mg5_path=mg5_path,
+        )
     assert not (tmp_path / "madgraph.log").exists()
 
 
 def test_overwrite_replaces_an_earlier_run(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     spec = specs["HToWW4Q"]
-    generate_events(spec, workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
+    generate_events(spec, workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path)
     second = generate_events(
-        spec, workdir=tmp_path, n_events=10, seed=2, overwrite=True, mg5=mg5
+        spec,
+        workdir=tmp_path,
+        n_events=10,
+        seed=2,
+        overwrite=True,
+        mg5_path=mg5_path,
     )
     assert second.banner.seed == 2
     commands = [
-        line for line in second.log_file.read_text().splitlines() if line[:2] == "$ "
+        line for line in second.log_path.read_text().splitlines() if line[:2] == "$ "
     ]
     assert len(commands) == 2
 
 
 def test_a_run_stamps_its_directory_and_seals_its_artifacts(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     run = generate_events(
-        specs["HToWW4Q"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5
+        specs["HToWW4Q"], workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path
     )
     stamp = read_stamp(tmp_path)
     assert stamp is not None
@@ -156,7 +200,7 @@ def test_a_run_stamps_its_directory_and_seals_its_artifacts(
 
 def test_a_run_killed_before_sealing_is_set_aside(
     specs: Mapping[str, ProcessSpec],
-    mg5: Path,
+    mg5_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -164,9 +208,20 @@ def test_a_run_killed_before_sealing_is_set_aside(
 
     with monkeypatch.context() as killed_before_sealing:
         killed_before_sealing.setattr(workspace, "seal", lambda *_: None)
-        generate_events(specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
+        generate_events(
+            specs["HToBB"],
+            workdir=tmp_path,
+            n_events=10,
+            seed=1,
+            mg5_path=mg5_path,
+        )
     run = generate_events(
-        specs["HToBB"], workdir=tmp_path, n_events=10, seed=2, overwrite=True, mg5=mg5
+        specs["HToBB"],
+        workdir=tmp_path,
+        n_events=10,
+        seed=2,
+        overwrite=True,
+        mg5_path=mg5_path,
     )
     assert run.banner.seed == 2
     assert run.set_aside is not None
@@ -176,29 +231,43 @@ def test_a_run_killed_before_sealing_is_set_aside(
 
 def test_a_process_directory_without_the_process_card_is_set_aside(
     specs: Mapping[str, ProcessSpec],
-    mg5: Path,
+    mg5_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import omphjc.madgraph.driver as driver
 
-    generate_events(specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
+    generate_events(
+        specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path
+    )
     monkeypatch.setattr(driver, "_PROC_CARD", "a_card_madgraph_did_not_write.dat")
     run = generate_events(
-        specs["HToBB"], workdir=tmp_path, n_events=10, seed=2, overwrite=True, mg5=mg5
+        specs["HToBB"],
+        workdir=tmp_path,
+        n_events=10,
+        seed=2,
+        overwrite=True,
+        mg5_path=mg5_path,
     )
     assert run.set_aside is not None and (run.set_aside / "HToBB").is_dir()
 
 
 def test_files_of_yours_inside_a_run_are_set_aside_with_it(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     spec = specs["HToWW4Q"]
-    first = generate_events(spec, workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
+    first = generate_events(
+        spec, workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path
+    )
     (first.process_dir / "Cards" / "notes.txt").write_text("mine")
     (tmp_path / "models" / "heft" / "notes.txt").write_text("mine too")
     second = generate_events(
-        spec, workdir=tmp_path, n_events=10, seed=2, overwrite=True, mg5=mg5
+        spec,
+        workdir=tmp_path,
+        n_events=10,
+        seed=2,
+        overwrite=True,
+        mg5_path=mg5_path,
     )
     assert second.set_aside is not None
     assert (second.set_aside / "HToWW4Q" / "Cards" / "notes.txt").read_text() == "mine"
@@ -212,7 +281,7 @@ def test_files_of_yours_inside_a_run_are_set_aside_with_it(
 )
 def test_a_failed_run_is_sealed_and_replaced(
     specs: Mapping[str, ProcessSpec],
-    mg5: Path,
+    mg5_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     failure: str,
@@ -226,21 +295,26 @@ def test_a_failed_run_is_sealed_and_replaced(
             n_events=10,
             seed=1,
             timeout=timeout,
-            mg5=mg5,
+            mg5_path=mg5_path,
         )
     monkeypatch.delenv("FAKE_MG5_FAIL")
     run = generate_events(
-        specs["HToWW4Q"], workdir=tmp_path, n_events=10, seed=2, overwrite=True, mg5=mg5
+        specs["HToWW4Q"],
+        workdir=tmp_path,
+        n_events=10,
+        seed=2,
+        overwrite=True,
+        mg5_path=mg5_path,
     )
     assert run.banner.seed == 2
     assert run.set_aside is None
 
 
 def test_an_invalid_request_leaves_an_earlier_run_in_place(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     run = generate_events(
-        specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5
+        specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path
     )
     with pytest.raises(ValueError, match="positive"):
         generate_events(
@@ -249,14 +323,14 @@ def test_an_invalid_request_leaves_an_earlier_run_in_place(
             n_events=0,
             seed=1,
             overwrite=True,
-            mg5=mg5,
+            mg5_path=mg5_path,
         )
-    assert run.events.is_file()
-    assert run.log_file.is_file()
+    assert run.events_path.is_file()
+    assert run.log_path.is_file()
 
 
 def test_a_directory_no_run_made_is_left_in_place(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     (tmp_path / "HToBB").mkdir()
     (tmp_path / "models" / "heft").mkdir(parents=True)
@@ -264,7 +338,11 @@ def test_a_directory_no_run_made_is_left_in_place(
     before = sorted(tmp_path.rglob("*"))
     with pytest.raises(StampError, match="has no omphjc stamp"):
         generate_events(
-            specs["HToWW4Q"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5
+            specs["HToWW4Q"],
+            workdir=tmp_path,
+            n_events=10,
+            seed=1,
+            mg5_path=mg5_path,
         )
     with pytest.raises(StampError, match="has no omphjc stamp"):
         generate_events(
@@ -273,43 +351,56 @@ def test_a_directory_no_run_made_is_left_in_place(
             n_events=10,
             seed=1,
             overwrite=True,
-            mg5=mg5,
+            mg5_path=mg5_path,
         )
     assert sorted(tmp_path.rglob("*")) == before
 
 
 def test_other_files_in_a_working_directory_are_kept(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     (tmp_path / "notes.txt").write_text("mine")
-    generate_events(specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
     generate_events(
-        specs["HToBB"], workdir=tmp_path, n_events=10, seed=2, overwrite=True, mg5=mg5
+        specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path
+    )
+    generate_events(
+        specs["HToBB"],
+        workdir=tmp_path,
+        n_events=10,
+        seed=2,
+        overwrite=True,
+        mg5_path=mg5_path,
     )
     assert (tmp_path / "notes.txt").read_text() == "mine"
 
 
 def test_a_directory_of_another_process_is_refused(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     run = generate_events(
-        specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5
+        specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path
     )
-    log = run.log_file.read_text()
+    log = run.log_path.read_text()
     with pytest.raises(StampError, match="process 'HToBB', not 'HToGG'"):
-        generate_events(specs["HToGG"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
-    assert run.log_file.read_text() == log
-    assert run.events.is_file()
+        generate_events(
+            specs["HToGG"],
+            workdir=tmp_path,
+            n_events=10,
+            seed=1,
+            mg5_path=mg5_path,
+        )
+    assert run.log_path.read_text() == log
+    assert run.events_path.is_file()
 
 
 @pytest.mark.parametrize(
     "replaced", ["HToWW4Q", "models/heft", "process.mg5", "madgraph.log"]
 )
 def test_an_artifact_replaced_by_yours_is_set_aside(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path, replaced: str
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path, replaced: str
 ) -> None:
     spec = specs["HToWW4Q"]
-    generate_events(spec, workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
+    generate_events(spec, workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path)
     mine = tmp_path / replaced
     if mine.is_dir():
         shutil.rmtree(mine)
@@ -318,7 +409,12 @@ def test_an_artifact_replaced_by_yours_is_set_aside(
     else:
         mine.write_text("mine\n")
     run = generate_events(
-        spec, workdir=tmp_path, n_events=10, seed=2, overwrite=True, mg5=mg5
+        spec,
+        workdir=tmp_path,
+        n_events=10,
+        seed=2,
+        overwrite=True,
+        mg5_path=mg5_path,
     )
     assert run.set_aside is not None
     kept = run.set_aside / replaced
@@ -328,9 +424,11 @@ def test_an_artifact_replaced_by_yours_is_set_aside(
 
 
 def test_something_else_in_the_stamps_place_is_left_alone(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
-    generate_events(specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5=mg5)
+    generate_events(
+        specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path
+    )
     (tmp_path / "omphjc-stamp.json").write_text("mine\n")
     with pytest.raises(StampError, match="not an omphjc stamp"):
         generate_events(
@@ -339,42 +437,53 @@ def test_something_else_in_the_stamps_place_is_left_alone(
             n_events=10,
             seed=2,
             overwrite=True,
-            mg5=mg5,
+            mg5_path=mg5_path,
         )
     assert (tmp_path / "omphjc-stamp.json").read_text() == "mine\n"
 
 
 def test_a_run_in_the_catalogue_folder_leaves_its_model_alone(
-    mg5: Path, tmp_path: Path
+    mg5_path: Path, tmp_path: Path
 ) -> None:
     config = export_config(tmp_path / "config")
     spec = load_catalogue(config / "jetclass.yaml")["HToWW4Q"]
     original = sorted(path.name for path in (config / "models" / "heft").iterdir())
     with pytest.raises(ValueError, match="would overlap the model folder"):
-        generate_events(spec, workdir=config, n_events=10, seed=1, mg5=mg5)
+        generate_events(spec, workdir=config, n_events=10, seed=1, mg5_path=mg5_path)
     assert (
         sorted(path.name for path in (config / "models" / "heft").iterdir()) == original
     )
 
 
 def test_a_symbolic_link_in_place_of_a_run_file_is_set_aside_unfollowed(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     elsewhere = tmp_path / "elsewhere.txt"
     elsewhere.write_text("import model mine\n")
     workdir = tmp_path / "work"
-    generate_events(specs["HToBB"], workdir=workdir, n_events=10, seed=1, mg5=mg5)
+    generate_events(
+        specs["HToBB"],
+        workdir=workdir,
+        n_events=10,
+        seed=1,
+        mg5_path=mg5_path,
+    )
     (workdir / "process.mg5").unlink()
     (workdir / "process.mg5").symlink_to(elsewhere)
     run = generate_events(
-        specs["HToBB"], workdir=workdir, n_events=10, seed=2, overwrite=True, mg5=mg5
+        specs["HToBB"],
+        workdir=workdir,
+        n_events=10,
+        seed=2,
+        overwrite=True,
+        mg5_path=mg5_path,
     )
     assert run.set_aside is not None and (run.set_aside / "process.mg5").is_symlink()
     assert elsewhere.read_text() == "import model mine\n"
 
 
 def test_a_filesystem_root_is_refused(
-    specs: Mapping[str, ProcessSpec], mg5: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path
 ) -> None:
     with pytest.raises(ValueError, match="filesystem root"):
         generate_events(
@@ -383,54 +492,70 @@ def test_a_filesystem_root_is_refused(
             n_events=10,
             seed=1,
             overwrite=True,
-            mg5=mg5,
+            mg5_path=mg5_path,
         )
 
 
 def test_invalid_requests_fail_before_madgraph_starts(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     with pytest.raises(ValueError, match="positive"):
-        generate_events(specs["HToBB"], workdir=tmp_path, n_events=0, seed=1, mg5=mg5)
+        generate_events(
+            specs["HToBB"], workdir=tmp_path, n_events=0, seed=1, mg5_path=mg5_path
+        )
     with pytest.raises(ValueError, match="whitespace"):
         generate_events(
-            specs["HToBB"], workdir=tmp_path / "my run", n_events=10, seed=1, mg5=mg5
+            specs["HToBB"],
+            workdir=tmp_path / "my run",
+            n_events=10,
+            seed=1,
+            mg5_path=mg5_path,
         )
     with pytest.raises(ValueError, match="n_cores"):
         generate_events(
-            specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, n_cores=0, mg5=mg5
+            specs["HToBB"],
+            workdir=tmp_path,
+            n_events=10,
+            seed=1,
+            n_cores=0,
+            mg5_path=mg5_path,
         )
     with pytest.raises(ValueError, match="timeout"):
         generate_events(
-            specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, timeout=0, mg5=mg5
+            specs["HToBB"],
+            workdir=tmp_path,
+            n_events=10,
+            seed=1,
+            timeout=0,
+            mg5_path=mg5_path,
         )
     assert not (tmp_path / "madgraph.log").exists()
 
 
 def test_a_workspace_finds_mg5_on_path_or_takes_the_given_one(
     specs: Mapping[str, ProcessSpec],
-    mg5: Path,
+    mg5_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     spec = specs["HToBB"]
-    assert MadGraphWorkspace(spec, tmp_path, mg5=mg5).program_path == mg5
-    monkeypatch.setenv("PATH", str(mg5.parent))
-    assert MadGraphWorkspace(spec, tmp_path).program_path == mg5
+    assert MadGraphWorkspace(spec, tmp_path, mg5_path=mg5_path).program_path == mg5_path
+    monkeypatch.setenv("PATH", str(mg5_path.parent))
+    assert MadGraphWorkspace(spec, tmp_path).program_path == mg5_path
     monkeypatch.setenv("PATH", "")
     with pytest.raises(FileNotFoundError, match="not on PATH"):
         MadGraphWorkspace(spec, tmp_path)
     with pytest.raises(FileNotFoundError, match="not found"):
-        MadGraphWorkspace(spec, tmp_path, mg5=mg5.parent / "missing")
+        MadGraphWorkspace(spec, tmp_path, mg5_path=mg5_path.parent / "missing")
 
 
 def test_a_workspace_derives_every_path_a_run_writes(
-    specs: Mapping[str, ProcessSpec], mg5: Path, tmp_path: Path
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
-    workspace = MadGraphWorkspace(specs["HToWW4Q"], tmp_path, mg5=mg5)
-    assert workspace.directory == tmp_path.resolve()
-    assert workspace.process_dir == workspace.directory / "HToWW4Q"
-    assert workspace.model_copy == workspace.directory / "models" / "heft"
+    workspace = MadGraphWorkspace(specs["HToWW4Q"], tmp_path, mg5_path=mg5_path)
+    assert workspace.workdir == tmp_path.resolve()
+    assert workspace.process_dir == workspace.workdir / "HToWW4Q"
+    assert workspace.model_copy_dir == workspace.workdir / "models" / "heft"
     assert workspace.artifacts == [
         "HToWW4Q",
         "process.mg5",
@@ -438,9 +563,9 @@ def test_a_workspace_derives_every_path_a_run_writes(
         "madgraph.log",
         "models/heft",
     ]
-    assert workspace.events.parent.name == "run_01"
-    decayed = MadGraphWorkspace(specs["TTBar"], tmp_path, mg5=mg5)
-    assert decayed.events.parent.name == "run_01_decayed_1"
+    assert workspace.events_path.parent.name == "run_01"
+    decayed = MadGraphWorkspace(specs["TTBar"], tmp_path, mg5_path=mg5_path)
+    assert decayed.events_path.parent.name == "run_01_decayed_1"
 
 
 @pytest.mark.integration
@@ -453,4 +578,4 @@ def test_madgraph_generates_a_small_sample(
     run = generate_events(specs["HToBB"], workdir=tmp_path, n_events=20, seed=1)
     assert run.banner.n_events == 20
     assert run.banner.seed == 1
-    assert os.path.getsize(run.events) > 0
+    assert os.path.getsize(run.events_path) > 0

@@ -54,7 +54,7 @@ class StageOutcome:
         keys are the stage's own.
     outputs : list[Path]
         The files the stage made, inside the job directory.
-    log : Path or None
+    log_path : Path or None
         The stage's log, inside the job directory.
     usage : dict[str, float]
         What the stage's program took beyond the wall time the job measures
@@ -67,7 +67,7 @@ class StageOutcome:
 
     metadata: dict[str, Any]
     outputs: list[Path]
-    log: Path | None = None
+    log_path: Path | None = None
     usage: dict[str, float] = field(default_factory=dict)
     set_aside: Path | None = None
 
@@ -116,7 +116,7 @@ class Job:
     ----------
     spec : ProcessSpec
     job_id : int
-    root : Path
+    root_dir : Path
         The job directory, ``<outdir>/<process>/job_<n>``; created by the
         first stage that runs.
     seed : int
@@ -137,29 +137,29 @@ class Job:
         self.spec = spec
         self.job_id = job_id
         self.seed = job_seed(spec, job_id)
-        self.root = inside(
+        self.root_dir = inside(
             working_directory(outdir), spec.name, f"{JOB_DIR_PREFIX}{job_id}"
         )
         self.manifest = self._load_manifest()
 
     @property
     def manifest_path(self) -> Path:
-        return self.root / MANIFEST_FILE
+        return self.root_dir / MANIFEST_FILE
 
     def stage_dir(self, stage: str) -> Path:
         """Return the directory of `stage`, ``<root>/<stage>``."""
-        return inside(self.root, stage)
+        return inside(self.root_dir, stage)
 
     def relative(self, path: Path) -> str:
         """Return `path` as a POSIX path relative to the job directory."""
-        return path.relative_to(self.root).as_posix()
+        return path.relative_to(self.root_dir).as_posix()
 
     def is_done(self, stage: str) -> bool:
         """Return whether `stage` is recorded as done with its outputs present."""
         record = self.manifest.stages.get(stage)
         if record is None or record.status != DONE:
             return False
-        return all((self.root / output).exists() for output in record.outputs)
+        return all((self.root_dir / output).exists() for output in record.outputs)
 
     def run_stage(
         self,
@@ -207,7 +207,7 @@ class Job:
         if earlier is not None and earlier.status == DONE and not force:
             if earlier.parameters != parameters:
                 raise ValueError(
-                    f"{stage} in {self.root} ran with {earlier.parameters}; "
+                    f"{stage} in {self.root_dir} ran with {earlier.parameters}; "
                     f"pass force to run it with {parameters}"
                 )
             if self.is_done(stage):
@@ -238,7 +238,7 @@ class Job:
             parameters=parameters,
             metadata=outcome.metadata,
             outputs=[self.relative(output) for output in outcome.outputs],
-            log=None if outcome.log is None else self.relative(outcome.log),
+            log=None if outcome.log_path is None else self.relative(outcome.log_path),
             usage={
                 "wall_seconds": round(time.monotonic() - clock, 3),
                 **outcome.usage,
@@ -293,7 +293,7 @@ class Job:
         return manifest
 
     def _write_manifest(self) -> None:
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.root_dir.mkdir(parents=True, exist_ok=True)
         self.manifest.write(self.manifest_path)
 
 

@@ -7,7 +7,7 @@ import pytest
 from click.testing import CliRunner
 
 from omphjc.cli import cli
-from omphjc.config_paths import config_root
+from omphjc.config_paths import config_dir
 from omphjc.jobs import job_seed
 from omphjc.madgraph import (
     compare_all,
@@ -99,7 +99,7 @@ def study(tmp_path: Path) -> Path:
         "set spinmode none\ndecay t > w+ b, w+ > j j\ndecay t~ > w- b~, w- > j j\n"
     )
     path = tmp_path / "study.yaml"
-    path.write_text(CATALOGUE.format(config=config_root()), encoding="utf-8")
+    path.write_text(CATALOGUE.format(config=config_dir()), encoding="utf-8")
     return path
 
 
@@ -112,7 +112,7 @@ def test_new_process_needs_only_a_catalogue_entry(
     specs: Mapping[str, ProcessSpec], study: Path
 ) -> None:
     spec = specs["ZPrimeToTT"]
-    assert spec.model_path == study.parent / "models" / "zprime"
+    assert spec.model_dir == study.parent / "models" / "zprime"
     assert (
         model_import_target(spec) == f"{study.parent / 'models' / 'zprime'}-restricted"
     )

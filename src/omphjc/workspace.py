@@ -34,7 +34,7 @@ class Workspace:
 
     Parameters
     ----------
-    directory : Path
+    workdir : Path
         The working directory, created by :meth:`prepare` when missing; it
         must not be a filesystem root.
     program : str
@@ -55,7 +55,7 @@ class Workspace:
 
     Attributes
     ----------
-    directory : Path
+    workdir : Path
         The working directory, normalized.
     program_path : Path
         The program file the run uses.
@@ -67,7 +67,7 @@ class Workspace:
     Raises
     ------
     ValueError
-        If `timeout` is not positive or `directory` is a filesystem root.
+        If `timeout` is not positive or `workdir` is a filesystem root.
     FileNotFoundError
         If `program_path` is not a file, or none is given and PATH has no
         `program`.
@@ -78,7 +78,7 @@ class Workspace:
 
     def __init__(
         self,
-        directory: Path,
+        workdir: Path,
         *,
         program: str,
         program_path: Path | None,
@@ -90,7 +90,7 @@ class Workspace:
     ) -> None:
         if timeout is not None and timeout <= 0:
             raise ValueError(f"timeout must be positive, got {timeout}")
-        self.directory = working_directory(directory)
+        self.workdir = working_directory(workdir)
         self.program_path = find_program(program, program_path, description=description)
         self.purpose = purpose
         self.details = dict(details)
@@ -104,9 +104,9 @@ class Workspace:
         raise NotImplementedError
 
     @property
-    def log_file(self) -> Path:
+    def log_path(self) -> Path:
         """The program's output for the run."""
-        return self.directory / self._log_name
+        return self.workdir / self._log_name
 
     def prepare(self, *, doubtful: Iterable[str] = ()) -> Path | None:
         """Make the directory ready for a run.
@@ -132,9 +132,9 @@ class Workspace:
             As :meth:`clear_earlier_run`; nothing is created in that case.
         """
         set_aside = self.clear_earlier_run(doubtful=doubtful)
-        self.directory.mkdir(parents=True, exist_ok=True)
-        if read_stamp(self.directory) is None:
-            write_stamp(self.directory, self.purpose, self.details)
+        self.workdir.mkdir(parents=True, exist_ok=True)
+        if read_stamp(self.workdir) is None:
+            write_stamp(self.workdir, self.purpose, self.details)
         return set_aside
 
     def clear_earlier_run(self, *, doubtful: Iterable[str] = ()) -> Path | None:
@@ -159,7 +159,7 @@ class Workspace:
             stamp in the stamp's place. Nothing is changed in that case.
         """
         return clear_artifacts(
-            self.directory,
+            self.workdir,
             self.artifacts,
             self.purpose,
             details=self.details,
@@ -197,7 +197,10 @@ class Workspace:
         )
         try:
             usage = run_program(
-                command, cwd=self.directory, log=self.log_file, timeout=timeout
+                command,
+                cwd=self.workdir,
+                log_path=self.log_path,
+                timeout=timeout,
             )
         except ProgramError as error:
             raise self.error_type(f"{failure}: {error}") from error
@@ -206,8 +209,8 @@ class Workspace:
 
     def seal_artifacts(self) -> None:
         """Record in the stamp what this run made, for later runs to compare with."""
-        seal(self.directory, self.artifacts)
+        seal(self.workdir, self.artifacts)
 
     def error(self, message: str) -> ProgramError:
         """Return an error of the workspace's type carrying `message` and the log's end."""
-        return self.error_type(f"{message}\n{log_tail(self.log_file)}")
+        return self.error_type(f"{message}\n{log_tail(self.log_path)}")

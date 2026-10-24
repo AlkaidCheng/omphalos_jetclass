@@ -94,7 +94,7 @@ class ProcessSpec:
     seed_offset : int
         Offset added to every job seed of the process; 0 unless the entry
         sets one.
-    model_path : Path or None
+    model_dir : Path or None
         Directory of the model when the catalogue includes it; ``None``
         leaves the model to MadGraph.
     madspin_card : Path or None
@@ -119,7 +119,7 @@ class ProcessSpec:
     pythia_matching: Mapping[str, SettingValue]
     matching: bool
     seed_offset: int
-    model_path: Path | None
+    model_dir: Path | None
     madspin_card: Path | None
     delphes_card: Path | None
     reference_cards: Path | None
@@ -204,7 +204,7 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     """
     with path.open(encoding="utf-8") as stream:
         document = yaml.safe_load(stream)
-    base = path.parent
+    base_dir = path.parent
     common = document.get("common", {})
     unknown = common.keys() - _COMMON_KEYS
     if unknown:
@@ -214,11 +214,13 @@ def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
         run_card=_read_run_card(common.get("run_card", {})),
         pythia=_read_settings(common.get("pythia", {})),
         pythia_matching=_read_settings(common.get("pythia_matching", {})),
-        models_dir=base / common.get("models_dir", _DEFAULT_MODELS_DIR),
-        delphes_card=_existing("common", common, "delphes_card", base, directory=False),
+        models_dir=base_dir / common.get("models_dir", _DEFAULT_MODELS_DIR),
+        delphes_card=_existing(
+            "common", common, "delphes_card", base_dir, directory=False
+        ),
     )
     specs = {
-        name: _build_spec(name, entry, shared, base=base)
+        name: _build_spec(name, entry, shared, base_dir=base_dir)
         for name, entry in document["processes"].items()
     }
     labels = [spec.label for spec in specs.values()]
@@ -241,7 +243,7 @@ class _Shared:
 
 
 def _build_spec(
-    name: str, entry: Mapping[str, Any], shared: _Shared, *, base: Path
+    name: str, entry: Mapping[str, Any], shared: _Shared, *, base_dir: Path
 ) -> ProcessSpec:
     missing = _REQUIRED_KEYS - entry.keys()
     if missing:
@@ -273,23 +275,23 @@ def _build_spec(
         pythia_matching=dict(shared.pythia_matching),
         matching=matching,
         seed_offset=int(entry.get("seed_offset", 0)),
-        model_path=model_dir if model_dir.is_dir() else None,
+        model_dir=model_dir if model_dir.is_dir() else None,
         madspin_card=_existing(
-            f"Process {name!r}", entry, "madspin_card", base, directory=False
+            f"Process {name!r}", entry, "madspin_card", base_dir, directory=False
         ),
         delphes_card=shared.delphes_card,
         reference_cards=_existing(
-            f"Process {name!r}", entry, "reference_cards", base, directory=True
+            f"Process {name!r}", entry, "reference_cards", base_dir, directory=True
         ),
     )
 
 
 def _existing(
-    owner: str, block: Mapping[str, Any], key: str, base: Path, *, directory: bool
+    owner: str, block: Mapping[str, Any], key: str, base_dir: Path, *, directory: bool
 ) -> Path | None:
     if block.get(key) is None:
         return None
-    path = base / str(block[key])
+    path = base_dir / str(block[key])
     if directory and not path.is_dir() or not directory and not path.is_file():
         raise ValueError(f"{owner}: {key} {str(block[key])!r} does not exist")
     return path

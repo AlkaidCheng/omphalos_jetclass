@@ -69,22 +69,22 @@ def occupied(path: Path) -> bool:
     return path.exists() or path.is_symlink()
 
 
-def inside(root: Path, *names: str) -> Path:
-    """Return `root` joined with `names`, each a plain name.
+def inside(root_dir: Path, *names: str) -> Path:
+    """Return `root_dir` joined with `names`, each a plain name.
 
     Raises
     ------
     ValueError
         If a name is not a plain name.
     """
-    path = root
+    path = root_dir
     for name in names:
         path = path / plain_name(name, what="Path component")
     return path
 
 
-def remove_inside(root: Path, paths: Iterable[Path]) -> None:
-    """Delete each of `paths`, a file or a directory tree, all inside `root`.
+def remove_inside(root_dir: Path, paths: Iterable[Path]) -> None:
+    """Delete each of `paths`, a file or a directory tree, all inside `root_dir`.
 
     Every path is checked before any is removed, so a refused path leaves all
     of them in place. A path that does not exist is skipped. Directory trees
@@ -93,7 +93,7 @@ def remove_inside(root: Path, paths: Iterable[Path]) -> None:
 
     Parameters
     ----------
-    root : Path
+    root_dir : Path
         Directory the removals must stay inside; it is never removed itself.
     paths : iterable of Path
         Files or directories to delete.
@@ -101,9 +101,9 @@ def remove_inside(root: Path, paths: Iterable[Path]) -> None:
     Raises
     ------
     ValueError
-        If a path is a symbolic link, is `root` itself or lies outside it.
+        If a path is a symbolic link, is `root_dir` itself or lies outside it.
     """
-    resolved_root = normalize_path(root)
+    resolved_root = normalize_path(root_dir)
     targets = []
     for path in paths:
         if path.is_symlink():
@@ -112,7 +112,7 @@ def remove_inside(root: Path, paths: Iterable[Path]) -> None:
             continue
         target = normalize_path(path)
         if target == resolved_root or not target.is_relative_to(resolved_root):
-            raise ValueError(f"Refusing to remove {path}: it is not inside {root}")
+            raise ValueError(f"Refusing to remove {path}: it is not inside {root_dir}")
         targets.append(target)
     for target in targets:
         if target.is_dir():

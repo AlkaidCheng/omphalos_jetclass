@@ -18,9 +18,9 @@ def model_import_target(spec: ProcessSpec) -> str:
     A model included with the catalogue is imported by path so that MadGraph
     never downloads it; the restriction suffix, if any, is kept.
     """
-    if spec.model_path is None:
+    if spec.model_dir is None:
         return spec.model
-    target = str(spec.model_path)
+    target = str(spec.model_dir)
     if spec.model_restriction:
         target = f"{target}-{spec.model_restriction}"
     return target

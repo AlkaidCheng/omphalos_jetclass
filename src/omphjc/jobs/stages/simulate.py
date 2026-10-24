@@ -15,10 +15,10 @@ SIMULATE = "simulate"
 def simulate(
     job: Job,
     *,
-    card: Path | None = None,
+    card_path: Path | None = None,
     timeout: float | None = None,
     force: bool = False,
-    delphes_root: Path | None = None,
+    delphes_root_path: Path | None = None,
 ) -> StageRecord:
     """Simulate the detector on the showered events of `job` with Delphes.
 
@@ -34,13 +34,13 @@ def simulate(
     ----------
     job : Job
         The job; its shower stage must be done.
-    card : Path or None, optional
+    card_path : Path or None, optional
         The detector card to run instead of the process's.
     timeout : float or None, optional
         Seconds the stage may take; ``None`` for no limit.
     force : bool, optional
         Run the stage again even when its result could be kept.
-    delphes_root : Path or None, optional
+    delphes_root_path : Path or None, optional
         Delphes's ``DelphesROOT``; ``None`` for the one on PATH.
 
     Returns
@@ -53,37 +53,37 @@ def simulate(
     ValueError
         If the shower stage of `job` has not run to completion.
     FileNotFoundError
-        If `card` is given and is not a file.
+        If `card_path` is given and is not a file.
     """
     shower_record = job.manifest.stages.get(SHOWER)
     if shower_record is None or not job.is_done(SHOWER):
         raise ValueError(
-            f"The shower stage of {job.root} has not run to completion; run "
+            f"The shower stage of {job.root_dir} has not run to completion; run "
             "omphjc shower first"
         )
-    events_file = job.root / shower_record.outputs[0]
-    directory = job.stage_dir(SIMULATE)
-    card_text = detector_card_text(job.spec, card)
+    events_path = job.root_dir / shower_record.outputs[0]
+    stage_dir = job.stage_dir(SIMULATE)
+    card_text = detector_card_text(job.spec, card_path)
     card_hash = hashlib.sha256(card_text.encode("utf-8")).hexdigest()
 
     def body(overwrite: bool) -> StageOutcome:
         run = simulate_events(
             job.spec,
-            events_file=events_file,
-            workdir=directory,
+            events_path=events_path,
+            workdir=stage_dir,
             seed=job.seed,
-            card=card,
+            card_path=card_path,
             timeout=timeout,
             overwrite=overwrite,
-            delphes_root=delphes_root,
+            delphes_root_path=delphes_root_path,
         )
         return StageOutcome(
             metadata={
                 "events": shower_record.metadata.get("events_accepted"),
-                "card": {job.relative(run.card): sha256(run.card)},
+                "card": {job.relative(run.card_path): sha256(run.card_path)},
             },
-            outputs=[run.output],
-            log=run.log_file,
+            outputs=[run.output_path],
+            log_path=run.log_path,
             usage=run.usage.recorded(),
             set_aside=run.set_aside,
         )
