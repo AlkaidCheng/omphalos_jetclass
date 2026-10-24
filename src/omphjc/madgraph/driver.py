@@ -58,7 +58,7 @@ from omphjc.madgraph.cards import (
 )
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import ProgramError, available_cores
-from omphjc.safe_paths import inside, is_occupied
+from omphjc.safe_paths import inside, require_unoccupied
 from omphjc.workspace import ProgramRun, Workspace
 
 # MadGraph's command-line program, bin/mg5_aMC of an installation.
@@ -196,11 +196,8 @@ def generate_events(
     if n_cores < 1:
         raise ValueError(f"n_cores must be positive, got {n_cores}")
     workspace = MadGraphWorkspace(spec, workdir, mg5_path=mg5_path, timeout=timeout)
-    if is_occupied(workspace.process_dir) and not overwrite:
-        raise FileExistsError(
-            f"Process directory {workspace.process_dir} already exists; "
-            "pass overwrite=True to replace it"
-        )
+    if not overwrite:
+        require_unoccupied(workspace.process_dir, what="Process directory")
     # Built before MadGraph starts or anything is removed, so that an invalid
     # request fails at once and leaves earlier results in place.
     launch = launch_commands(

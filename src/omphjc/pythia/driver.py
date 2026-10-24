@@ -53,7 +53,7 @@ from omphjc.delphes.card import particles_card_text
 from omphjc.processes.catalogue import ProcessSpec, SettingValue
 from omphjc.programs import ProgramError
 from omphjc.pythia.cmnd import format_cmnd, shower_settings
-from omphjc.safe_paths import is_occupied
+from omphjc.safe_paths import require_file, require_unoccupied
 from omphjc.workspace import ProgramRun, Workspace
 
 # Delphes's program combining Pythia 8 and the detector simulation.
@@ -219,16 +219,12 @@ def shower_events(
         failed events, is still running at the time limit, or writes no
         output; the message ends with the last lines of its log.
     """
-    if not lhe_path.is_file():
-        raise FileNotFoundError(f"Event file {lhe_path} not found")
+    require_file(lhe_path, what="Event file")
     workspace = ShowerWorkspace(
         spec, workdir, delphes_pythia8_path=delphes_pythia8_path, timeout=timeout
     )
-    if is_occupied(workspace.output_path) and not overwrite:
-        raise FileExistsError(
-            f"Output file {workspace.output_path} already exists; pass overwrite=True "
-            "to replace it"
-        )
+    if not overwrite:
+        require_unoccupied(workspace.output_path, what="Output file")
     # Built before anything is removed, so that an invalid request fails at
     # once and leaves earlier results in place.
     settings = shower_settings(
