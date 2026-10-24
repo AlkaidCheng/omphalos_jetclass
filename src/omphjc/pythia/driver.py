@@ -138,7 +138,7 @@ class ShowerRun:
     set_aside: Path | None = None
 
 
-def read_statistics(log_text: str) -> ShowerStatistics:
+def parse_statistics(log_text: str) -> ShowerStatistics:
     """Return Pythia's version and event counts from the text of a run's log.
 
     Raises
@@ -267,7 +267,7 @@ def shower_events(
             f"DelphesPythia8 wrote no output file {workspace.output_path}"
         )
     try:
-        statistics = read_statistics(log_text)
+        statistics = parse_statistics(log_text)
     except ValueError as error:
         raise workspace.error(f"DelphesPythia8 did not finish: {error}") from None
     return ShowerRun(

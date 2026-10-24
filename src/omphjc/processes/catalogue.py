@@ -19,7 +19,7 @@ from typing import Any
 import yaml
 
 from omphjc.config_paths import catalogue_path
-from omphjc.safe_paths import plain_name
+from omphjc.safe_paths import require_plain_name
 
 RunCardValue = bool | int | float | str | dict[int, float]
 """A MadGraph run-card value as it appears after ``set name value``."""
@@ -65,7 +65,7 @@ class ProcessSpec:
     ----------
     name : str
         Catalogue name, for example ``"HToBB"``; a plain name
-        (:func:`omphjc.safe_paths.plain_name`), since it names directories.
+        (:func:`omphjc.safe_paths.require_plain_name`), since it names directories.
     label : str
         Class name of the sample, the suffix of the ``label_*`` column.
     description : str
@@ -125,7 +125,7 @@ class ProcessSpec:
     reference_cards: Path | None
 
     def __post_init__(self) -> None:
-        plain_name(self.name, what="Process name")
+        require_plain_name(self.name, what="Process name")
         if not _MODEL_NAME.fullmatch(self.model):
             raise ValueError(
                 f"Process {self.name!r}: model {self.model!r} must be a name of "
@@ -171,10 +171,10 @@ def get_process(name: str) -> ProcessSpec:
 @cache
 def default_catalogue() -> Mapping[str, ProcessSpec]:
     """Return the default catalogue, keyed by process name."""
-    return load_catalogue(catalogue_path())
+    return read_catalogue(catalogue_path())
 
 
-def load_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
+def read_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     """Load a catalogue file.
 
     Parameters

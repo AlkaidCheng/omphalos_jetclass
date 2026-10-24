@@ -5,8 +5,8 @@ import pytest
 from omphjc.safe_paths import (
     inside,
     normalize_path,
-    plain_name,
     remove_inside,
+    require_plain_name,
     working_directory,
 )
 
@@ -28,13 +28,13 @@ UNSAFE_NAMES = [
     "name", ["HToBB", "ZJetsToNuNu", "heft_c_mass", "run-2", "v1.2"]
 )
 def test_plain_names_are_accepted(name: str) -> None:
-    assert plain_name(name) == name
+    assert require_plain_name(name) == name
 
 
 @pytest.mark.parametrize("name", UNSAFE_NAMES)
 def test_names_that_could_leave_a_directory_are_refused(name: str) -> None:
     with pytest.raises(ValueError, match="Process name"):
-        plain_name(name, what="Process name")
+        require_plain_name(name, what="Process name")
 
 
 def test_normalize_path_expands_home_and_resolves_parents_and_links(

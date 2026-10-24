@@ -6,8 +6,8 @@ from omphjc.processes.catalogue import (
     SettingValue,
     default_catalogue,
     get_process,
-    load_catalogue,
     process_names,
+    read_catalogue,
 )
 
 __all__ = [
@@ -16,6 +16,6 @@ __all__ = [
     "SettingValue",
     "default_catalogue",
     "get_process",
-    "load_catalogue",
+    "read_catalogue",
     "process_names",
 ]

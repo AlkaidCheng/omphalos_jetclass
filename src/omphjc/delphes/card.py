@@ -145,7 +145,7 @@ def parse_card(text: str) -> DelphesCard:
     )
 
 
-def load_card(path: Path) -> DelphesCard:
+def read_card(path: Path) -> DelphesCard:
     """Read and evaluate the Delphes card at `path`."""
     return parse_card(path.read_text(encoding="utf-8"))
 

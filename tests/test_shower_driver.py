@@ -9,7 +9,7 @@ from omphjc.processes import ProcessSpec
 from omphjc.pythia import (
     ShowerError,
     ShowerWorkspace,
-    read_statistics,
+    parse_statistics,
     shower_events,
 )
 from omphjc.stamps import read_stamp
@@ -241,14 +241,14 @@ def test_read_statistics_parses_pythias_banner_and_table() -> None:
         " | sum                                                |"
         "        1000       1000        800 |   1.000e-09  0.000e+00 |\n"
     )
-    statistics = read_statistics(log)
+    statistics = parse_statistics(log)
     assert statistics.pythia_version == "8.318"
     assert (statistics.events_read, statistics.events_selected) == (1000, 1000)
     assert statistics.events_accepted == 800
     with pytest.raises(ValueError, match="banner"):
-        read_statistics("no banner")
+        parse_statistics("no banner")
     with pytest.raises(ValueError, match="statistics"):
-        read_statistics("This is PYTHIA version 8.318 and nothing else")
+        parse_statistics("This is PYTHIA version 8.318 and nothing else")
 
 
 def test_a_workspace_finds_delphes_pythia8_on_path_or_takes_the_given_one(

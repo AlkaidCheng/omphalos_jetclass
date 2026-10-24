@@ -6,9 +6,9 @@ from pathlib import Path
 import click
 
 from omphjc import __version__
-from omphjc.cli.formatting import count, describe_usage, size
+from omphjc.cli.formatting import format_count, format_size, format_usage
 from omphjc.config_paths import config_dir, export_config
-from omphjc.delphes import DelphesCard, compare_cards, load_card, reference_card
+from omphjc.delphes import DelphesCard, compare_cards, read_card, reference_card
 from omphjc.jobs import (
     MADGRAPH,
     SHOWER,
@@ -27,7 +27,7 @@ from omphjc.madgraph import (
     launch_commands,
     proc_card_commands,
 )
-from omphjc.processes import ProcessSpec, default_catalogue, load_catalogue
+from omphjc.processes import ProcessSpec, default_catalogue, read_catalogue
 from omphjc.programs import ProgramError
 from omphjc.pythia import format_cmnd, shower_settings
 from omphjc.stamps import StampError
@@ -50,7 +50,7 @@ def cli(context: click.Context, catalogue_path: Path | None) -> None:
     context.obj = (
         default_catalogue()
         if catalogue_path is None
-        else load_catalogue(catalogue_path)
+        else read_catalogue(catalogue_path)
     )
 
 
@@ -201,7 +201,7 @@ def _report_generation(job: Job, record: StageRecord, *, kept: bool) -> None:
     click.echo(f"  event file        {record.outputs[0]}")
     click.echo(f"  log               {record.log}")
     click.echo(f"  cards             {job.relative(job.stage_dir(MADGRAPH))}/cards/")
-    click.echo(f"  took              {describe_usage(record.usage)}")
+    click.echo(f"  took              {format_usage(record.usage)}")
     _report_set_aside(job)
 
 
@@ -211,7 +211,7 @@ def _report_set_aside(job: Job) -> None:
     if not folders:
         return
     click.echo(
-        f"  set aside         {count(len(folders), 'folder')} left by earlier runs; "
+        f"  set aside         {format_count(len(folders), 'folder')} left by earlier runs; "
         "omphjc clean --set-aside deletes them"
     )
 
@@ -305,7 +305,7 @@ def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
     click.echo(f"  output            {record.outputs[0]}")
     click.echo(f"  log               {record.log}")
     click.echo(f"  settings          {', '.join(metadata['settings'])}")
-    click.echo(f"  took              {describe_usage(record.usage)}")
+    click.echo(f"  took              {format_usage(record.usage)}")
     _report_set_aside(job)
 
 
@@ -392,7 +392,7 @@ def _report_simulation(job: Job, record: StageRecord, *, kept: bool) -> None:
     click.echo(f"  events            {metadata['events']}")
     click.echo(f"  output            {record.outputs[0]}")
     click.echo(f"  log               {record.log}")
-    click.echo(f"  took              {describe_usage(record.usage)}")
+    click.echo(f"  took              {format_usage(record.usage)}")
     _report_set_aside(job)
 
 
@@ -441,11 +441,13 @@ def clean_job(
         click.echo("set aside: nothing")
         return
     verb = "would delete" if dry_run else "deleted"
-    click.echo(f"set aside: {verb} {count(len(folders), 'folder')}, {size(sum(sizes))}")
+    click.echo(
+        f"set aside: {verb} {format_count(len(folders), 'folder')}, {format_size(sum(sizes))}"
+    )
     for folder, folder_size in zip(folders, sizes, strict=True):
         click.echo(
             f"  {job.relative(folder.path):<56} "
-            f"{folder.moment:%Y-%m-%d %H:%M} UTC  {size(folder_size):>9}"
+            f"{folder.moment:%Y-%m-%d %H:%M} UTC  {format_size(folder_size):>9}"
         )
 
 
@@ -538,7 +540,7 @@ def delphes() -> None:
 )
 def delphes_show(card_path: Path | None) -> None:
     """Print the evaluated configuration of a card (default: the official one)."""
-    configuration = reference_card() if card_path is None else load_card(card_path)
+    configuration = reference_card() if card_path is None else read_card(card_path)
     click.echo("ExecutionPath:")
     for name in configuration.execution_path:
         click.echo(f"  {name}")
@@ -565,9 +567,9 @@ def delphes_show(card_path: Path | None) -> None:
 def delphes_compare(card_path: Path, reference_path: Path | None) -> None:
     """Report configuration differences between a card and a reference."""
     reference_configuration: DelphesCard = (
-        reference_card() if reference_path is None else load_card(reference_path)
+        reference_card() if reference_path is None else read_card(reference_path)
     )
-    differences = compare_cards(load_card(card_path), reference_configuration)
+    differences = compare_cards(read_card(card_path), reference_configuration)
     if not differences:
         click.echo("The cards configure Delphes identically.")
         return

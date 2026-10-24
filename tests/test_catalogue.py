@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from omphjc.config_paths import catalogue_path
-from omphjc.processes import ProcessSpec, get_process, load_catalogue, process_names
+from omphjc.processes import ProcessSpec, get_process, process_names, read_catalogue
 
 JETCLASS_CLASSES = {
     "HToBB": "Hbb",
@@ -119,7 +119,7 @@ def test_load_catalogue_rejects_missing_keys(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="lacks required keys"):
-        load_catalogue(broken)
+        read_catalogue(broken)
 
 
 def test_load_catalogue_rejects_unknown_keys_and_missing_files(tmp_path: Path) -> None:
@@ -130,11 +130,11 @@ def test_load_catalogue_rejects_unknown_keys_and_missing_files(tmp_path: Path) -
     typo = tmp_path / "typo.yaml"
     typo.write_text(entry + "    madspin_cards: decays.dat\n", encoding="utf-8")
     with pytest.raises(ValueError, match="unknown keys.*madspin_cards"):
-        load_catalogue(typo)
+        read_catalogue(typo)
     missing = tmp_path / "missing.yaml"
     missing.write_text(entry + "    madspin_card: decays.dat\n", encoding="utf-8")
     with pytest.raises(ValueError, match="madspin_card 'decays.dat' does not exist"):
-        load_catalogue(missing)
+        read_catalogue(missing)
 
 
 def test_load_catalogue_rejects_duplicate_labels(tmp_path: Path) -> None:
@@ -148,7 +148,7 @@ def test_load_catalogue_rejects_duplicate_labels(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match=r"more than one process: \['Same'\]"):
-        load_catalogue(path)
+        read_catalogue(path)
 
 
 def test_the_delphes_card_is_named_once_for_every_process(
@@ -168,14 +168,14 @@ def test_load_catalogue_checks_the_common_block(tmp_path: Path) -> None:
     with pytest.raises(
         ValueError, match="common block has unknown keys.*delphes_cards"
     ):
-        load_catalogue(typo)
+        read_catalogue(typo)
     missing = tmp_path / "missing.yaml"
     missing.write_text("common:\n  delphes_card: d.tcl\n" + entry, encoding="utf-8")
     with pytest.raises(ValueError, match="common: delphes_card 'd.tcl' does not exist"):
-        load_catalogue(missing)
+        read_catalogue(missing)
     bare = tmp_path / "bare.yaml"
     bare.write_text(entry, encoding="utf-8")
-    assert load_catalogue(bare)["X"].delphes_card is None
+    assert read_catalogue(bare)["X"].delphes_card is None
 
 
 def test_an_entry_needs_only_its_physics(tmp_path: Path) -> None:
@@ -186,7 +186,7 @@ def test_an_entry_needs_only_its_physics(tmp_path: Path) -> None:
         "    processes: ['p p > z']\n",
         encoding="utf-8",
     )
-    spec = load_catalogue(path)["Z"]
+    spec = read_catalogue(path)["Z"]
     assert spec.run_card == {"ebeam1": 6800.0}
     assert spec.definitions == ()
     assert (spec.seed_offset, spec.matching, spec.madspin) == (0, False, False)
@@ -205,7 +205,7 @@ def test_paths_may_be_absolute(tmp_path: Path) -> None:
         f"    reference_cards: {config / 'references' / 'jetclass' / 'TTBar'}\n",
         encoding="utf-8",
     )
-    spec = load_catalogue(path)["T"]
+    spec = read_catalogue(path)["T"]
     assert spec.model_dir == config / "models" / "heft"
     assert spec.delphes_card == config / "delphes" / "delphes_card_JetClass.tcl"
     assert spec.madspin_card == config / "madspin" / "TTBar.dat"

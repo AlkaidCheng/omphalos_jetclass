@@ -150,7 +150,7 @@ def seal(directory: Path, artifacts: Iterable[str]) -> Stamp:
     """Seal the `artifacts` now in the stamped `directory`; forget the others.
 
     Each artifact is a POSIX path relative to `directory` whose components
-    are plain names (:func:`omphjc.safe_paths.plain_name`).
+    are plain names (:func:`omphjc.safe_paths.require_plain_name`).
 
     Raises
     ------
@@ -196,7 +196,7 @@ def clear_artifacts(
         The stamped directory.
     artifacts : iterable of str
         What a run makes in `directory`: POSIX paths relative to it whose
-        components are plain names (:func:`omphjc.safe_paths.plain_name`).
+        components are plain names (:func:`omphjc.safe_paths.require_plain_name`).
     purpose : str
         The purpose the stamp must record.
     details : Mapping[str, str] or None, optional
