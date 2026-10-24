@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from omphjc.cli import cli
@@ -169,3 +170,33 @@ def test_shower_runs_after_generate_and_reports(
     again = CliRunner().invoke(cli, shower)
     assert again.exit_code == 0, again.output
     assert "Pythia shower: done, kept from an earlier run" in again.output
+
+
+def test_clean_deletes_what_earlier_runs_set_aside(
+    mg5: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import omphjc.workspace as workspace
+
+    job = ["HToBB", "--job", "1", "--outdir", str(tmp_path)]
+    generate = ["generate", *job, "--events", "10", "--mg5", str(mg5)]
+    with monkeypatch.context() as killed_before_sealing:
+        killed_before_sealing.setattr(workspace, "seal", lambda *_: None)
+        assert CliRunner().invoke(cli, generate).exit_code == 0
+    rerun = CliRunner().invoke(cli, [*generate, "--force"])
+    assert rerun.exit_code == 0, rerun.output
+    assert "  set aside         1 folder left by earlier runs" in rerun.output
+    assert "omphjc clean --set-aside deletes them" in rerun.output
+
+    unnamed = CliRunner().invoke(cli, ["clean", *job])
+    assert unnamed.exit_code != 0 and "Name what to delete" in unnamed.output
+    listed = CliRunner().invoke(cli, ["clean", *job, "--set-aside", "--dry-run"])
+    assert listed.exit_code == 0, listed.output
+    assert "set aside: would delete 1 folder, " in listed.output
+    assert "madgraph/omphjc-set-aside/" in listed.output
+    cleaned = CliRunner().invoke(cli, ["clean", *job, "--set-aside"])
+    assert cleaned.exit_code == 0, cleaned.output
+    assert "set aside: deleted 1 folder, " in cleaned.output
+    set_aside = tmp_path / "HToBB" / "job_1" / "madgraph" / "omphjc-set-aside"
+    assert not set_aside.exists()
+    again = CliRunner().invoke(cli, ["clean", *job, "--set-aside"])
+    assert again.exit_code == 0 and again.output.endswith("set aside: nothing\n")

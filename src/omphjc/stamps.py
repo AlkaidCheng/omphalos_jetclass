@@ -14,13 +14,16 @@ seal. Editing a file in place inside a folder changes the file alone and is not
 detected. An artifact that was sealed and shows no such change is deleted; one
 the run cannot confirm as its own, such as one left by a run killed before sealing, is
 moved into ``omphjc-set-aside/`` instead, with its contents. Nothing else in the
-directory is ever touched. Stamps guard against mistakes, such as a mistyped
-path or a user's file left in a run's folder; anyone who can write to a
-directory can also edit its stamp.
+directory is ever touched. What was set aside stays until someone deletes it:
+:func:`set_aside_folders` shows the folders with their sizes and
+:func:`clear_set_aside_folders` deletes them. Stamps guard against mistakes, such as a
+mistyped path or a user's file left in a run's folder; anyone who can write to
+a directory can also edit its stamp.
 """
 
 import json
 import os
+import re
 import tempfile
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
@@ -29,11 +32,15 @@ from pathlib import Path
 from typing import Any
 
 from omphjc import __version__
+from omphjc.filetree import latest_change, tree_size
 from omphjc.safe_paths import inside, occupied, remove_inside
 
 STAMP_FILE = "omphjc-stamp.json"
 SET_ASIDE_DIR = "omphjc-set-aside"
 _PRODUCER = "omphjc"
+_MOMENT_FORMAT = "%Y%m%dT%H%M%SZ"
+# A folder _set_aside makes: the moment, then the suffix tempfile.mkdtemp adds.
+_SET_ASIDE_FOLDER = re.compile(r"([0-9]{8}T[0-9]{6}Z)-[A-Za-z0-9_]+")
 
 
 class StampError(RuntimeError):
@@ -156,7 +163,7 @@ def seal(directory: Path, artifacts: Iterable[str]) -> Stamp:
     sealed = replace(
         stamp,
         artifacts={
-            name: _latest_change(path)
+            name: latest_change(path)
             for name in artifacts
             if occupied(path := _artifact_path(directory, name))
         },
@@ -232,7 +239,7 @@ def clear_artifacts(
         if name not in doubts
         and not path.is_symlink()
         and name in stamp.artifacts
-        and _latest_change(path) <= stamp.artifacts[name]
+        and latest_change(path) <= stamp.artifacts[name]
     }
     unconfirmed = {
         name: path for name, path in present.items() if name not in confirmed
@@ -261,11 +268,86 @@ def _check_stamp(
             )
 
 
+@dataclass(frozen=True)
+class SetAsideFolder:
+    """A folder of artifacts a clearing moved aside.
+
+    Parameters
+    ----------
+    path : Path
+        The folder, under ``omphjc-set-aside/``.
+    moment : datetime
+        When the artifacts were set aside, in UTC, read from the folder's name.
+    """
+
+    path: Path
+    moment: datetime
+
+    def size(self) -> int:
+        """Return the bytes held by the files in the folder, walking it once.
+
+        Symbolic links are not followed. The walk reads every file's metadata,
+        so callers that only need to know the folders exist skip it.
+        """
+        return tree_size(self.path)
+
+
+def set_aside_folders(directory: Path) -> list[SetAsideFolder]:
+    """Return the folders set aside in `directory`, oldest first.
+
+    Only folders named as :func:`clear_artifacts` names them count; anything
+    else under ``omphjc-set-aside/`` is left out.
+    """
+    root = directory / SET_ASIDE_DIR
+    if root.is_symlink() or not root.is_dir():
+        return []
+    found = []
+    with os.scandir(root) as entries:
+        for entry in entries:
+            match = _SET_ASIDE_FOLDER.fullmatch(entry.name)
+            if match is None or not entry.is_dir(follow_symlinks=False):
+                continue
+            moment = datetime.strptime(match.group(1), _MOMENT_FORMAT)
+            found.append(
+                SetAsideFolder(
+                    path=Path(entry.path), moment=moment.replace(tzinfo=timezone.utc)
+                )
+            )
+    return sorted(found, key=lambda folder: folder.path.name)
+
+
+def clear_set_aside_folders(directory: Path) -> list[SetAsideFolder]:
+    """Delete the folders set aside in `directory`; return what was deleted.
+
+    Only the folders :func:`set_aside_folders` lists are deleted;
+    ``omphjc-set-aside/`` itself goes once it is empty.
+
+    Raises
+    ------
+    StampError
+        If folders are set aside in `directory` while it has no stamp;
+        nothing is changed then.
+    """
+    folders = set_aside_folders(directory)
+    if not folders:
+        return []
+    if read_stamp(directory) is None:
+        raise StampError(
+            f"{directory} holds {SET_ASIDE_DIR}/ but has no omphjc stamp; "
+            "nothing is changed"
+        )
+    remove_inside(directory, [folder.path for folder in folders])
+    root = directory / SET_ASIDE_DIR
+    if not any(root.iterdir()):
+        root.rmdir()
+    return folders
+
+
 def _set_aside(directory: Path, artifacts: Mapping[str, Path]) -> Path:
     """Move `artifacts` into a new folder under ``omphjc-set-aside/``; return it."""
     root = inside(directory, SET_ASIDE_DIR)
     root.mkdir(exist_ok=True)
-    moment = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    moment = datetime.now(timezone.utc).strftime(_MOMENT_FORMAT)
     folder = Path(tempfile.mkdtemp(dir=root, prefix=f"{moment}-"))
     for name, path in artifacts.items():
         target = folder / name
@@ -276,26 +358,6 @@ def _set_aside(directory: Path, artifacts: Mapping[str, Path]) -> Path:
 
 def _artifact_path(directory: Path, name: str) -> Path:
     return inside(directory, *name.split("/"))
-
-
-def _latest_change(path: Path) -> int:
-    """Return the latest ``ctime`` of `path` and of every folder in it, in ns.
-
-    Adding, removing or renaming an entry changes the folder holding it, so
-    the folders alone show such changes; editing a file in place changes only
-    the file, which is not read. Symbolic links are not followed.
-    """
-    latest = path.lstat().st_ctime_ns
-    if path.is_symlink() or not path.is_dir():
-        return latest
-    folders = [os.fspath(path)]
-    while folders:
-        with os.scandir(folders.pop()) as entries:
-            for entry in entries:
-                if entry.is_dir(follow_symlinks=False):
-                    latest = max(latest, entry.stat(follow_symlinks=False).st_ctime_ns)
-                    folders.append(entry.path)
-    return latest
 
 
 def _replace_stamp(directory: Path, stamp: Stamp) -> None:

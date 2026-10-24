@@ -83,6 +83,7 @@ def generate(
             outputs=[run.events],
             log=run.log_file,
             usage=run.usage.recorded(),
+            set_aside=run.set_aside,
         )
 
     parameters = {"events": n_events, "seed": job.seed}

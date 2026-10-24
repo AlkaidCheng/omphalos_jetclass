@@ -309,6 +309,7 @@ omphjc generate HToBB --job 1 --events 1000 --outdir runs/dev --cores 8 --timeou
 omphjc shower HToBB --job 1 --outdir runs/dev
 omphjc shower HToBB --job 1 --outdir runs/dev --set Main:timesAllowErrors=100
 omphjc shower HToBB --job 1 --outdir runs/dev --force    # run it again
+omphjc clean HToBB --job 1 --outdir runs/dev --set-aside  # drop what reruns set aside
 ```
 
 ```
@@ -346,7 +347,13 @@ present and whose parameters match, runs again a stage that failed or was
 interrupted, replacing what it left, and refuses other parameters, a changed
 seed included, unless `--force` is given. A job that receives `SIGTERM`, as
 from a batch system's time limit, stops its running program and records the
-failure before it exits. MadGraph's directory is kept after the shower.
+failure before it exits. A rerun deletes only what it can recognise as the
+earlier run's: anything else in the earlier run's place, as after a hard kill
+or a change made to the files since, is moved into `<stage>/omphjc-set-aside/`
+instead and stays there. The stage's report counts those folders, the
+manifest names the folder each run made, and `omphjc clean --set-aside`
+deletes them (`--dry-run` lists them with their sizes first).
+MadGraph's directory is kept after the shower.
 
 ## Acknowledgements
 

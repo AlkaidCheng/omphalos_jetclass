@@ -46,3 +46,5 @@
   `DelphesPythia8` and keeps the generator record of every showered event. (#12)
 - Each stage records its wall time, CPU time and peak memory in the job's
   `manifest.json`. (#13)
+- `omphjc clean --set-aside` deletes the folders a rerun set aside, which the
+  stage reports now count. (#14)
