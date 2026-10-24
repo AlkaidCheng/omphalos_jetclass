@@ -14,7 +14,7 @@ from pathlib import Path
 
 from omphjc.madgraph.cards import madspin_card_text, proc_card_commands
 from omphjc.madgraph.madspin import compare_madspin_cards, parse_madspin_card
-from omphjc.madgraph.runcard import (
+from omphjc.madgraph.run_card import (
     format_value,
     parse_launch_overrides,
     parse_run_card,

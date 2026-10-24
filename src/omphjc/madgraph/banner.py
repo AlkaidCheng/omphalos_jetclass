@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, overload
 
-from omphjc.madgraph.runcard import parse_run_card
+from omphjc.madgraph.run_card import parse_run_card
 from omphjc.processes.catalogue import RunCardValue
 
 # Blocks of the banner, captured without their tags.

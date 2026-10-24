@@ -18,14 +18,7 @@ from omphjc.madgraph.madspin import (
     compare_madspin_cards,
     parse_madspin_card,
 )
-from omphjc.madgraph.runcard import (
-    format_value,
-    parse_launch_overrides,
-    parse_run_card,
-    parse_value,
-    values_equal,
-)
-from omphjc.madgraph.verify import (
+from omphjc.madgraph.reference import (
     DISABLED_DEFAULTS,
     TRACKED_PARAMETERS,
     Mismatch,
@@ -33,6 +26,13 @@ from omphjc.madgraph.verify import (
     compare_process,
     reference_proc_lines,
     reference_run_settings,
+)
+from omphjc.madgraph.run_card import (
+    format_value,
+    parse_launch_overrides,
+    parse_run_card,
+    parse_value,
+    values_equal,
 )
 
 __all__ = [

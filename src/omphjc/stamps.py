@@ -38,8 +38,8 @@ from omphjc.safe_paths import inside, occupied, remove_inside
 STAMP_FILE = "omphjc-stamp.json"
 SET_ASIDE_DIR = "omphjc-set-aside"
 _PRODUCER = "omphjc"
-_MOMENT_FORMAT = "%Y%m%dT%H%M%SZ"
-# A folder _set_aside makes: the moment, then the suffix tempfile.mkdtemp adds.
+_CREATED_FORMAT = "%Y%m%dT%H%M%SZ"
+# A folder _set_aside makes: the creation time, then the suffix tempfile.mkdtemp adds.
 _SET_ASIDE_FOLDER = re.compile(r"([0-9]{8}T[0-9]{6}Z)-[A-Za-z0-9_]+")
 
 
@@ -276,12 +276,12 @@ class SetAsideFolder:
     ----------
     path : Path
         The folder, under ``omphjc-set-aside/``.
-    moment : datetime
+    created : datetime
         When the artifacts were set aside, in UTC, read from the folder's name.
     """
 
     path: Path
-    moment: datetime
+    created: datetime
 
     def size(self) -> int:
         """Return the bytes held by the files in the folder, walking it once.
@@ -307,10 +307,10 @@ def set_aside_folders(directory: Path) -> list[SetAsideFolder]:
             match = _SET_ASIDE_FOLDER.fullmatch(entry.name)
             if match is None or not entry.is_dir(follow_symlinks=False):
                 continue
-            moment = datetime.strptime(match.group(1), _MOMENT_FORMAT)
+            created = datetime.strptime(match.group(1), _CREATED_FORMAT)
             found.append(
                 SetAsideFolder(
-                    path=Path(entry.path), moment=moment.replace(tzinfo=timezone.utc)
+                    path=Path(entry.path), created=created.replace(tzinfo=timezone.utc)
                 )
             )
     return sorted(found, key=lambda folder: folder.path.name)
@@ -347,8 +347,8 @@ def _set_aside(directory: Path, artifacts: Mapping[str, Path]) -> Path:
     """Move `artifacts` into a new folder under ``omphjc-set-aside/``; return it."""
     set_aside_dir = inside(directory, SET_ASIDE_DIR)
     set_aside_dir.mkdir(exist_ok=True)
-    moment = datetime.now(timezone.utc).strftime(_MOMENT_FORMAT)
-    folder = Path(tempfile.mkdtemp(dir=set_aside_dir, prefix=f"{moment}-"))
+    created = datetime.now(timezone.utc).strftime(_CREATED_FORMAT)
+    folder = Path(tempfile.mkdtemp(dir=set_aside_dir, prefix=f"{created}-"))
     for name, path in artifacts.items():
         target_path = folder / name
         target_path.parent.mkdir(parents=True, exist_ok=True)

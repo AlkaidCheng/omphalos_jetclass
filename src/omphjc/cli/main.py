@@ -447,7 +447,7 @@ def clean_job(
     for folder, folder_size in zip(folders, sizes, strict=True):
         click.echo(
             f"  {job.relative(folder.path):<56} "
-            f"{folder.moment:%Y-%m-%d %H:%M} UTC  {format_size(folder_size):>9}"
+            f"{folder.created:%Y-%m-%d %H:%M} UTC  {format_size(folder_size):>9}"
         )
 
 

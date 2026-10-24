@@ -264,7 +264,7 @@ class Job:
             for stage in self.manifest.stages
             for folder in set_aside_folders(self.stage_dir(stage))
         ]
-        return sorted(found, key=lambda folder: (folder.moment, folder.path))
+        return sorted(found, key=lambda folder: (folder.created, folder.path))
 
     def clear_set_aside_folders(self) -> list[SetAsideFolder]:
         """Delete what earlier runs of the job's stages set aside; return it.
@@ -280,7 +280,7 @@ class Job:
             for stage in self.manifest.stages
             for folder in clear_set_aside_folders(self.stage_dir(stage))
         ]
-        return sorted(removed, key=lambda folder: (folder.moment, folder.path))
+        return sorted(removed, key=lambda folder: (folder.created, folder.path))
 
     def _load_manifest(self) -> Manifest:
         if not self.manifest_path.exists():
