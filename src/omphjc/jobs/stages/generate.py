@@ -7,8 +7,8 @@ from omphjc.jobs.job import Job, StageOutcome, sha256
 from omphjc.jobs.manifest import StageRecord
 from omphjc.madgraph.driver import generate_events
 
-MADGRAPH = "madgraph"
-"""The stage's name and directory, ``<job>/madgraph/``."""
+GENERATE = "generate"
+"""The stage's name and directory, ``<job>/generate/``."""
 
 _CARDS_DIR = "cards"
 # The cards MadGraph writes into its Cards directory that a job keeps as run.
@@ -31,8 +31,8 @@ def generate(
 ) -> StageRecord:
     """Generate the parton-level events of `job` with MadGraph.
 
-    Runs :func:`omphjc.madgraph.generate_events` in the job's ``madgraph/``
-    directory and copies the cards MadGraph ran with into ``madgraph/cards/``.
+    Runs :func:`omphjc.madgraph.generate_events` in the job's ``generate/``
+    directory and copies the cards MadGraph ran with into ``generate/cards/``.
     The stage's parameters are the event count and the job's seed, so a
     changed seed is refused like any other change unless `force` is set. Its
     metadata are the MadGraph version, the events made, the cross section with
@@ -58,7 +58,7 @@ def generate(
     StageRecord
         The stage's record, kept or new.
     """
-    stage_dir = job.stage_dir(MADGRAPH)
+    stage_dir = job.stage_dir(GENERATE)
 
     def body(overwrite: bool) -> StageOutcome:
         run = generate_events(
@@ -87,7 +87,7 @@ def generate(
         )
 
     parameters = {"events": n_events, "seed": job.seed}
-    return job.run_stage(MADGRAPH, parameters, body, force=force)
+    return job.run_stage(GENERATE, parameters, body, force=force)
 
 
 def _copy_cards(source_dir: Path, target_dir: Path, job: Job) -> dict[str, str]:

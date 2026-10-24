@@ -318,7 +318,7 @@ omphjc clean HToBB --job 1 --outdir runs/dev --set-aside  # drop what reruns set
 ```
 runs/dev/HToBB/job_1/
 ├── manifest.json          what ran, with what, and what came out
-├── madgraph/              the MadGraph working directory, MadGraph's own layout inside
+├── generate/              the MadGraph working directory, MadGraph's own layout inside
 │   ├── cards/             the cards MadGraph ran with, hashed in the manifest
 │   ├── madgraph.log
 │   └── HToBB/Events/run_01/unweighted_events.lhe.gz

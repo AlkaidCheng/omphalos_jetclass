@@ -121,9 +121,9 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
     assert lines[3] == "  events requested  10"
     assert lines[4] == "  events generated  10000"
     assert lines[5] == "  cross section     1.05282 +- 0.0024 pb"
-    assert lines[6].startswith("  event file        madgraph/HToBB/Events/")
-    assert lines[7] == "  log               madgraph/madgraph.log"
-    assert lines[8] == "  cards             madgraph/cards/"
+    assert lines[6].startswith("  event file        generate/HToBB/Events/")
+    assert lines[7] == "  log               generate/madgraph.log"
+    assert lines[8] == "  cards             generate/cards/"
     assert lines[9].startswith("  took              ") and "s wall" in lines[9]
     assert "s CPU" in lines[9] and "MiB peak" in lines[9]
     manifest = tmp_path / "HToBB" / "job_1" / "manifest.json"
@@ -196,11 +196,11 @@ def test_clean_deletes_what_earlier_runs_set_aside(
     listed = CliRunner().invoke(cli, ["clean", *job, "--set-aside", "--dry-run"])
     assert listed.exit_code == 0, listed.output
     assert "set aside: would delete 1 folder, " in listed.output
-    assert "madgraph/omphjc-set-aside/" in listed.output
+    assert "generate/omphjc-set-aside/" in listed.output
     cleaned = CliRunner().invoke(cli, ["clean", *job, "--set-aside"])
     assert cleaned.exit_code == 0, cleaned.output
     assert "set aside: deleted 1 folder, " in cleaned.output
-    set_aside = tmp_path / "HToBB" / "job_1" / "madgraph" / "omphjc-set-aside"
+    set_aside = tmp_path / "HToBB" / "job_1" / "generate" / "omphjc-set-aside"
     assert not set_aside.exists()
     again = CliRunner().invoke(cli, ["clean", *job, "--set-aside"])
     assert again.exit_code == 0 and again.output.endswith("set aside: nothing\n")

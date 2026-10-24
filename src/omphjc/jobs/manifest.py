@@ -9,7 +9,7 @@ created the job, and one record per stage::
       "job": 1,
       "omphjc_version": "0.1.0",
       "stages": {
-        "madgraph": {
+        "generate": {
           "status": "done",
           "started": "2026-10-23T01:00:00+00:00",
           "finished": "2026-10-23T01:20:00+00:00",
@@ -19,10 +19,10 @@ created the job, and one record per stage::
             "events": 1000,
             "cross_section_pb": 1.23,
             "cross_section_error_pb": 0.01,
-            "cards": {"madgraph/cards/run_card.dat": "<sha256>"}
+            "cards": {"generate/cards/run_card.dat": "<sha256>"}
           },
-          "outputs": ["madgraph/HToBB/Events/run_01/unweighted_events.lhe.gz"],
-          "log": "madgraph/madgraph.log",
+          "outputs": ["generate/HToBB/Events/run_01/unweighted_events.lhe.gz"],
+          "log": "generate/madgraph.log",
           "usage": {"wall_seconds": 1203.4, "cpu_seconds": 9012.7, "max_memory_mb": 812.5},
           "set_aside": null,
           "error": null
