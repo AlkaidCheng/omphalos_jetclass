@@ -235,14 +235,9 @@ def shower_events(
         overrides=overrides,
     )
 
-    set_aside = workspace.prepare()
-    try:
+    with workspace.sealed_run() as set_aside:
         workspace.write_inputs(lhe_path, settings)
         workspace.run_shower()
-    finally:
-        # Whatever the outcome, the stamp seals what this run made, so that a
-        # later run can tell whether anyone changed it since.
-        workspace.seal_artifacts()
 
     log_text = workspace.log_path.read_text(encoding="utf-8", errors="replace")
     if _ABORTED in log_text:
@@ -272,9 +267,9 @@ class ShowerWorkspace(Workspace):
     """The working directory of one process's shower runs, and the steps of a run.
 
     :func:`shower_events` drives a workspace from start to finish; a caller
-    that needs the steps one at a time constructs one and calls
-    :meth:`prepare`, :meth:`write_inputs`, :meth:`run_shower`, then
-    :meth:`seal_artifacts` in a ``finally``.
+    that needs the steps one at a time constructs one and, inside
+    ``with workspace.sealed_run():``, calls :meth:`write_inputs` then
+    :meth:`run_shower`.
 
     Parameters
     ----------

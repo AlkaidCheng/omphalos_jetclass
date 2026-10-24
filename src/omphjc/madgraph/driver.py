@@ -204,8 +204,7 @@ def generate_events(
         spec, process_dir=workspace.process_dir, n_events=n_events, seed=seed
     )
 
-    set_aside = workspace.prepare()
-    try:
+    with workspace.sealed_run() as set_aside:
         local_spec = workspace.copy_model()
         workspace.run_script(
             _PROCESS_SCRIPT,
@@ -213,10 +212,6 @@ def generate_events(
         )
         workspace.write_cards(n_cores)
         workspace.run_script(_LAUNCH_SCRIPT, launch)
-    finally:
-        # Whatever the outcome, the stamp seals what this run made, so that a
-        # later run can tell whether anyone changed it since.
-        workspace.seal_artifacts()
 
     output_path = workspace.output_path
     if not output_path.is_file():
@@ -235,11 +230,10 @@ class MadGraphWorkspace(Workspace):
     """The working directory of one process's runs, and the steps a run takes in it.
 
     :func:`generate_events` drives a workspace from start to finish; a caller
-    that needs the steps one at a time constructs one and calls them in the
-    same order: :meth:`prepare`, :meth:`copy_model`,
-    :meth:`run_script` for the process script, :meth:`write_cards`,
-    :meth:`run_script` for the launch script, then :meth:`seal_artifacts` in
-    a ``finally``.
+    that needs the steps one at a time constructs one and, inside
+    ``with workspace.sealed_run():``, calls them in the same order:
+    :meth:`copy_model`, :meth:`run_script` for the process script,
+    :meth:`write_cards`, then :meth:`run_script` for the launch script.
 
     Parameters
     ----------

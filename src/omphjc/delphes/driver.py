@@ -170,14 +170,9 @@ def simulate_events(
     if seed is not None:
         card_text = with_random_seed(card_text, seed)
 
-    set_aside = workspace.prepare()
-    try:
+    with workspace.sealed_run() as set_aside:
         workspace.write_card(card_text)
         workspace.run_simulation(events_path)
-    finally:
-        # Whatever the outcome, the stamp seals what this run made, so that a
-        # later run can tell whether anyone changed it since.
-        workspace.seal_artifacts()
 
     if not workspace.output_path.is_file():
         raise workspace.make_error(
@@ -196,9 +191,9 @@ class SimulationWorkspace(Workspace):
     """The working directory of one process's ``DelphesROOT`` runs, and the steps of a run.
 
     :func:`simulate_events` drives a workspace from start to finish; a caller
-    that needs the steps one at a time constructs one and calls
-    :meth:`prepare`, :meth:`write_card`, :meth:`run_simulation`, then
-    :meth:`seal_artifacts` in a ``finally``.
+    that needs the steps one at a time constructs one and, inside
+    ``with workspace.sealed_run():``, calls :meth:`write_card` then
+    :meth:`run_simulation`.
 
     Parameters
     ----------
