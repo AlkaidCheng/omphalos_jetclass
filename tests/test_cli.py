@@ -200,3 +200,39 @@ def test_clean_deletes_what_earlier_runs_set_aside(
     assert not set_aside.exists()
     again = CliRunner().invoke(cli, ["clean", *job, "--set-aside"])
     assert again.exit_code == 0 and again.output.endswith("set aside: nothing\n")
+
+
+def test_simulate_runs_after_shower_and_reports(
+    mg5: Path, delphes_pythia8: Path, delphes_root: Path, tmp_path: Path
+) -> None:
+    job = ["HToBB", "--job", "1", "--outdir", str(tmp_path)]
+    simulate = ["simulate", *job, "--delphes-root", str(delphes_root)]
+    missing = CliRunner().invoke(cli, simulate)
+    assert missing.exit_code != 0
+    assert "run omphjc shower first" in missing.output
+    assert (
+        CliRunner()
+        .invoke(cli, ["generate", *job, "--events", "10", "--mg5", str(mg5)])
+        .exit_code
+        == 0
+    )
+    assert (
+        CliRunner()
+        .invoke(cli, ["shower", *job, "--delphes-pythia8", str(delphes_pythia8)])
+        .exit_code
+        == 0
+    )
+    result = CliRunner().invoke(cli, simulate)
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert lines[0].startswith("HToBB job 1: ")
+    assert lines[1] == "Delphes simulation: done"
+    assert lines[2] == "  card              simulate/delphes_card.tcl"
+    assert lines[3] == "  seed              10000001"
+    assert lines[4] == "  events            1"
+    assert lines[5] == "  output            simulate/delphes.root"
+    assert lines[6] == "  log               simulate/simulate.log"
+    assert lines[7].startswith("  took              ") and "s wall" in lines[7]
+    again = CliRunner().invoke(cli, simulate)
+    assert again.exit_code == 0, again.output
+    assert "Delphes simulation: done, kept from an earlier run" in again.output

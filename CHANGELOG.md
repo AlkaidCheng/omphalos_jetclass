@@ -48,3 +48,5 @@
   `manifest.json`. (#13)
 - `omphjc clean --set-aside` deletes the folders a rerun set aside, which the
   stage reports now count. (#14)
+- `omphjc simulate` runs Delphes on a job's showered events through
+  `DelphesROOT`, with the process's detector card or one given by `--card`. (#15)

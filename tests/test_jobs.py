@@ -18,6 +18,7 @@ from omphjc.jobs import (
     generate,
     job_seed,
     shower,
+    simulate,
 )
 from omphjc.madgraph import MadGraphError
 from omphjc.processes import ProcessSpec, get_process
@@ -373,3 +374,61 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
     assert job.set_aside_folders() == []
     assert not (job.stage_dir("madgraph") / "omphjc-set-aside").exists()
     assert job.is_done("madgraph")
+
+
+def test_simulate_needs_a_finished_shower_stage(
+    specs: Mapping[str, ProcessSpec], delphes_root: Path, tmp_path: Path
+) -> None:
+    with pytest.raises(ValueError, match="run omphjc shower first"):
+        simulate(Job(specs["HToBB"], tmp_path, 1), delphes_root=delphes_root)
+    assert not (tmp_path / "HToBB" / "job_1" / "simulate").exists()
+
+
+def test_simulate_records_what_it_made_and_keeps_it(
+    specs: Mapping[str, ProcessSpec],
+    mg5: Path,
+    delphes_pythia8: Path,
+    delphes_root: Path,
+    tmp_path: Path,
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    generate(job, n_events=10, mg5=mg5)
+    showered = shower(job, delphes_pythia8=delphes_pythia8)
+    record = simulate(job, delphes_root=delphes_root)
+    assert record.status == "done"
+    assert record.parameters["seed"] == job.seed
+    assert record.parameters["showered_with"] == showered.metadata["settings"]
+    assert len(record.parameters["card"]) == 64
+    assert record.metadata["events"] == showered.metadata["events_accepted"]
+    assert list(record.metadata["card"]) == ["simulate/delphes_card.tcl"]
+    assert record.outputs == ["simulate/delphes.root"]
+    assert (job.root / "simulate" / "delphes.root").is_file()
+    assert record.log == "simulate/simulate.log"
+    card = (job.root / "simulate" / "delphes_card.tcl").read_text()
+    assert card.startswith("set RandomSeed 10000001\n")
+    log = (job.root / "simulate" / "simulate.log").read_text()
+    assert f"** Reading {job.root / 'shower' / 'particles.root'}" in log
+
+    kept = simulate(Job(specs["HToBB"], tmp_path, 1), delphes_root=delphes_root)
+    assert kept == record
+    other = tmp_path / "other.tcl"
+    other.write_text("set ExecutionPath {\n  TreeWriter\n}\n")
+    with pytest.raises(ValueError, match="ran with"):
+        simulate(
+            Job(specs["HToBB"], tmp_path, 1), card=other, delphes_root=delphes_root
+        )
+    forced = simulate(
+        Job(specs["HToBB"], tmp_path, 1),
+        card=other,
+        force=True,
+        delphes_root=delphes_root,
+    )
+    assert (
+        forced.status == "done"
+        and forced.parameters["card"] != record.parameters["card"]
+    )
+    assert (
+        (job.root / "simulate" / "delphes_card.tcl")
+        .read_text()
+        .endswith(other.read_text())
+    )

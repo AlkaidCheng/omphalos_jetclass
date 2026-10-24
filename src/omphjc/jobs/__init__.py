@@ -5,8 +5,8 @@ one directory per stage. The job number fixes the seed of every program the
 job runs, so a job is reproducible from its process and number alone.
 :class:`Job` builds the directory, keeps the manifest and applies the rerun
 rules; :mod:`omphjc.jobs.manifest` defines the file; the functions in
-:mod:`omphjc.jobs.stages` run the stages: MadGraph generation, then the
-Pythia and Delphes shower.
+:mod:`omphjc.jobs.stages` run the stages: MadGraph generation, the Pythia
+shower, then the Delphes simulation.
 """
 
 from omphjc.jobs.job import (
@@ -18,7 +18,7 @@ from omphjc.jobs.job import (
     sha256,
 )
 from omphjc.jobs.manifest import DONE, FAILED, RUNNING, Manifest, StageRecord
-from omphjc.jobs.stages import MADGRAPH, SHOWER, generate, shower
+from omphjc.jobs.stages import MADGRAPH, SHOWER, SIMULATE, generate, shower, simulate
 
 __all__ = [
     "DONE",
@@ -26,6 +26,7 @@ __all__ = [
     "MADGRAPH",
     "RUNNING",
     "SHOWER",
+    "SIMULATE",
     "Job",
     "Manifest",
     "StageOutcome",
@@ -36,4 +37,5 @@ __all__ = [
     "job_seed",
     "sha256",
     "shower",
+    "simulate",
 ]
