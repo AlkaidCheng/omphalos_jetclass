@@ -333,3 +333,43 @@ def test_sigterm_becomes_an_exception_inside_the_block() -> None:
     with pytest.raises(TerminationError, match="signal"), exception_on_termination():
         os.kill(os.getpid(), signal.SIGTERM)
     assert signal.getsignal(signal.SIGTERM) == before
+
+
+def test_a_stage_records_the_folder_its_run_set_aside(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+
+    def body(overwrite: bool) -> StageOutcome:
+        aside = job.stage_dir("x") / "omphjc-set-aside" / "20260101T000000Z-abc"
+        aside.mkdir(parents=True)
+        return replace(_make_output(job), set_aside=aside)
+
+    record = job.run_stage("x", {"events": 10}, body)
+    assert record.set_aside == "x/omphjc-set-aside/20260101T000000Z-abc"
+    assert Manifest.read(job.manifest_path).stages["x"].set_aside == record.set_aside
+
+
+def test_a_job_lists_and_clears_what_its_stages_set_aside(
+    specs: Mapping[str, ProcessSpec],
+    mg5: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import omphjc.workspace as workspace
+
+    with monkeypatch.context() as killed_before_sealing:
+        killed_before_sealing.setattr(workspace, "seal", lambda *_: None)
+        generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5=mg5)
+    job = Job(specs["HToBB"], tmp_path, 1)
+    assert job.set_aside_folders() == []
+    record = generate(job, n_events=10, force=True, mg5=mg5)
+    assert record.set_aside is not None
+    assert record.set_aside.startswith("madgraph/omphjc-set-aside/")
+    folders = job.set_aside_folders()
+    assert [job.relative(folder.path) for folder in folders] == [record.set_aside]
+    assert folders[0].size() > 0
+    assert job.clear_set_aside_folders() == folders
+    assert job.set_aside_folders() == []
+    assert not (job.stage_dir("madgraph") / "omphjc-set-aside").exists()
+    assert job.is_done("madgraph")

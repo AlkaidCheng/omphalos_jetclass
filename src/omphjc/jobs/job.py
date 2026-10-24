@@ -34,6 +34,7 @@ from omphjc.jobs.manifest import (
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.pythia.cmnd import PYTHIA_SEED_LIMIT
 from omphjc.safe_paths import inside, working_directory
+from omphjc.stamps import SetAsideFolder, clear_set_aside_folders, set_aside_folders
 
 JOB_DIR_PREFIX = "job_"
 
@@ -58,12 +59,17 @@ class StageOutcome:
     usage : dict[str, float]
         What the stage's program took beyond the wall time the job measures
         itself, such as ``cpu_seconds`` and ``max_memory_mb``.
+    set_aside : Path or None
+        The folder into which the run moved what an earlier run left and it
+        could not confirm as that run's, inside the job directory; ``None``
+        when it moved nothing.
     """
 
     metadata: dict[str, Any]
     outputs: list[Path]
     log: Path | None = None
     usage: dict[str, float] = field(default_factory=dict)
+    set_aside: Path | None = None
 
 
 StageBody = Callable[[bool], StageOutcome]
@@ -237,10 +243,44 @@ class Job:
                 "wall_seconds": round(time.monotonic() - clock, 3),
                 **outcome.usage,
             },
+            set_aside=(
+                None if outcome.set_aside is None else self.relative(outcome.set_aside)
+            ),
         )
         self.manifest.stages[stage] = record
         self._write_manifest()
         return record
+
+    def set_aside_folders(self) -> list[SetAsideFolder]:
+        """Return what earlier runs of the job's stages set aside, oldest first.
+
+        A run that cannot confirm an artifact an earlier run left, as after a
+        kill before sealing, moves it into ``<stage>/omphjc-set-aside/``
+        rather than deleting it (:mod:`omphjc.stamps`). The folders stay until
+        :meth:`clear_set_aside_folders` or the user deletes them.
+        """
+        found = [
+            folder
+            for stage in self.manifest.stages
+            for folder in set_aside_folders(self.stage_dir(stage))
+        ]
+        return sorted(found, key=lambda folder: (folder.moment, folder.path))
+
+    def clear_set_aside_folders(self) -> list[SetAsideFolder]:
+        """Delete what earlier runs of the job's stages set aside; return it.
+
+        Raises
+        ------
+        StampError
+            If a stage directory holds set-aside folders but no stamp; nothing
+            in that directory is changed.
+        """
+        removed = [
+            folder
+            for stage in self.manifest.stages
+            for folder in clear_set_aside_folders(self.stage_dir(stage))
+        ]
+        return sorted(removed, key=lambda folder: (folder.moment, folder.path))
 
     def _load_manifest(self) -> Manifest:
         if not self.manifest_path.exists():

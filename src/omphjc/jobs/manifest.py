@@ -24,6 +24,7 @@ created the job, and one record per stage::
           "outputs": ["madgraph/HToBB/Events/run_01/unweighted_events.lhe.gz"],
           "log": "madgraph/madgraph.log",
           "usage": {"wall_seconds": 1203.4, "cpu_seconds": 9012.7, "max_memory_mb": 812.5},
+          "set_aside": null,
           "error": null
         }
       }
@@ -34,9 +35,12 @@ created the job, and one record per stage::
 what the stage was asked for, the seed included where the stage uses one, and
 decides whether a later run may keep its result. ``metadata`` is what is known
 about the stage and the sample it made; its keys are the stage's own.
-``outputs`` and ``log`` are paths relative to the job directory. ``usage`` is
-what the stage took: its wall time, and the CPU time and peak memory (MiB) of
-the external program's processes where the platform reports them. The file is
+``outputs``, ``log`` and ``set_aside`` are paths relative to the job
+directory; ``set_aside`` names the folder into which the run moved what an
+earlier run left and it could not confirm as that run's
+(:mod:`omphjc.stamps`), ``null`` when it moved nothing. ``usage`` is what the
+stage took: its wall time, and the CPU time and peak memory (MiB) of the
+external program's processes where the platform reports them. The file is
 replaced in one step whenever it changes, so a crash never leaves a
 half-written manifest.
 """
@@ -71,6 +75,7 @@ class StageRecord:
     outputs: list[str] = field(default_factory=list)
     log: str | None = None
     usage: dict[str, float] = field(default_factory=dict)
+    set_aside: str | None = None
     error: str | None = None
 
 

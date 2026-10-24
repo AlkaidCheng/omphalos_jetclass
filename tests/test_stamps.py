@@ -11,9 +11,11 @@ from omphjc.stamps import (
     STAMP_FILE,
     StampError,
     clear_artifacts,
+    clear_set_aside_folders,
     read_stamp,
     require_stamp,
     seal,
+    set_aside_folders,
     write_stamp,
 )
 
@@ -221,3 +223,50 @@ def test_a_link_sealed_in_an_artifacts_place_is_set_aside(
     folder = clear_artifacts(run, ["run.log"], "testing", details={"process": "HToBB"})
     assert folder is not None and (folder / "run.log").is_symlink()
     assert elsewhere.read_text() == "mine"
+
+
+def test_set_aside_folders_are_listed_oldest_first_with_their_size(
+    run: Path,
+) -> None:
+    assert set_aside_folders(run) == []
+    for text in ("first", "second!"):
+        (run / "later").mkdir()
+        (run / "later" / "file.txt").write_text(text)
+        clear_artifacts(run, ["later"], "testing")
+    (run / SET_ASIDE_DIR / "notes.txt").write_text("mine")
+    (run / SET_ASIDE_DIR / "20200101T000000Z-link").symlink_to(run / "notes.txt")
+    folders = set_aside_folders(run)
+    assert sorted(folder.size() for folder in folders) == [5, 7]
+    assert folders[0].moment <= folders[1].moment
+    assert folders[0].moment.tzinfo is not None
+    assert all(folder.path.parent == run / SET_ASIDE_DIR for folder in folders)
+
+
+def test_clearing_deletes_the_listed_set_aside_folders_and_nothing_else(
+    run: Path,
+) -> None:
+    assert clear_set_aside_folders(run) == []
+    (run / "later").mkdir()
+    (run / "later" / "file.txt").write_text("gone")
+    clear_artifacts(run, ["later"], "testing")
+    stray = run / SET_ASIDE_DIR / "notes.txt"
+    stray.write_text("mine")
+    removed = clear_set_aside_folders(run)
+    assert len(removed) == 1 and not removed[0].path.exists()
+    assert stray.read_text() == "mine" and set_aside_folders(run) == []
+    stray.unlink()
+    (run / "later").mkdir()
+    clear_artifacts(run, ["later"], "testing")
+    assert len(clear_set_aside_folders(run)) == 1
+    assert not (run / SET_ASIDE_DIR).exists()
+    assert (run / "notes.txt").read_text() == "mine"
+
+
+def test_clearing_set_aside_folders_needs_a_stamp_when_there_is_something_to_delete(
+    tmp_path: Path,
+) -> None:
+    folder = tmp_path / SET_ASIDE_DIR / "20260101T000000Z-abc"
+    folder.mkdir(parents=True)
+    with pytest.raises(StampError, match="no omphjc stamp"):
+        clear_set_aside_folders(tmp_path)
+    assert folder.is_dir()

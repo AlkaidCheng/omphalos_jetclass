@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from omphjc import __version__
+from omphjc.cli.formatting import count, describe_usage, size
 from omphjc.config_paths import config_root, export_config
 from omphjc.delphes import DelphesCard, compare_cards, load_card, reference_card
 from omphjc.jobs import (
@@ -196,30 +197,19 @@ def _report_generation(job: Job, record: StageRecord, *, kept: bool) -> None:
     click.echo(f"  event file        {record.outputs[0]}")
     click.echo(f"  log               {record.log}")
     click.echo(f"  cards             {job.relative(job.stage_dir(MADGRAPH))}/cards/")
-    click.echo(f"  took              {_describe_usage(record.usage)}")
+    click.echo(f"  took              {describe_usage(record.usage)}")
+    _report_set_aside(job)
 
 
-def _describe_usage(usage: Mapping[str, float]) -> str:
-    """Return a stage's wall time, CPU time and peak memory in one line."""
-    parts = []
-    if "wall_seconds" in usage:
-        parts.append(f"{_duration(usage['wall_seconds'])} wall")
-    if "cpu_seconds" in usage:
-        parts.append(f"{_duration(usage['cpu_seconds'])} CPU")
-    if "max_memory_mb" in usage:
-        parts.append(f"{usage['max_memory_mb']:.0f} MiB peak")
-    return ", ".join(parts) if parts else "not recorded"
-
-
-def _duration(seconds: float) -> str:
-    """Return `seconds` as ``12.3 s``, ``4 min 05 s`` or ``2 h 07 min``."""
-    if seconds < 60:
-        return f"{seconds:.1f} s"
-    minutes, rest = divmod(round(seconds), 60)
-    if minutes < 60:
-        return f"{minutes} min {rest:02d} s"
-    hours, minutes = divmod(minutes, 60)
-    return f"{hours} h {minutes:02d} min"
+def _report_set_aside(job: Job) -> None:
+    """Print what earlier runs of `job` set aside, when anything is."""
+    folders = job.set_aside_folders()
+    if not folders:
+        return
+    click.echo(
+        f"  set aside         {count(len(folders), 'folder')} left by earlier runs; "
+        "omphjc clean --set-aside deletes them"
+    )
 
 
 @cli.command("shower")
@@ -309,7 +299,60 @@ def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
     click.echo(f"  output            {record.outputs[0]}")
     click.echo(f"  log               {record.log}")
     click.echo(f"  settings          {', '.join(metadata['settings'])}")
-    click.echo(f"  took              {_describe_usage(record.usage)}")
+    click.echo(f"  took              {describe_usage(record.usage)}")
+    _report_set_aside(job)
+
+
+@cli.command("clean")
+@click.argument("name")
+@click.option("--job", "job_id", type=int, required=True, help="Job number.")
+@click.option(
+    "--outdir",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Directory holding the jobs of every process.",
+)
+@click.option(
+    "--set-aside",
+    "set_aside",
+    is_flag=True,
+    help="Delete what earlier runs set aside in <stage>/omphjc-set-aside/.",
+)
+@click.option(
+    "--dry-run", is_flag=True, help="List what would be deleted; delete nothing."
+)
+@click.pass_obj
+def clean_job(
+    specs: Catalogue,
+    name: str,
+    job_id: int,
+    outdir: Path,
+    set_aside: bool,
+    dry_run: bool,
+) -> None:
+    """Delete what one job of a process no longer needs; an option names what."""
+    if not set_aside:
+        raise click.UsageError("Name what to delete: --set-aside.")
+    spec = _lookup(specs, name)
+    try:
+        job = Job(spec, outdir, job_id)
+        folders = job.set_aside_folders()
+        sizes = [folder.size() for folder in folders]
+        if not dry_run:
+            job.clear_set_aside_folders()
+    except (ValueError, StampError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(f"{job.spec.name} job {job.job_id}: {job.root}")
+    if not folders:
+        click.echo("set aside: nothing")
+        return
+    verb = "would delete" if dry_run else "deleted"
+    click.echo(f"set aside: {verb} {count(len(folders), 'folder')}, {size(sum(sizes))}")
+    for folder, folder_size in zip(folders, sizes, strict=True):
+        click.echo(
+            f"  {job.relative(folder.path):<56} "
+            f"{folder.moment:%Y-%m-%d %H:%M} UTC  {size(folder_size):>9}"
+        )
 
 
 @cli.group()
