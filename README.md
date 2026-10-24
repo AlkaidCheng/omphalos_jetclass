@@ -305,14 +305,14 @@ through `DelphesROOT`. A job may stop after `shower` when only the showered
 events are wanted. Extraction and conversion follow.
 
 ```
-omphjc generate HToBB --job 1 --events 1000 --outdir runs/dev
-omphjc generate HToBB --job 1 --events 1000 --outdir runs/dev --cores 8 --timeout 7200
-omphjc shower HToBB --job 1 --outdir runs/dev
-omphjc shower HToBB --job 1 --outdir runs/dev --set Main:timesAllowErrors=100
-omphjc shower HToBB --job 1 --outdir runs/dev --force    # run it again
-omphjc simulate HToBB --job 1 --outdir runs/dev
-omphjc simulate HToBB --job 1 --outdir runs/dev --card my_detector.tcl --force
-omphjc clean HToBB --job 1 --outdir runs/dev --set-aside  # drop what reruns set aside
+omphjc generate HToBB --job-id 1 --events 1000 --outdir runs/dev
+omphjc generate HToBB --job-id 1 --events 1000 --outdir runs/dev --cores 8 --timeout 7200
+omphjc shower HToBB --job-id 1 --outdir runs/dev
+omphjc shower HToBB --job-id 1 --outdir runs/dev --set Main:timesAllowErrors=100
+omphjc shower HToBB --job-id 1 --outdir runs/dev --force    # run it again
+omphjc simulate HToBB --job-id 1 --outdir runs/dev
+omphjc simulate HToBB --job-id 1 --outdir runs/dev --card my_detector.tcl --force
+omphjc clean HToBB --job-id 1 --outdir runs/dev --set-aside  # drop what reruns set aside
 ```
 
 ```

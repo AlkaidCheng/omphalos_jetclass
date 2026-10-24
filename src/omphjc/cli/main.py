@@ -111,7 +111,7 @@ def check_cards(specs: Catalogue) -> None:
 @cli.command("generate")
 @click.argument("name")
 @click.option(
-    "--job",
+    "--job-id",
     "job_id",
     type=int,
     required=True,
@@ -221,7 +221,7 @@ def _report_set_aside(job: Job) -> None:
 @cli.command("shower")
 @click.argument("name")
 @click.option(
-    "--job",
+    "--job-id",
     "job_id",
     type=int,
     required=True,
@@ -314,7 +314,7 @@ def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
 @cli.command("simulate")
 @click.argument("name")
 @click.option(
-    "--job",
+    "--job-id",
     "job_id",
     type=int,
     required=True,
@@ -400,7 +400,7 @@ def _report_simulation(job: Job, record: StageRecord, *, kept: bool) -> None:
 
 @cli.command("clean")
 @click.argument("name")
-@click.option("--job", "job_id", type=int, required=True, help="Job number.")
+@click.option("--job-id", "job_id", type=int, required=True, help="Job number.")
 @click.option(
     "--outdir",
     "outdir",

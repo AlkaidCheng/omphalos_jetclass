@@ -109,7 +109,7 @@ def test_pythia_show_prints_a_command_file() -> None:
 def test_generate_runs_a_job_and_keeps_a_finished_one(
     mg5_path: Path, tmp_path: Path
 ) -> None:
-    arguments = ["generate", "HToBB", "--job", "1", "--outdir", str(tmp_path)]
+    arguments = ["generate", "HToBB", "--job-id", "1", "--outdir", str(tmp_path)]
     result = CliRunner().invoke(
         cli, [*arguments, "--events", "10", "--mg5", str(mg5_path)]
     )
@@ -140,7 +140,9 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
     assert other_count.exit_code != 0
     assert "ran with {'events': 10, 'seed': 10000001}" in other_count.output
     assert (
-        CliRunner().invoke(cli, [*arguments, "--events", "10", "--job", "0"]).exit_code
+        CliRunner()
+        .invoke(cli, [*arguments, "--events", "10", "--job-id", "0"])
+        .exit_code
         != 0
     )
 
@@ -148,7 +150,7 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
 def test_shower_runs_after_generate_and_reports(
     mg5_path: Path, delphes_pythia8_path: Path, tmp_path: Path
 ) -> None:
-    job = ["HToBB", "--job", "1", "--outdir", str(tmp_path)]
+    job = ["HToBB", "--job-id", "1", "--outdir", str(tmp_path)]
     shower = ["shower", *job, "--delphes-pythia8", str(delphes_pythia8_path)]
     missing = CliRunner().invoke(cli, shower)
     assert missing.exit_code != 0
@@ -181,7 +183,7 @@ def test_clean_deletes_what_earlier_runs_set_aside(
 ) -> None:
     import omphjc.workspace as workspace
 
-    job = ["HToBB", "--job", "1", "--outdir", str(tmp_path)]
+    job = ["HToBB", "--job-id", "1", "--outdir", str(tmp_path)]
     generate = ["generate", *job, "--events", "10", "--mg5", str(mg5_path)]
     with monkeypatch.context() as killed_before_sealing:
         killed_before_sealing.setattr(workspace, "seal", lambda *_: None)
@@ -209,7 +211,7 @@ def test_clean_deletes_what_earlier_runs_set_aside(
 def test_simulate_runs_after_shower_and_reports(
     mg5_path: Path, delphes_pythia8_path: Path, delphes_root_path: Path, tmp_path: Path
 ) -> None:
-    job = ["HToBB", "--job", "1", "--outdir", str(tmp_path)]
+    job = ["HToBB", "--job-id", "1", "--outdir", str(tmp_path)]
     simulate = ["simulate", *job, "--delphes-root", str(delphes_root_path)]
     missing = CliRunner().invoke(cli, simulate)
     assert missing.exit_code != 0
