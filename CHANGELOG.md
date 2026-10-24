@@ -60,3 +60,6 @@
   `read_card`, `parse_statistics`, `format_duration`, `uses_madspin`,
   `is_occupied` and `make_error`; `madgraph.verify` is `madgraph.reference` and
   `madgraph.runcard` is `madgraph.run_card`. (#17)
+- The first stage's directory and manifest record are named `generate` after
+  its command, the job number is `--job-id` on the command line and `job_id` in
+  the manifest, and the peak memory is `peak_memory_mib`. (#18)

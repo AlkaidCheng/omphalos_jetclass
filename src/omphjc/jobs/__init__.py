@@ -18,12 +18,12 @@ from omphjc.jobs.job import (
     sha256,
 )
 from omphjc.jobs.manifest import DONE, FAILED, RUNNING, Manifest, StageRecord
-from omphjc.jobs.stages import MADGRAPH, SHOWER, SIMULATE, generate, shower, simulate
+from omphjc.jobs.stages import GENERATE, SHOWER, SIMULATE, generate, shower, simulate
 
 __all__ = [
     "DONE",
     "FAILED",
-    "MADGRAPH",
+    "GENERATE",
     "RUNNING",
     "SHOWER",
     "SIMULATE",

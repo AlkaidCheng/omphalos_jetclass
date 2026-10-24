@@ -58,7 +58,7 @@ class StageOutcome:
         The stage's log, inside the job directory.
     usage : dict[str, float]
         What the stage's program took beyond the wall time the job measures
-        itself, such as ``cpu_seconds`` and ``max_memory_mb``.
+        itself, such as ``cpu_seconds`` and ``peak_memory_mib``.
     set_aside : Path or None
         The folder into which the run moved what an earlier run left and it
         could not confirm as that run's, inside the job directory; ``None``
@@ -290,11 +290,11 @@ class Job:
 
     def _load_manifest(self) -> Manifest:
         if not self.manifest_path.exists():
-            return Manifest(process=self.spec.name, job=self.job_id)
+            return Manifest(process=self.spec.name, job_id=self.job_id)
         manifest = Manifest.read(self.manifest_path)
-        if (manifest.process, manifest.job) != (self.spec.name, self.job_id):
+        if (manifest.process, manifest.job_id) != (self.spec.name, self.job_id):
             raise ValueError(
-                f"{self.manifest_path} belongs to {manifest.process} job {manifest.job}"
+                f"{self.manifest_path} belongs to {manifest.process} job {manifest.job_id}"
             )
         return manifest
 

@@ -41,10 +41,10 @@ def test_a_job_has_a_directory_per_process_and_number(
     job = Job(specs["HToBB"], tmp_path / "runs", 7)
     assert job.root_dir == (tmp_path / "runs").resolve() / "HToBB" / "job_7"
     assert job.manifest_path == job.root_dir / "manifest.json"
-    assert job.stage_dir("madgraph") == job.root_dir / "madgraph"
-    assert job.relative_path(job.root_dir / "madgraph" / "x.log") == "madgraph/x.log"
+    assert job.stage_dir("generate") == job.root_dir / "generate"
+    assert job.relative_path(job.root_dir / "generate" / "x.log") == "generate/x.log"
     assert job.seed == 10000007
-    assert job.manifest == Manifest(process="HToBB", job=7)
+    assert job.manifest == Manifest(process="HToBB", job_id=7)
     assert not job.root_dir.exists()
     with pytest.raises(ValueError, match="job_id"):
         Job(specs["HToBB"], tmp_path, 0)
@@ -60,7 +60,7 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
         metadata={"events": 10, "cards": {"x/c.dat": "abc"}},
         outputs=["x/out"],
     )
-    manifest = Manifest(process="HToBB", job=1, stages={"x": record})
+    manifest = Manifest(process="HToBB", job_id=1, stages={"x": record})
     path = tmp_path / "manifest.json"
     manifest.write(path)
     assert json.loads(path.read_text())["schema"] == 1
@@ -180,7 +180,7 @@ def test_a_manifest_of_another_job_is_refused(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     job.root_dir.mkdir(parents=True)
-    Manifest(process="HToGG", job=1).write(job.manifest_path)
+    Manifest(process="HToGG", job_id=1).write(job.manifest_path)
     with pytest.raises(ValueError, match="belongs to HToGG job 1"):
         Job(specs["HToBB"], tmp_path, 1)
 
@@ -190,7 +190,7 @@ def test_generate_records_what_madgraph_made(
 ) -> None:
     job = Job(specs["TTBar"], tmp_path, 3)
     record = generate(job, n_events=10, mg5_path=mg5_path)
-    assert Manifest.read(job.manifest_path).stages["madgraph"] == record
+    assert Manifest.read(job.manifest_path).stages["generate"] == record
     assert record.status == "done"
     assert record.parameters == {"events": 10, "seed": 3}
     assert record.metadata["madgraph_version"] == "3.5.7"
@@ -198,26 +198,26 @@ def test_generate_records_what_madgraph_made(
     assert record.metadata["cross_section_pb"] == pytest.approx(1.052824254921272)
     assert record.metadata["cross_section_error_pb"] == pytest.approx(2.3983749989e-3)
     assert record.usage["wall_seconds"] > 0
-    assert record.usage["cpu_seconds"] >= 0 and record.usage["max_memory_mb"] > 0
+    assert record.usage["cpu_seconds"] >= 0 and record.usage["peak_memory_mib"] > 0
     assert record.outputs == [
-        "madgraph/TTBar/Events/run_01_decayed_1/unweighted_events.lhe.gz"
+        "generate/TTBar/Events/run_01_decayed_1/unweighted_events.lhe.gz"
     ]
     assert (job.root_dir / record.outputs[0]).is_file()
-    assert record.log == "madgraph/madgraph.log"
-    card = job.root_dir / "madgraph" / "cards" / "proc_card_mg5.dat"
+    assert record.log == "generate/madgraph.log"
+    card = job.root_dir / "generate" / "cards" / "proc_card_mg5.dat"
     assert card.is_file()
-    assert record.metadata["cards"]["madgraph/cards/proc_card_mg5.dat"] == (
+    assert record.metadata["cards"]["generate/cards/proc_card_mg5.dat"] == (
         hashlib.sha256(card.read_bytes()).hexdigest()
     )
     assert (card.parent / "madspin_card.dat").is_file()
-    assert "set iseed 3" in (job.root_dir / "madgraph" / "launch.mg5").read_text()
+    assert "set iseed 3" in (job.root_dir / "generate" / "launch.mg5").read_text()
 
 
 def test_generate_keeps_a_finished_run_unless_forced(
     specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     first = generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
-    log = tmp_path / "HToBB" / "job_1" / "madgraph" / "madgraph.log"
+    log = tmp_path / "HToBB" / "job_1" / "generate" / "madgraph.log"
     runs = log.read_text().count("$ ")
     assert (
         generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
@@ -247,7 +247,7 @@ def test_a_failed_madgraph_run_is_recorded_and_retried(
     with pytest.raises(MadGraphError):
         generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
     manifest = Manifest.read(tmp_path / "HToBB" / "job_1" / "manifest.json")
-    record = manifest.stages["madgraph"]
+    record = manifest.stages["generate"]
     assert record.status == "failed" and record.finished is not None
     assert record.error is not None and "launch.mg5" in record.error
     monkeypatch.delenv("FAKE_MG5_FAIL")
@@ -387,14 +387,14 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
     assert job.set_aside_folders() == []
     record = generate(job, n_events=10, force=True, mg5_path=mg5_path)
     assert record.set_aside is not None
-    assert record.set_aside.startswith("madgraph/omphjc-set-aside/")
+    assert record.set_aside.startswith("generate/omphjc-set-aside/")
     folders = job.set_aside_folders()
     assert [job.relative_path(folder.path) for folder in folders] == [record.set_aside]
     assert folders[0].size() > 0
     assert job.clear_set_aside_folders() == folders
     assert job.set_aside_folders() == []
-    assert not (job.stage_dir("madgraph") / "omphjc-set-aside").exists()
-    assert job.is_done("madgraph")
+    assert not (job.stage_dir("generate") / "omphjc-set-aside").exists()
+    assert job.is_done("generate")
 
 
 def test_simulate_needs_a_finished_shower_stage(

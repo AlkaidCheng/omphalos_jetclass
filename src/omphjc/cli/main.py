@@ -10,7 +10,7 @@ from omphjc.cli.formatting import format_count, format_size, format_usage
 from omphjc.config_paths import config_dir, export_config
 from omphjc.delphes import DelphesCard, compare_cards, read_card, reference_card
 from omphjc.jobs import (
-    MADGRAPH,
+    GENERATE,
     SHOWER,
     SIMULATE,
     Job,
@@ -111,7 +111,7 @@ def check_cards(specs: Catalogue) -> None:
 @cli.command("generate")
 @click.argument("name")
 @click.option(
-    "--job",
+    "--job-id",
     "job_id",
     type=int,
     required=True,
@@ -161,7 +161,7 @@ def generate_job(
     spec = _lookup(specs, name)
     try:
         job = Job(spec, outdir, job_id)
-        earlier = job.manifest.stages.get(MADGRAPH)
+        earlier = job.manifest.stages.get(GENERATE)
         with exception_on_termination():
             record = generate(
                 job,
@@ -184,7 +184,7 @@ def generate_job(
 
 
 def _report_generation(job: Job, record: StageRecord, *, kept: bool) -> None:
-    """Print what the MadGraph stage of `job` ran with and what it made."""
+    """Print what the generate stage of `job` ran with and what it made."""
     metadata = record.metadata
     outcome = "done, kept from an earlier run" if kept else "done"
     click.echo(f"{job.spec.name} job {job.job_id}: {job.root_dir}")
@@ -201,7 +201,7 @@ def _report_generation(job: Job, record: StageRecord, *, kept: bool) -> None:
     click.echo(f"  event file        {record.outputs[0]}")
     click.echo(f"  log               {record.log}")
     click.echo(
-        f"  cards             {job.relative_path(job.stage_dir(MADGRAPH))}/cards/"
+        f"  cards             {job.relative_path(job.stage_dir(GENERATE))}/cards/"
     )
     click.echo(f"  took              {format_usage(record.usage)}")
     _report_set_aside(job)
@@ -221,7 +221,7 @@ def _report_set_aside(job: Job) -> None:
 @cli.command("shower")
 @click.argument("name")
 @click.option(
-    "--job",
+    "--job-id",
     "job_id",
     type=int,
     required=True,
@@ -314,7 +314,7 @@ def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
 @cli.command("simulate")
 @click.argument("name")
 @click.option(
-    "--job",
+    "--job-id",
     "job_id",
     type=int,
     required=True,
@@ -400,7 +400,7 @@ def _report_simulation(job: Job, record: StageRecord, *, kept: bool) -> None:
 
 @cli.command("clean")
 @click.argument("name")
-@click.option("--job", "job_id", type=int, required=True, help="Job number.")
+@click.option("--job-id", "job_id", type=int, required=True, help="Job number.")
 @click.option(
     "--outdir",
     "outdir",

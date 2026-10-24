@@ -305,20 +305,20 @@ through `DelphesROOT`. A job may stop after `shower` when only the showered
 events are wanted. Extraction and conversion follow.
 
 ```
-omphjc generate HToBB --job 1 --events 1000 --outdir runs/dev
-omphjc generate HToBB --job 1 --events 1000 --outdir runs/dev --cores 8 --timeout 7200
-omphjc shower HToBB --job 1 --outdir runs/dev
-omphjc shower HToBB --job 1 --outdir runs/dev --set Main:timesAllowErrors=100
-omphjc shower HToBB --job 1 --outdir runs/dev --force    # run it again
-omphjc simulate HToBB --job 1 --outdir runs/dev
-omphjc simulate HToBB --job 1 --outdir runs/dev --card my_detector.tcl --force
-omphjc clean HToBB --job 1 --outdir runs/dev --set-aside  # drop what reruns set aside
+omphjc generate HToBB --job-id 1 --events 1000 --outdir runs/dev
+omphjc generate HToBB --job-id 1 --events 1000 --outdir runs/dev --cores 8 --timeout 7200
+omphjc shower HToBB --job-id 1 --outdir runs/dev
+omphjc shower HToBB --job-id 1 --outdir runs/dev --set Main:timesAllowErrors=100
+omphjc shower HToBB --job-id 1 --outdir runs/dev --force    # run it again
+omphjc simulate HToBB --job-id 1 --outdir runs/dev
+omphjc simulate HToBB --job-id 1 --outdir runs/dev --card my_detector.tcl --force
+omphjc clean HToBB --job-id 1 --outdir runs/dev --set-aside  # drop what reruns set aside
 ```
 
 ```
 runs/dev/HToBB/job_1/
 ├── manifest.json          what ran, with what, and what came out
-├── madgraph/              the MadGraph working directory, MadGraph's own layout inside
+├── generate/              the MadGraph working directory, MadGraph's own layout inside
 │   ├── cards/             the cards MadGraph ran with, hashed in the manifest
 │   ├── madgraph.log
 │   └── HToBB/Events/run_01/unweighted_events.lhe.gz

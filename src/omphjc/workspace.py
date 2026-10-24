@@ -95,7 +95,9 @@ class Workspace:
         self.purpose = purpose
         self.details = dict(details)
         self.deadline = None if timeout is None else time.monotonic() + timeout
-        self.usage = ProgramUsage(wall_seconds=0.0, cpu_seconds=0.0, max_memory_mb=None)
+        self.usage = ProgramUsage(
+            wall_seconds=0.0, cpu_seconds=0.0, peak_memory_mib=None
+        )
         self._log_name = log_name
 
     @property

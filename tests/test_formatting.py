@@ -33,6 +33,8 @@ def test_usage_lists_what_was_recorded() -> None:
     assert format_usage({}) == "not recorded"
     assert format_usage({"wall_seconds": 1.5}) == "1.5 s wall"
     assert (
-        format_usage({"wall_seconds": 90, "cpu_seconds": 3600, "max_memory_mb": 812.4})
+        format_usage(
+            {"wall_seconds": 90, "cpu_seconds": 3600, "peak_memory_mib": 812.4}
+        )
         == "1 min 30 s wall, 1 h 00 min CPU, 812 MiB peak"
     )

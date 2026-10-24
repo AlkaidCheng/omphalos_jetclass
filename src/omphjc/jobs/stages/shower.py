@@ -5,7 +5,7 @@ from pathlib import Path
 
 from omphjc.jobs.job import Job, StageOutcome, sha256
 from omphjc.jobs.manifest import StageRecord
-from omphjc.jobs.stages.generate import MADGRAPH
+from omphjc.jobs.stages.generate import GENERATE
 from omphjc.processes.catalogue import SettingValue
 from omphjc.pythia.driver import shower_events
 
@@ -24,7 +24,7 @@ def shower(
     """Shower the generated events of `job` with Pythia 8.
 
     Runs :func:`omphjc.pythia.shower_events` in the job's ``shower/``
-    directory on the event file the MadGraph stage made, with the job's seed
+    directory on the event file the generate stage made, with the job's seed
     and as many events as that stage recorded. The stage's parameters are the
     event count, the seed, the Pythia overrides and the cards the events were
     generated with, so a sample regenerated with the same seed keeps its
@@ -35,7 +35,7 @@ def shower(
     Parameters
     ----------
     job : Job
-        The job; its MadGraph stage must be done.
+        The job; its generate stage must be done.
     overrides : Mapping[str, SettingValue] or None, optional
         Pythia settings applied over the catalogue's.
     timeout : float or None, optional
@@ -53,12 +53,12 @@ def shower(
     Raises
     ------
     ValueError
-        If the MadGraph stage of `job` has not run to completion.
+        If the generate stage of `job` has not run to completion.
     """
-    generated = job.manifest.stages.get(MADGRAPH)
-    if generated is None or not job.is_done(MADGRAPH):
+    generated = job.manifest.stages.get(GENERATE)
+    if generated is None or not job.is_done(GENERATE):
         raise ValueError(
-            f"The MadGraph stage of {job.root_dir} has not run to completion; run "
+            f"The generate stage of {job.root_dir} has not run to completion; run "
             "omphjc generate first"
         )
     lhe_path = job.root_dir / generated.outputs[0]
