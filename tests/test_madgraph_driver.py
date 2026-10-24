@@ -310,6 +310,41 @@ def test_a_failed_run_is_sealed_and_replaced(
     assert run.set_aside is None
 
 
+def test_a_model_copy_cut_short_is_sealed_and_replaced(
+    specs: Mapping[str, ProcessSpec],
+    mg5_path: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def copy_cut_short(source: Path, destination: Path, **_: object) -> None:
+        destination.mkdir(parents=True)
+        (destination / "__init__.py").write_text("")
+        raise OSError("copy cut short")
+
+    with monkeypatch.context() as cut_short:
+        cut_short.setattr(shutil, "copytree", copy_cut_short)
+        with pytest.raises(OSError, match="cut short"):
+            generate_events(
+                specs["HToWW4Q"],
+                workdir=tmp_path,
+                n_events=10,
+                seed=1,
+                mg5_path=mg5_path,
+            )
+    stamp = read_stamp(tmp_path)
+    assert stamp is not None
+    assert "models/heft" in stamp.artifacts
+    run = generate_events(
+        specs["HToWW4Q"],
+        workdir=tmp_path,
+        n_events=10,
+        seed=2,
+        mg5_path=mg5_path,
+    )
+    assert run.set_aside is None
+    assert (tmp_path / "models" / "heft" / "py3_model.pkl").is_file()
+
+
 def test_an_invalid_request_leaves_an_earlier_run_in_place(
     specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:

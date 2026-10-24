@@ -66,3 +66,8 @@
 - `compare_process` and `compare_all` report `omphjc.comparison.Difference`
   records like the Pythia and Delphes comparisons, `compare_all` keyed by
   process name; `Mismatch` is gone. (#19)
+
+### Fixed
+
+- A model copy cut short in `generate_events` is sealed with the run's other
+  artifacts, so the next run deletes it instead of setting it aside. (#20)
