@@ -19,7 +19,7 @@ from omphjc.processes import ProcessSpec
 
 
 def test_catalogue_matches_the_official_gridpack_cards() -> None:
-    assert compare_all() == []
+    assert compare_all() == {}
 
 
 def test_every_tracked_official_setting_is_pinned(
@@ -40,10 +40,10 @@ def test_a_changed_cut_is_reported(specs: Mapping[str, ProcessSpec]) -> None:
     altered = ProcessSpec(
         **{**original.__dict__, "run_card": {**original.run_card, "misset": 400.0}}
     )
-    mismatches = compare_process(altered)
-    assert [m.item for m in mismatches] == ["run_card.misset"]
-    assert mismatches[0].expected == "450.0"
-    assert mismatches[0].actual == "400.0"
+    differences = compare_process(altered)
+    assert [d.item for d in differences] == ["run_card.misset"]
+    assert differences[0].expected == "450.0"
+    assert differences[0].actual == "400.0"
 
 
 def test_a_missing_tracked_setting_is_reported(
@@ -52,9 +52,9 @@ def test_a_missing_tracked_setting_is_reported(
     original = specs["HToWW2Q1L"]
     run_card = {key: value for key, value in original.run_card.items() if key != "ptl"}
     altered = ProcessSpec(**{**original.__dict__, "run_card": run_card})
-    mismatches = compare_process(altered)
-    assert [m.item for m in mismatches] == ["run_card.ptl"]
-    assert mismatches[0].actual == "absent"
+    differences = compare_process(altered)
+    assert [d.item for d in differences] == ["run_card.ptl"]
+    assert differences[0].actual == "absent"
 
 
 def test_proc_card_commands_for_a_matched_process(
@@ -163,7 +163,7 @@ def test_a_changed_decay_is_reported(
     card = tmp_path / "TTBar.dat"
     card.write_text(text.replace(hadronic, leptonic), encoding="utf-8")
     altered = ProcessSpec(**{**original.__dict__, "madspin_card": card})
-    assert sorted(str(m) for m in compare_process(altered)) == [
-        f"TTBar: madspin {hadronic}: expected present, got absent",
-        f"TTBar: madspin {leptonic}: expected absent, got present",
+    assert sorted(str(d) for d in compare_process(altered)) == [
+        f"madspin {hadronic}: expected present, got absent",
+        f"madspin {leptonic}: expected absent, got present",
     ]

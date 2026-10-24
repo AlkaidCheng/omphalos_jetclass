@@ -21,7 +21,6 @@ from omphjc.madgraph.madspin import (
 from omphjc.madgraph.reference import (
     DISABLED_DEFAULTS,
     TRACKED_PARAMETERS,
-    Mismatch,
     compare_all,
     compare_process,
     reference_proc_lines,
@@ -43,7 +42,6 @@ __all__ = [
     "MadGraphRun",
     "MadGraphWorkspace",
     "MadSpinCard",
-    "Mismatch",
     "compare_madspin_cards",
     "parse_madspin_card",
     "compare_all",

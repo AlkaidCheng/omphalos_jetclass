@@ -9,9 +9,9 @@ not compared.
 """
 
 from collections.abc import Iterable
-from dataclasses import dataclass
 from pathlib import Path
 
+from omphjc.comparison import Difference
 from omphjc.madgraph.cards import madspin_card_text, proc_card_commands
 from omphjc.madgraph.madspin import compare_madspin_cards, parse_madspin_card
 from omphjc.madgraph.run_card import (
@@ -94,22 +94,6 @@ _PROC_CARD_PREAMBLE: tuple[str, ...] = (
 _OFFICIAL_MODEL_ALIASES: dict[str, str] = {"heft-c_mass": "heft_c_mass_jetclass"}
 
 
-@dataclass(frozen=True)
-class Mismatch:
-    """One difference between the catalogue and the reference cards."""
-
-    process: str
-    item: str
-    expected: str
-    actual: str
-
-    def __str__(self) -> str:
-        return (
-            f"{self.process}: {self.item}: expected {self.expected}, "
-            f"got {self.actual}"
-        )
-
-
 def reference_run_settings(spec: ProcessSpec) -> dict[str, RunCardValue]:
     """Return the reference run-card values with the launch overrides applied.
 
@@ -152,7 +136,7 @@ def reference_proc_lines(spec: ProcessSpec) -> list[str]:
     return [_canonical_import(line) for line in lines]
 
 
-def compare_process(spec: ProcessSpec) -> list[Mismatch]:
+def compare_process(spec: ProcessSpec) -> list[Difference]:
     """Return every difference between `spec` and its reference cards.
 
     Raises
@@ -160,23 +144,29 @@ def compare_process(spec: ProcessSpec) -> list[Mismatch]:
     ValueError
         If `spec` has no reference cards.
     """
-    mismatches = _compare_run_card(spec)
-    mismatches.extend(_compare_proc_card(spec))
-    mismatches.extend(_compare_madspin(spec))
-    return mismatches
+    differences = _compare_run_card(spec)
+    differences.extend(_compare_proc_card(spec))
+    differences.extend(_compare_madspin(spec))
+    return differences
 
 
-def compare_all(specs: Iterable[ProcessSpec] | None = None) -> list[Mismatch]:
-    """Return the differences for every process that has reference cards.
+def compare_all(
+    specs: Iterable[ProcessSpec] | None = None,
+) -> dict[str, list[Difference]]:
+    """Return the differences of every process that has reference cards.
 
-    Without `specs`, the processes of the default catalogue are compared.
+    The result maps a process name to its differences, in catalogue order;
+    a process that matches its reference cards is absent, so an empty result
+    means every compared process matches. Without `specs`, the processes of
+    the default catalogue are compared.
     """
-    return [
-        mismatch
-        for spec in (default_catalogue().values() if specs is None else specs)
-        if spec.reference_cards is not None
-        for mismatch in compare_process(spec)
-    ]
+    differences = {}
+    for spec in default_catalogue().values() if specs is None else specs:
+        if spec.reference_cards is None:
+            continue
+        if process_differences := compare_process(spec):
+            differences[spec.name] = process_differences
+    return differences
 
 
 def _reference_dir(spec: ProcessSpec) -> Path:
@@ -185,18 +175,17 @@ def _reference_dir(spec: ProcessSpec) -> Path:
     return spec.reference_cards
 
 
-def _compare_run_card(spec: ProcessSpec) -> list[Mismatch]:
+def _compare_run_card(spec: ProcessSpec) -> list[Difference]:
     reference = reference_run_settings(spec)
-    mismatches = []
+    differences = []
     for name, value in spec.run_card.items():
         if name not in reference:
-            mismatches.append(
-                Mismatch(spec.name, f"run_card.{name}", "absent", format_value(value))
+            differences.append(
+                Difference(f"run_card.{name}", "absent", format_value(value))
             )
         elif not values_equal(value, reference[name]):
-            mismatches.append(
-                Mismatch(
-                    spec.name,
+            differences.append(
+                Difference(
                     f"run_card.{name}",
                     format_value(reference[name]),
                     format_value(value),
@@ -208,15 +197,13 @@ def _compare_run_card(spec: ProcessSpec) -> list[Mismatch]:
             reference[name], DISABLED_DEFAULTS[name]
         ):
             continue
-        mismatches.append(
-            Mismatch(
-                spec.name, f"run_card.{name}", format_value(reference[name]), "absent"
-            )
+        differences.append(
+            Difference(f"run_card.{name}", format_value(reference[name]), "absent")
         )
-    return mismatches
+    return differences
 
 
-def _compare_proc_card(spec: ProcessSpec) -> list[Mismatch]:
+def _compare_proc_card(spec: ProcessSpec) -> list[Difference]:
     expected = reference_proc_lines(spec)
     actual = [
         _canonical_import(line)
@@ -225,26 +212,21 @@ def _compare_proc_card(spec: ProcessSpec) -> list[Mismatch]:
     ]
     if expected == actual:
         return []
-    return [Mismatch(spec.name, "proc_card", " | ".join(expected), " | ".join(actual))]
+    return [Difference("proc_card", " | ".join(expected), " | ".join(actual))]
 
 
-def _compare_madspin(spec: ProcessSpec) -> list[Mismatch]:
+def _compare_madspin(spec: ProcessSpec) -> list[Difference]:
     reference_card = _reference_dir(spec) / "madspin_card.dat"
     if reference_card.is_file() != spec.uses_madspin:
         return [
-            Mismatch(
-                spec.name,
-                "madspin",
-                str(reference_card.is_file()),
-                str(spec.uses_madspin),
-            )
+            Difference("madspin", str(reference_card.is_file()), str(spec.uses_madspin))
         ]
     if not spec.uses_madspin:
         return []
     reference = parse_madspin_card(reference_card.read_text("utf-8"))
     card = parse_madspin_card(madspin_card_text(spec))
     return [
-        Mismatch(spec.name, f"madspin {d.item}", d.expected, d.actual)
+        Difference(f"madspin {d.item}", d.expected, d.actual)
         for d in compare_madspin_cards(card, reference)
     ]
 
