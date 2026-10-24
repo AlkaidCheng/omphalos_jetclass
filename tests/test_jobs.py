@@ -44,7 +44,7 @@ def test_a_job_has_a_directory_per_process_and_number(
     assert job.stage_dir("generate") == job.root_dir / "generate"
     assert job.relative_path(job.root_dir / "generate" / "x.log") == "generate/x.log"
     assert job.seed == 10000007
-    assert job.manifest == Manifest(process="HToBB", job=7)
+    assert job.manifest == Manifest(process="HToBB", job_id=7)
     assert not job.root_dir.exists()
     with pytest.raises(ValueError, match="job_id"):
         Job(specs["HToBB"], tmp_path, 0)
@@ -60,7 +60,7 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
         metadata={"events": 10, "cards": {"x/c.dat": "abc"}},
         outputs=["x/out"],
     )
-    manifest = Manifest(process="HToBB", job=1, stages={"x": record})
+    manifest = Manifest(process="HToBB", job_id=1, stages={"x": record})
     path = tmp_path / "manifest.json"
     manifest.write(path)
     assert json.loads(path.read_text())["schema"] == 1
@@ -180,7 +180,7 @@ def test_a_manifest_of_another_job_is_refused(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     job.root_dir.mkdir(parents=True)
-    Manifest(process="HToGG", job=1).write(job.manifest_path)
+    Manifest(process="HToGG", job_id=1).write(job.manifest_path)
     with pytest.raises(ValueError, match="belongs to HToGG job 1"):
         Job(specs["HToBB"], tmp_path, 1)
 

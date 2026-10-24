@@ -6,7 +6,7 @@ created the job, and one record per stage::
     {
       "schema": 1,
       "process": "HToBB",
-      "job": 1,
+      "job_id": 1,
       "omphjc_version": "0.1.0",
       "stages": {
         "generate": {
@@ -84,7 +84,7 @@ class Manifest:
     """The manifest of one job; the module docstring describes the fields."""
 
     process: str
-    job: int
+    job_id: int
     omphjc_version: str = __version__
     stages: dict[str, StageRecord] = field(default_factory=dict)
 
@@ -120,7 +120,7 @@ class Manifest:
         try:
             return cls(
                 process=record["process"],
-                job=record["job"],
+                job_id=record["job_id"],
                 omphjc_version=record["omphjc_version"],
                 stages={
                     name: StageRecord(**stage)

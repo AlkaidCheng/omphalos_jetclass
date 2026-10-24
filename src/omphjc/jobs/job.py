@@ -290,11 +290,11 @@ class Job:
 
     def _load_manifest(self) -> Manifest:
         if not self.manifest_path.exists():
-            return Manifest(process=self.spec.name, job=self.job_id)
+            return Manifest(process=self.spec.name, job_id=self.job_id)
         manifest = Manifest.read(self.manifest_path)
-        if (manifest.process, manifest.job) != (self.spec.name, self.job_id):
+        if (manifest.process, manifest.job_id) != (self.spec.name, self.job_id):
             raise ValueError(
-                f"{self.manifest_path} belongs to {manifest.process} job {manifest.job}"
+                f"{self.manifest_path} belongs to {manifest.process} job {manifest.job_id}"
             )
         return manifest
 
