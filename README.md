@@ -330,8 +330,10 @@ The job number gives the seed of every program the job runs
 (`seed_offset + job`, see [Seeds](#seeds)), so a job is reproducible from its
 process and number alone. The manifest records the process, the job number,
 the omphjc version, and for each stage its status, its start and end times,
-the parameters it was asked for, the metadata of what it made, its outputs and
-its log. For generation the parameters are the event count and the seed, and
+the parameters it was asked for, the metadata of what it made, its outputs,
+its log, and what it took: the wall time of the stage and the CPU time and
+peak memory of the program's processes. For generation the parameters are the
+event count and the seed, and
 the metadata the MadGraph version, the events, the cross section with its
 error and the SHA-256 of each card. For the shower the parameters are the
 event count, the seed, the Pythia overrides and the cards the events were

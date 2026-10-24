@@ -8,6 +8,7 @@ import pytest
 
 from omphjc.programs import (
     ProgramError,
+    ProgramUsage,
     available_cores,
     log_tail,
     run_program,
@@ -47,6 +48,18 @@ def test_the_program_runs_in_the_given_directory_without_input(tmp_path: Path) -
         log=log,
     )
     assert log.read_text().splitlines()[1:] == [str(tmp_path.resolve()), "''"]
+
+
+def test_a_run_reports_its_wall_time_cpu_time_and_memory(tmp_path: Path) -> None:
+    code = "import time; s = time.process_time()\nwhile time.process_time() - s < 0.2: pass"
+    usage = run_program(python(code), cwd=tmp_path, log=tmp_path / "run.log")
+    assert usage.wall_seconds >= 0.2
+    assert usage.cpu_seconds is not None and usage.cpu_seconds >= 0.15
+    assert usage.max_memory_mb is not None and usage.max_memory_mb > 1
+    assert set(usage.recorded()) == {"cpu_seconds", "max_memory_mb"}
+    both = usage.combined(ProgramUsage(1.0, None, None))
+    assert both.wall_seconds == usage.wall_seconds + 1.0
+    assert both.cpu_seconds is None and both.max_memory_mb == usage.max_memory_mb
 
 
 def test_a_failing_status_raises_with_the_end_of_the_log(tmp_path: Path) -> None:

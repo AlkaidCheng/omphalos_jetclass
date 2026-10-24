@@ -13,9 +13,19 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+try:
+    import resource
+except ImportError:  # Windows has no resource module.
+    resource = None  # type: ignore[assignment]
+
+# ru_maxrss is in bytes on macOS and in kibibytes elsewhere.
+_MAXRSS_BYTES = 1 if sys.platform == "darwin" else 1024
 
 _LOG_TAIL_LINES = 20
 
@@ -67,13 +77,69 @@ def find_program(program: str, program_path: Path | None, *, description: str) -
     return Path(found)
 
 
+@dataclass(frozen=True)
+class ProgramUsage:
+    """What a run of an external program took.
+
+    Parameters
+    ----------
+    wall_seconds : float
+        Time from the program's start to its exit.
+    cpu_seconds : float or None
+        User and system CPU time of the program and of every process it
+        waited for, so MadGraph's parallel jobs count; ``None`` where the
+        platform does not report it.
+    max_memory_mb : float or None
+        Peak resident memory, in MiB, of the largest process this Python
+        process has waited for so far, this program's or an earlier one's;
+        ``None`` where the platform does not report it.
+    """
+
+    wall_seconds: float
+    cpu_seconds: float | None
+    max_memory_mb: float | None
+
+    def combined(self, other: "ProgramUsage") -> "ProgramUsage":
+        """Return the usage of this run and `other` together."""
+        cpu = (
+            None
+            if self.cpu_seconds is None or other.cpu_seconds is None
+            else self.cpu_seconds + other.cpu_seconds
+        )
+        memories = [
+            m for m in (self.max_memory_mb, other.max_memory_mb) if m is not None
+        ]
+        return ProgramUsage(
+            wall_seconds=self.wall_seconds + other.wall_seconds,
+            cpu_seconds=cpu,
+            max_memory_mb=max(memories) if memories else None,
+        )
+
+    def recorded(self) -> dict[str, float]:
+        """Return the CPU time and peak memory as manifest values, the unknown left out."""
+        record = {}
+        if self.cpu_seconds is not None:
+            record["cpu_seconds"] = round(self.cpu_seconds, 3)
+        if self.max_memory_mb is not None:
+            record["max_memory_mb"] = round(self.max_memory_mb, 1)
+        return record
+
+
+def _children_usage() -> tuple[float, int] | None:
+    """Return the CPU seconds and peak resident size of the processes waited for so far."""
+    if resource is None:
+        return None
+    usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return usage.ru_utime + usage.ru_stime, usage.ru_maxrss
+
+
 def run_program(
     command: Sequence[str | os.PathLike[str]],
     *,
     cwd: Path,
     log: Path,
     timeout: float | None = None,
-) -> None:
+) -> ProgramUsage:
     """Run `command` in `cwd`, appending a line naming it and its output to `log`.
 
     Parameters
@@ -88,6 +154,11 @@ def run_program(
         Seconds the program may run; ``None`` sets no limit. At the limit, the
         program and every process it started are stopped.
 
+    Returns
+    -------
+    ProgramUsage
+        The wall time, CPU time and peak memory of the run.
+
     Raises
     ------
     ValueError
@@ -100,6 +171,8 @@ def run_program(
         raise ValueError(f"timeout must not be negative, got {timeout}")
     arguments = [os.fspath(part) for part in command]
     name = Path(arguments[0]).name
+    started = time.monotonic()
+    before = _children_usage()
     with log.open("a", encoding="utf-8") as stream:
         stream.write(f"$ {shlex.join(arguments)}\n")
         stream.flush()
@@ -123,6 +196,15 @@ def run_program(
             raise
     if returncode != 0:
         raise ProgramError(f"{name} exited with status {returncode}\n{log_tail(log)}")
+    wall = time.monotonic() - started
+    after = _children_usage()
+    if before is None or after is None:
+        return ProgramUsage(wall_seconds=wall, cpu_seconds=None, max_memory_mb=None)
+    return ProgramUsage(
+        wall_seconds=wall,
+        cpu_seconds=after[0] - before[0],
+        max_memory_mb=after[1] * _MAXRSS_BYTES / 2**20,
+    )
 
 
 def stop_process(process: subprocess.Popen[Any]) -> None:

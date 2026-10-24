@@ -57,7 +57,7 @@ from omphjc.madgraph.cards import (
     proc_card_commands,
 )
 from omphjc.processes.catalogue import ProcessSpec
-from omphjc.programs import ProgramError, available_cores
+from omphjc.programs import ProgramError, ProgramUsage, available_cores
 from omphjc.safe_paths import inside, occupied
 from omphjc.workspace import Workspace
 
@@ -112,6 +112,8 @@ class MadGraphRun:
         The banner of `events`: version, event count, cross section, run card.
     log_file : Path
         MadGraph's output for the run.
+    usage : ProgramUsage
+        Wall time, CPU time and peak memory of MadGraph's two scripts together.
     set_aside : Path or None
         Folder in the working directory holding what an earlier run left and
         this run could not confirm as its own, moved there rather than deleted;
@@ -122,6 +124,7 @@ class MadGraphRun:
     events: Path
     banner: Banner
     log_file: Path
+    usage: ProgramUsage
     set_aside: Path | None = None
 
 
@@ -235,6 +238,7 @@ def generate_events(
         events=events,
         banner=Banner.read(events),
         log_file=workspace.log_file,
+        usage=workspace.usage,
         set_aside=set_aside,
     )
 

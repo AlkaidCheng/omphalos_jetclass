@@ -92,7 +92,12 @@ def shower(
             metadata["matching_efficiency"] = (
                 statistics.events_accepted / statistics.events_read
             )
-        return StageOutcome(metadata=metadata, outputs=[run.output], log=run.log_file)
+        return StageOutcome(
+            metadata=metadata,
+            outputs=[run.output],
+            log=run.log_file,
+            usage=run.usage.recorded(),
+        )
 
     parameters = {
         "events": n_events,

@@ -44,3 +44,5 @@
   `<outdir>/<process>/job_<N>/` and records the run in its `manifest.json`. (#10)
 - `omphjc shower` runs Pythia 8 on a job's generated events through
   `DelphesPythia8` and keeps the generator record of every showered event. (#12)
+- Each stage records its wall time, CPU time and peak memory in the job's
+  `manifest.json`. (#13)

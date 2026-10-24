@@ -51,7 +51,7 @@ from typing import ClassVar
 
 from omphjc.delphes.card import particles_card_text
 from omphjc.processes.catalogue import ProcessSpec, SettingValue
-from omphjc.programs import ProgramError
+from omphjc.programs import ProgramError, ProgramUsage
 from omphjc.pythia.cmnd import format_cmnd, shower_settings
 from omphjc.safe_paths import occupied
 from omphjc.workspace import Workspace
@@ -121,6 +121,8 @@ class ShowerRun:
         ``DelphesPythia8``'s output for the run.
     statistics : ShowerStatistics
         Pythia's version and event counts, read from the log.
+    usage : ProgramUsage
+        Wall time, CPU time and peak memory of the ``DelphesPythia8`` run.
     set_aside : Path or None
         Folder in the working directory holding what an earlier run left and
         this run could not confirm as its own, moved there rather than deleted;
@@ -132,6 +134,7 @@ class ShowerRun:
     card: Path
     log_file: Path
     statistics: ShowerStatistics
+    usage: ProgramUsage
     set_aside: Path | None = None
 
 
@@ -271,6 +274,7 @@ def shower_events(
         card=workspace.card,
         log_file=workspace.log_file,
         statistics=statistics,
+        usage=workspace.usage,
         set_aside=set_aside,
     )
 

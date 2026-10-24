@@ -121,6 +121,8 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
     assert lines[6].startswith("  event file        madgraph/HToBB/Events/")
     assert lines[7] == "  log               madgraph/madgraph.log"
     assert lines[8] == "  cards             madgraph/cards/"
+    assert lines[9].startswith("  took              ") and "s wall" in lines[9]
+    assert "s CPU" in lines[9] and "MiB peak" in lines[9]
     manifest = tmp_path / "HToBB" / "job_1" / "manifest.json"
     assert manifest.is_file()
     written = manifest.read_text()
@@ -163,6 +165,7 @@ def test_shower_runs_after_generate_and_reports(
     assert (
         lines[7] == "  settings          shower/pythia.cmnd, shower/particles_card.tcl"
     )
+    assert lines[8].startswith("  took              ") and "s wall" in lines[8]
     again = CliRunner().invoke(cli, shower)
     assert again.exit_code == 0, again.output
     assert "Pythia shower: done, kept from an earlier run" in again.output
