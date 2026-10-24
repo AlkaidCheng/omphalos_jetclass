@@ -69,6 +69,50 @@ def is_occupied(path: Path) -> bool:
     return path.exists() or path.is_symlink()
 
 
+def require_file(path: Path, *, what: str) -> Path:
+    """Return `path` if it is a file.
+
+    Parameters
+    ----------
+    path : Path
+        The file a run reads.
+    what : str
+        What the file is, for the error message, for example ``"Event file"``.
+
+    Raises
+    ------
+    FileNotFoundError
+        If `path` is not a file.
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f"{what} {path} not found")
+    return path
+
+
+def require_unoccupied(path: Path, *, what: str) -> Path:
+    """Return `path` if nothing is at it.
+
+    Parameters
+    ----------
+    path : Path
+        Where a run writes its output.
+    what : str
+        What the output is, for the error message, for example
+        ``"Output file"``.
+
+    Raises
+    ------
+    FileExistsError
+        If something, a broken symbolic link included, is at `path`; the
+        message says to pass ``overwrite=True`` to replace it.
+    """
+    if is_occupied(path):
+        raise FileExistsError(
+            f"{what} {path} already exists; pass overwrite=True to replace it"
+        )
+    return path
+
+
 def inside(root_dir: Path, *names: str) -> Path:
     """Return `root_dir` joined with `names`, each a plain name.
 

@@ -6,7 +6,9 @@ from omphjc.safe_paths import (
     inside,
     normalize_path,
     remove_inside,
+    require_file,
     require_plain_name,
+    require_unoccupied,
     working_directory,
 )
 
@@ -60,6 +62,28 @@ def test_inside_joins_plain_names_only(tmp_path: Path) -> None:
     for name in UNSAFE_NAMES:
         with pytest.raises(ValueError, match="Path component"):
             inside(tmp_path, "models", name)
+
+
+def test_require_file_accepts_a_file_only(tmp_path: Path) -> None:
+    events_path = tmp_path / "events.lhe"
+    events_path.write_text("events")
+    assert require_file(events_path, what="Event file") == events_path
+    for path in (tmp_path / "missing.lhe", tmp_path):
+        with pytest.raises(FileNotFoundError, match="Event file .* not found"):
+            require_file(path, what="Event file")
+
+
+def test_require_unoccupied_refuses_files_folders_and_broken_links(
+    tmp_path: Path,
+) -> None:
+    new_path = tmp_path / "new.root"
+    assert require_unoccupied(new_path, what="Output file") == new_path
+    (tmp_path / "file.root").write_text("")
+    (tmp_path / "folder").mkdir()
+    (tmp_path / "broken").symlink_to(tmp_path / "gone")
+    for name in ("file.root", "folder", "broken"):
+        with pytest.raises(FileExistsError, match="Output file .* already exists"):
+            require_unoccupied(tmp_path / name, what="Output file")
 
 
 @pytest.fixture

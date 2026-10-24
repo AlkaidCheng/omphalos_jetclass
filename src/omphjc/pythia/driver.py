@@ -53,7 +53,7 @@ from omphjc.delphes.card import particles_card_text
 from omphjc.processes.catalogue import ProcessSpec, SettingValue
 from omphjc.programs import ProgramError
 from omphjc.pythia.cmnd import format_cmnd, shower_settings
-from omphjc.safe_paths import is_occupied
+from omphjc.safe_paths import require_file, require_unoccupied
 from omphjc.workspace import ProgramRun, Workspace
 
 # Delphes's program combining Pythia 8 and the detector simulation.
@@ -219,16 +219,12 @@ def shower_events(
         failed events, is still running at the time limit, or writes no
         output; the message ends with the last lines of its log.
     """
-    if not lhe_path.is_file():
-        raise FileNotFoundError(f"Event file {lhe_path} not found")
+    require_file(lhe_path, what="Event file")
     workspace = ShowerWorkspace(
         spec, workdir, delphes_pythia8_path=delphes_pythia8_path, timeout=timeout
     )
-    if is_occupied(workspace.output_path) and not overwrite:
-        raise FileExistsError(
-            f"Output file {workspace.output_path} already exists; pass overwrite=True "
-            "to replace it"
-        )
+    if not overwrite:
+        require_unoccupied(workspace.output_path, what="Output file")
     # Built before anything is removed, so that an invalid request fails at
     # once and leaves earlier results in place.
     settings = shower_settings(
@@ -239,14 +235,9 @@ def shower_events(
         overrides=overrides,
     )
 
-    set_aside = workspace.prepare()
-    try:
+    with workspace.sealed_run() as set_aside:
         workspace.write_inputs(lhe_path, settings)
         workspace.run_shower()
-    finally:
-        # Whatever the outcome, the stamp seals what this run made, so that a
-        # later run can tell whether anyone changed it since.
-        workspace.seal_artifacts()
 
     log_text = workspace.log_path.read_text(encoding="utf-8", errors="replace")
     if _ABORTED in log_text:
@@ -276,9 +267,9 @@ class ShowerWorkspace(Workspace):
     """The working directory of one process's shower runs, and the steps of a run.
 
     :func:`shower_events` drives a workspace from start to finish; a caller
-    that needs the steps one at a time constructs one and calls
-    :meth:`prepare`, :meth:`write_inputs`, :meth:`run_shower`, then
-    :meth:`seal_artifacts` in a ``finally``.
+    that needs the steps one at a time constructs one and, inside
+    ``with workspace.sealed_run():``, calls :meth:`write_inputs` then
+    :meth:`run_shower`.
 
     Parameters
     ----------

@@ -58,7 +58,7 @@ from omphjc.madgraph.cards import (
 )
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import ProgramError, available_cores
-from omphjc.safe_paths import inside, is_occupied
+from omphjc.safe_paths import inside, require_unoccupied
 from omphjc.workspace import ProgramRun, Workspace
 
 # MadGraph's command-line program, bin/mg5_aMC of an installation.
@@ -196,19 +196,15 @@ def generate_events(
     if n_cores < 1:
         raise ValueError(f"n_cores must be positive, got {n_cores}")
     workspace = MadGraphWorkspace(spec, workdir, mg5_path=mg5_path, timeout=timeout)
-    if is_occupied(workspace.process_dir) and not overwrite:
-        raise FileExistsError(
-            f"Process directory {workspace.process_dir} already exists; "
-            "pass overwrite=True to replace it"
-        )
+    if not overwrite:
+        require_unoccupied(workspace.process_dir, what="Process directory")
     # Built before MadGraph starts or anything is removed, so that an invalid
     # request fails at once and leaves earlier results in place.
     launch = launch_commands(
         spec, process_dir=workspace.process_dir, n_events=n_events, seed=seed
     )
 
-    set_aside = workspace.prepare()
-    try:
+    with workspace.sealed_run() as set_aside:
         local_spec = workspace.copy_model()
         workspace.run_script(
             _PROCESS_SCRIPT,
@@ -216,10 +212,6 @@ def generate_events(
         )
         workspace.write_cards(n_cores)
         workspace.run_script(_LAUNCH_SCRIPT, launch)
-    finally:
-        # Whatever the outcome, the stamp seals what this run made, so that a
-        # later run can tell whether anyone changed it since.
-        workspace.seal_artifacts()
 
     output_path = workspace.output_path
     if not output_path.is_file():
@@ -238,11 +230,10 @@ class MadGraphWorkspace(Workspace):
     """The working directory of one process's runs, and the steps a run takes in it.
 
     :func:`generate_events` drives a workspace from start to finish; a caller
-    that needs the steps one at a time constructs one and calls them in the
-    same order: :meth:`prepare`, :meth:`copy_model`,
-    :meth:`run_script` for the process script, :meth:`write_cards`,
-    :meth:`run_script` for the launch script, then :meth:`seal_artifacts` in
-    a ``finally``.
+    that needs the steps one at a time constructs one and, inside
+    ``with workspace.sealed_run():``, calls them in the same order:
+    :meth:`copy_model`, :meth:`run_script` for the process script,
+    :meth:`write_cards`, then :meth:`run_script` for the launch script.
 
     Parameters
     ----------

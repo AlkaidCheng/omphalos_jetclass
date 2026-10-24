@@ -18,7 +18,8 @@ driver's record adds its own.
 
 import os
 import time
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -78,7 +79,7 @@ class Workspace:
     Parameters
     ----------
     workdir : Path
-        The working directory, created by :meth:`prepare` when missing; it
+        The working directory, created by :meth:`sealed_run` when missing; it
         must not be a filesystem root.
     program : str
         The program's name on PATH.
@@ -153,21 +154,19 @@ class Workspace:
         """The program's output for the run."""
         return self.workdir / self._log_name
 
-    def prepare(self, *, unconfirmed: Iterable[str] = ()) -> Path | None:
-        """Make the directory ready for a run.
+    @contextmanager
+    def sealed_run(self) -> Iterator[Path | None]:
+        """Make the directory ready for the run in the block, and seal it after.
 
-        Clears what an earlier run left (:meth:`clear_earlier_run`) first, so
-        that a directory the program must not touch is refused before anything
-        is created; then creates the directory when it is missing and stamps
-        it when it carries no stamp.
+        On entry, clears what an earlier run left (:meth:`clear_earlier_run`)
+        first, so that a directory the program must not touch is refused
+        before anything is created; then creates the directory when it is
+        missing and stamps it when it carries no stamp. On exit, however the
+        block ended, records in the stamp what the run made, so that a later
+        run can tell whether anyone changed it since.
 
-        Parameters
-        ----------
-        unconfirmed : iterable of str, optional
-            Passed to :meth:`clear_earlier_run`.
-
-        Returns
-        -------
+        Yields
+        ------
         Path or None
             The folder holding what was moved aside, ``None`` when nothing was.
 
@@ -176,11 +175,14 @@ class Workspace:
         StampError
             As :meth:`clear_earlier_run`; nothing is created in that case.
         """
-        set_aside = self.clear_earlier_run(unconfirmed=unconfirmed)
+        set_aside = self.clear_earlier_run()
         self.workdir.mkdir(parents=True, exist_ok=True)
         if read_stamp(self.workdir) is None:
             write_stamp(self.workdir, self.purpose, self.details)
-        return set_aside
+        try:
+            yield set_aside
+        finally:
+            seal(self.workdir, self.artifacts)
 
     def clear_earlier_run(self, *, unconfirmed: Iterable[str] = ()) -> Path | None:
         """Clear what an earlier run left in the directory, and nothing else.
@@ -251,10 +253,6 @@ class Workspace:
             raise self.error_type(f"{failure_message}: {error}") from error
         self.usage = self.usage.combined_with(usage)
         return usage
-
-    def seal_artifacts(self) -> None:
-        """Record in the stamp what this run made, for later runs to compare with."""
-        seal(self.workdir, self.artifacts)
 
     def make_error(self, message: str) -> ProgramError:
         """Return an error of the workspace's type carrying `message` and the log's end."""

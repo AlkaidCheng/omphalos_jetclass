@@ -34,7 +34,7 @@ from typing import ClassVar
 from omphjc.delphes.card import reference_card_text, with_random_seed
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import ProgramError
-from omphjc.safe_paths import is_occupied, normalize_path
+from omphjc.safe_paths import normalize_path, require_file, require_unoccupied
 from omphjc.workspace import ProgramRun, Workspace
 
 # Delphes's program running a card on the generator record of a Delphes ROOT file.
@@ -86,8 +86,7 @@ def detector_card_text(spec: ProcessSpec, card_path: Path | None = None) -> str:
         If `card_path` is given and is not a file.
     """
     if card_path is not None:
-        if not card_path.is_file():
-            raise FileNotFoundError(f"Delphes card {card_path} not found")
+        require_file(card_path, what="Delphes card")
         return card_path.read_text(encoding="utf-8")
     if spec.delphes_card is None:
         return reference_card_text()
@@ -159,30 +158,21 @@ def simulate_events(
         limit, or writes no output; the message ends with the last lines of
         its log.
     """
-    if not events_path.is_file():
-        raise FileNotFoundError(f"Showered events {events_path} not found")
+    require_file(events_path, what="Showered events")
     workspace = SimulationWorkspace(
         spec, workdir, delphes_root_path=delphes_root_path, timeout=timeout
     )
-    if is_occupied(workspace.output_path) and not overwrite:
-        raise FileExistsError(
-            f"Output file {workspace.output_path} already exists; pass overwrite=True "
-            "to replace it"
-        )
+    if not overwrite:
+        require_unoccupied(workspace.output_path, what="Output file")
     # Read before anything is removed, so that a missing card fails at once
     # and leaves earlier results in place.
     card_text = detector_card_text(spec, card_path)
     if seed is not None:
         card_text = with_random_seed(card_text, seed)
 
-    set_aside = workspace.prepare()
-    try:
+    with workspace.sealed_run() as set_aside:
         workspace.write_card(card_text)
         workspace.run_simulation(events_path)
-    finally:
-        # Whatever the outcome, the stamp seals what this run made, so that a
-        # later run can tell whether anyone changed it since.
-        workspace.seal_artifacts()
 
     if not workspace.output_path.is_file():
         raise workspace.make_error(
@@ -201,9 +191,9 @@ class SimulationWorkspace(Workspace):
     """The working directory of one process's ``DelphesROOT`` runs, and the steps of a run.
 
     :func:`simulate_events` drives a workspace from start to finish; a caller
-    that needs the steps one at a time constructs one and calls
-    :meth:`prepare`, :meth:`write_card`, :meth:`run_simulation`, then
-    :meth:`seal_artifacts` in a ``finally``.
+    that needs the steps one at a time constructs one and, inside
+    ``with workspace.sealed_run():``, calls :meth:`write_card` then
+    :meth:`run_simulation`.
 
     Parameters
     ----------

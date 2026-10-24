@@ -69,6 +69,9 @@
 - Run records derive from `omphjc.workspace.Run` and `ProgramRun`, which carry
   the fields every run shares, and MadGraph's event file is `output_path` like
   the other runs' outputs. (#21)
+- A workspace's `sealed_run` context manager readies the directory on entry and
+  seals the run's artifacts on exit, in place of `prepare` and
+  `seal_artifacts`. (#22)
 
 ### Fixed
 
