@@ -34,13 +34,42 @@ from omphjc.stamps import StampError
 
 Catalogue = Mapping[str, ProcessSpec]
 
+_EXISTING_FILE = click.Path(exists=True, dir_okay=False, path_type=Path)
+
+# Options that several commands share. A command applies them in its own
+# decorator stack, which sets their order in its --help.
+_JOB_ID_OPTION = click.option(
+    "--job-id",
+    "job_id",
+    type=int,
+    required=True,
+    help="Job number; the seed of every program follows from it.",
+)
+_OUTDIR_OPTION = click.option(
+    "--outdir",
+    "outdir",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Directory holding the jobs of every process.",
+)
+_FORCE_OPTION = click.option(
+    "--force", is_flag=True, help="Run the stage again, replacing its outputs."
+)
+_SET_OPTION = click.option(
+    "--set",
+    "assignments",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Override one Pythia setting; may be repeated.",
+)
+
 
 @click.group()
 @click.version_option(__version__, prog_name="omphjc")
 @click.option(
     "--catalogue",
     "catalogue_path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    type=_EXISTING_FILE,
     envvar="OMPHJC_CATALOGUE",
     help="Process catalogue to use instead of the default config/jetclass.yaml.",
 )
@@ -111,23 +140,11 @@ def check_cards(specs: Catalogue) -> None:
 
 @cli.command("generate")
 @click.argument("name")
-@click.option(
-    "--job-id",
-    "job_id",
-    type=int,
-    required=True,
-    help="Job number; the seed of every program follows from it.",
-)
+@_JOB_ID_OPTION
 @click.option(
     "--events", "n_events", type=int, required=True, help="Events to generate."
 )
-@click.option(
-    "--outdir",
-    "outdir",
-    type=click.Path(path_type=Path),
-    required=True,
-    help="Directory holding the jobs of every process.",
-)
+@_OUTDIR_OPTION
 @click.option(
     "--cores",
     "n_cores",
@@ -136,13 +153,11 @@ def check_cards(specs: Catalogue) -> None:
     help="Cores MadGraph may use (default: every usable CPU).",
 )
 @click.option("--timeout", type=float, default=None, help="Seconds MadGraph may take.")
-@click.option(
-    "--force", is_flag=True, help="Run the stage again, replacing its outputs."
-)
+@_FORCE_OPTION
 @click.option(
     "--mg5",
     "mg5_path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    type=_EXISTING_FILE,
     default=None,
     help="MadGraph's bin/mg5_aMC (default: the one on PATH).",
 )
@@ -221,37 +236,17 @@ def _report_set_aside(job: Job) -> None:
 
 @cli.command("shower")
 @click.argument("name")
-@click.option(
-    "--job-id",
-    "job_id",
-    type=int,
-    required=True,
-    help="Job number; the seed of every program follows from it.",
-)
-@click.option(
-    "--outdir",
-    "outdir",
-    type=click.Path(path_type=Path),
-    required=True,
-    help="Directory holding the jobs of every process.",
-)
-@click.option(
-    "--set",
-    "assignments",
-    multiple=True,
-    metavar="KEY=VALUE",
-    help="Override one Pythia setting; may be repeated.",
-)
+@_JOB_ID_OPTION
+@_OUTDIR_OPTION
+@_SET_OPTION
 @click.option(
     "--timeout", type=float, default=None, help="Seconds DelphesPythia8 may take."
 )
-@click.option(
-    "--force", is_flag=True, help="Run the stage again, replacing its outputs."
-)
+@_FORCE_OPTION
 @click.option(
     "--delphes-pythia8",
     "delphes_pythia8_path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    type=_EXISTING_FILE,
     default=None,
     help="Delphes's DelphesPythia8 (default: the one on PATH).",
 )
@@ -314,37 +309,23 @@ def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
 
 @cli.command("simulate")
 @click.argument("name")
-@click.option(
-    "--job-id",
-    "job_id",
-    type=int,
-    required=True,
-    help="Job number; the seed of every program follows from it.",
-)
-@click.option(
-    "--outdir",
-    "outdir",
-    type=click.Path(path_type=Path),
-    required=True,
-    help="Directory holding the jobs of every process.",
-)
+@_JOB_ID_OPTION
+@_OUTDIR_OPTION
 @click.option(
     "--card",
     "card_path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    type=_EXISTING_FILE,
     default=None,
     help="Detector card to run instead of the process's.",
 )
 @click.option(
     "--timeout", type=float, default=None, help="Seconds DelphesROOT may take."
 )
-@click.option(
-    "--force", is_flag=True, help="Run the stage again, replacing its outputs."
-)
+@_FORCE_OPTION
 @click.option(
     "--delphes-root",
     "delphes_root_path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    type=_EXISTING_FILE,
     default=None,
     help="Delphes's DelphesROOT (default: the one on PATH).",
 )
@@ -402,13 +383,7 @@ def _report_simulation(job: Job, record: StageRecord, *, kept: bool) -> None:
 @cli.command("clean")
 @click.argument("name")
 @click.option("--job-id", "job_id", type=int, required=True, help="Job number.")
-@click.option(
-    "--outdir",
-    "outdir",
-    type=click.Path(path_type=Path),
-    required=True,
-    help="Directory holding the jobs of every process.",
-)
+@_OUTDIR_OPTION
 @click.option(
     "--set-aside",
     "set_aside",
@@ -504,13 +479,7 @@ def pythia() -> None:
     show_default=True,
     help="Uncompressed LHE file Pythia reads.",
 )
-@click.option(
-    "--set",
-    "assignments",
-    multiple=True,
-    metavar="KEY=VALUE",
-    help="Override one Pythia setting; may be repeated.",
-)
+@_SET_OPTION
 @click.pass_obj
 def pythia_show(
     specs: Catalogue,
@@ -538,7 +507,7 @@ def delphes() -> None:
 @click.argument(
     "card_path",
     metavar="CARD",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    type=_EXISTING_FILE,
     required=False,
 )
 def delphes_show(card_path: Path | None) -> None:
@@ -559,12 +528,12 @@ def delphes_show(card_path: Path | None) -> None:
 @click.argument(
     "card_path",
     metavar="CARD",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    type=_EXISTING_FILE,
 )
 @click.option(
     "--reference",
     "reference_path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    type=_EXISTING_FILE,
     help="Card to compare against (default: the official JetClass card).",
 )
 def delphes_compare(card_path: Path, reference_path: Path | None) -> None:
