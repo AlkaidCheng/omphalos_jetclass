@@ -1,6 +1,6 @@
 """The ``omphjc`` command line."""
 
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
 
 import click
@@ -61,6 +61,16 @@ _SET_OPTION = click.option(
     multiple=True,
     metavar="KEY=VALUE",
     help="Override one Pythia setting; may be repeated.",
+)
+
+# The errors of a stage command that are reported as a message, not a traceback.
+_STAGE_ERRORS = (
+    ValueError,
+    FileExistsError,
+    FileNotFoundError,
+    StampError,
+    ProgramError,
+    TerminationError,
 )
 
 
@@ -175,65 +185,42 @@ def generate_job(
 ) -> None:
     """Generate the parton-level events of one job of a process with MadGraph."""
     spec = _lookup(specs, name)
-    try:
-        job = Job(spec, outdir, job_id)
-        earlier = job.manifest.stages.get(GENERATE)
-        with exception_on_termination():
-            record = generate(
-                job,
-                n_events=n_events,
-                n_cores=n_cores,
-                timeout=timeout,
-                force=force,
-                mg5_path=mg5_path,
-            )
-    except (
-        ValueError,
-        FileExistsError,
-        FileNotFoundError,
-        StampError,
-        ProgramError,
-        TerminationError,
-    ) as error:
-        raise click.ClickException(str(error)) from error
-    _report_generation(job, record, kept=record is earlier)
 
+    def run(job: Job) -> StageRecord:
+        return generate(
+            job,
+            n_events=n_events,
+            n_cores=n_cores,
+            timeout=timeout,
+            force=force,
+            mg5_path=mg5_path,
+        )
 
-def _report_generation(job: Job, record: StageRecord, *, kept: bool) -> None:
-    """Print what the generate stage of `job` ran with and what it made."""
-    metadata = record.metadata
-    outcome = "done, kept from an earlier run" if kept else "done"
-    click.echo(_job_line(job))
-    click.echo(f"MadGraph generation: {outcome}")
-    click.echo(
-        f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
+    _run_stage_command(
+        spec,
+        job_id,
+        outdir,
+        stage=GENERATE,
+        run=run,
+        title="MadGraph generation",
+        lines=_generation_lines,
     )
-    click.echo(_row("events requested", record.parameters["events"]))
-    click.echo(_row("events generated", metadata["events"]))
+
+
+def _generation_lines(job: Job, record: StageRecord) -> Iterator[str]:
+    """Yield what the generate stage of `job` ran with and what it made."""
+    metadata = record.metadata
+    yield f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
+    yield _row("events requested", record.parameters["events"])
+    yield _row("events generated", metadata["events"])
     cross_section = (
         f"{metadata['cross_section_pb']:g}"
         f" +- {metadata['cross_section_error_pb']:.3g} pb"
     )
-    click.echo(_row("cross section", cross_section))
-    click.echo(_row("event file", record.outputs[0]))
-    click.echo(_row("log", record.log))
-    click.echo(_row("cards", f"{job.relative_path(job.stage_dir(GENERATE))}/cards/"))
-    click.echo(_row("took", format_usage(record.usage)))
-    _report_set_aside(job)
-
-
-def _report_set_aside(job: Job) -> None:
-    """Print what earlier runs of `job` set aside, when anything is."""
-    folders = job.set_aside_folders()
-    if not folders:
-        return
-    count = format_count(len(folders), "folder")
-    click.echo(
-        _row(
-            "set aside",
-            f"{count} left by earlier runs; omphjc clean --set-aside deletes them",
-        )
-    )
+    yield _row("cross section", cross_section)
+    yield _row("event file", record.outputs[0])
+    yield _row("log", record.log)
+    yield _row("cards", f"{job.relative_path(job.stage_dir(GENERATE))}/cards/")
 
 
 @cli.command("shower")
@@ -266,47 +253,38 @@ def shower_job(
     """Shower one job's generated events with Pythia 8; the detector comes later."""
     spec = _lookup(specs, name)
     overrides = dict(_assignment(item) for item in assignments)
-    try:
-        job = Job(spec, outdir, job_id)
-        earlier = job.manifest.stages.get(SHOWER)
-        with exception_on_termination():
-            record = shower(
-                job,
-                overrides=overrides,
-                timeout=timeout,
-                force=force,
-                delphes_pythia8_path=delphes_pythia8_path,
-            )
-    except (
-        ValueError,
-        FileExistsError,
-        FileNotFoundError,
-        StampError,
-        ProgramError,
-        TerminationError,
-    ) as error:
-        raise click.ClickException(str(error)) from error
-    _report_shower(job, record, kept=record is earlier)
 
+    def run(job: Job) -> StageRecord:
+        return shower(
+            job,
+            overrides=overrides,
+            timeout=timeout,
+            force=force,
+            delphes_pythia8_path=delphes_pythia8_path,
+        )
 
-def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
-    """Print what the shower stage of `job` ran with and what it made."""
-    metadata = record.metadata
-    outcome = "done, kept from an earlier run" if kept else "done"
-    click.echo(_job_line(job))
-    click.echo(f"Pythia shower: {outcome}")
-    click.echo(
-        f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
+    _run_stage_command(
+        spec,
+        job_id,
+        outdir,
+        stage=SHOWER,
+        run=run,
+        title="Pythia shower",
+        lines=_shower_lines,
     )
-    click.echo(_row("events read", metadata["events_read"]))
-    click.echo(_row("events kept", metadata["events_accepted"]))
+
+
+def _shower_lines(job: Job, record: StageRecord) -> Iterator[str]:
+    """Yield what the shower stage of `job` ran with and what it made."""
+    metadata = record.metadata
+    yield f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
+    yield _row("events read", metadata["events_read"])
+    yield _row("events kept", metadata["events_accepted"])
     if "matching_efficiency" in metadata:
-        click.echo(_row("kept by matching", f"{metadata['matching_efficiency']:.1%}"))
-    click.echo(_row("output", record.outputs[0]))
-    click.echo(_row("log", record.log))
-    click.echo(_row("settings", ", ".join(metadata["settings"])))
-    click.echo(_row("took", format_usage(record.usage)))
-    _report_set_aside(job)
+        yield _row("kept by matching", f"{metadata['matching_efficiency']:.1%}")
+    yield _row("output", record.outputs[0])
+    yield _row("log", record.log)
+    yield _row("settings", ", ".join(metadata["settings"]))
 
 
 @cli.command("simulate")
@@ -344,42 +322,35 @@ def simulate_job(
 ) -> None:
     """Simulate the detector on one job's showered events with Delphes."""
     spec = _lookup(specs, name)
-    try:
-        job = Job(spec, outdir, job_id)
-        earlier = job.manifest.stages.get(SIMULATE)
-        with exception_on_termination():
-            record = simulate(
-                job,
-                card_path=card_path,
-                timeout=timeout,
-                force=force,
-                delphes_root_path=delphes_root_path,
-            )
-    except (
-        ValueError,
-        FileExistsError,
-        FileNotFoundError,
-        StampError,
-        ProgramError,
-        TerminationError,
-    ) as error:
-        raise click.ClickException(str(error)) from error
-    _report_simulation(job, record, kept=record is earlier)
+
+    def run(job: Job) -> StageRecord:
+        return simulate(
+            job,
+            card_path=card_path,
+            timeout=timeout,
+            force=force,
+            delphes_root_path=delphes_root_path,
+        )
+
+    _run_stage_command(
+        spec,
+        job_id,
+        outdir,
+        stage=SIMULATE,
+        run=run,
+        title="Delphes simulation",
+        lines=_simulation_lines,
+    )
 
 
-def _report_simulation(job: Job, record: StageRecord, *, kept: bool) -> None:
-    """Print what the simulation stage of `job` ran with and what it made."""
+def _simulation_lines(job: Job, record: StageRecord) -> Iterator[str]:
+    """Yield what the simulation stage of `job` ran with and what it made."""
     metadata = record.metadata
-    outcome = "done, kept from an earlier run" if kept else "done"
-    click.echo(_job_line(job))
-    click.echo(f"Delphes simulation: {outcome}")
-    click.echo(_row("card", ", ".join(metadata["card"])))
-    click.echo(_row("seed", record.parameters["seed"]))
-    click.echo(_row("events", metadata["events"]))
-    click.echo(_row("output", record.outputs[0]))
-    click.echo(_row("log", record.log))
-    click.echo(_row("took", format_usage(record.usage)))
-    _report_set_aside(job)
+    yield _row("card", ", ".join(metadata["card"]))
+    yield _row("seed", record.parameters["seed"])
+    yield _row("events", metadata["events"])
+    yield _row("output", record.outputs[0])
+    yield _row("log", record.log)
 
 
 @cli.command("clean")
@@ -550,6 +521,52 @@ def delphes_compare(card_path: Path, reference_path: Path | None) -> None:
     for difference in differences:
         click.echo(str(difference), err=True)
     raise SystemExit(1)
+
+
+def _run_stage_command(
+    spec: ProcessSpec,
+    job_id: int,
+    outdir: Path,
+    *,
+    stage: str,
+    run: Callable[[Job], StageRecord],
+    title: str,
+    lines: Callable[[Job, StageRecord], Iterable[str]],
+) -> None:
+    """Run `stage` of one job of `spec` through `run` and print its report.
+
+    `title` names the stage in the report and `lines` gives the rows between
+    the title and what the stage took. An error in :data:`_STAGE_ERRORS`
+    becomes a :class:`click.ClickException`.
+    """
+    try:
+        job = Job(spec, outdir, job_id)
+        earlier = job.manifest.stages.get(stage)
+        with exception_on_termination():
+            record = run(job)
+    except _STAGE_ERRORS as error:
+        raise click.ClickException(str(error)) from error
+    outcome = "done, kept from an earlier run" if record is earlier else "done"
+    click.echo(_job_line(job))
+    click.echo(f"{title}: {outcome}")
+    for line in lines(job, record):
+        click.echo(line)
+    click.echo(_row("took", format_usage(record.usage)))
+    _report_set_aside(job)
+
+
+def _report_set_aside(job: Job) -> None:
+    """Print what earlier runs of `job` set aside, when anything is."""
+    folders = job.set_aside_folders()
+    if not folders:
+        return
+    count = format_count(len(folders), "folder")
+    click.echo(
+        _row(
+            "set aside",
+            f"{count} left by earlier runs; omphjc clean --set-aside deletes them",
+        )
+    )
 
 
 def _job_line(job: Job) -> str:
