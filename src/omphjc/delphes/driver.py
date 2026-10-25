@@ -29,13 +29,12 @@ describes what a later run may delete.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
 
 from omphjc.delphes.card import reference_card_text, with_random_seed
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import ProgramError
 from omphjc.safe_paths import normalize_path, require_file, require_unoccupied
-from omphjc.workspace import ProgramRun, Workspace
+from omphjc.workspace import ProgramRun, ProgramWorkspace
 
 # Delphes's program running a card on the generator record of a Delphes ROOT file.
 _DELPHES_ROOT = "DelphesROOT"
@@ -187,7 +186,7 @@ def simulate_events(
     )
 
 
-class SimulationWorkspace(Workspace):
+class SimulationWorkspace(ProgramWorkspace):
     """The working directory of one process's ``DelphesROOT`` runs, and the steps of a run.
 
     :func:`simulate_events` drives a workspace from start to finish; a caller
@@ -215,7 +214,11 @@ class SimulationWorkspace(Workspace):
         ``DelphesROOT``.
     """
 
-    error_type: ClassVar[type[ProgramError]] = SimulationError
+    purpose = _RUN_PURPOSE
+    program = _DELPHES_ROOT
+    description = f"Delphes's {_DELPHES_ROOT}"
+    log_name = _LOG_FILE
+    error_type = SimulationError
 
     def __init__(
         self,
@@ -225,17 +228,7 @@ class SimulationWorkspace(Workspace):
         delphes_root_path: Path | None = None,
         timeout: float | None = None,
     ) -> None:
-        super().__init__(
-            workdir,
-            program=_DELPHES_ROOT,
-            program_path=delphes_root_path,
-            description=f"Delphes's {_DELPHES_ROOT}",
-            purpose=_RUN_PURPOSE,
-            details={"process": spec.name},
-            log_name=_LOG_FILE,
-            timeout=timeout,
-        )
-        self.spec = spec
+        super().__init__(spec, workdir, program_path=delphes_root_path, timeout=timeout)
 
     @property
     def card_path(self) -> Path:

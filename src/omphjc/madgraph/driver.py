@@ -48,7 +48,6 @@ import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
 
 from omphjc.madgraph.banner import Banner
 from omphjc.madgraph.cards import (
@@ -59,7 +58,7 @@ from omphjc.madgraph.cards import (
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import ProgramError, available_cores
 from omphjc.safe_paths import inside, require_unoccupied
-from omphjc.workspace import ProgramRun, Workspace
+from omphjc.workspace import ProgramRun, ProgramWorkspace
 
 # MadGraph's command-line program, bin/mg5_aMC of an installation.
 _MG5_EXECUTABLE = "mg5_aMC"
@@ -226,7 +225,7 @@ def generate_events(
     )
 
 
-class MadGraphWorkspace(Workspace):
+class MadGraphWorkspace(ProgramWorkspace):
     """The working directory of one process's runs, and the steps a run takes in it.
 
     :func:`generate_events` drives a workspace from start to finish; a caller
@@ -267,7 +266,11 @@ class MadGraphWorkspace(Workspace):
         If `mg5_path` is not a file, or none is given and PATH has no ``mg5_aMC``.
     """
 
-    error_type: ClassVar[type[ProgramError]] = MadGraphError
+    purpose = _RUN_PURPOSE
+    program = _MG5_EXECUTABLE
+    description = f"MadGraph's bin/{_MG5_EXECUTABLE}"
+    log_name = _LOG_FILE
+    error_type = MadGraphError
 
     def __init__(
         self,
@@ -277,21 +280,11 @@ class MadGraphWorkspace(Workspace):
         mg5_path: Path | None = None,
         timeout: float | None = None,
     ) -> None:
-        super().__init__(
-            workdir,
-            program=_MG5_EXECUTABLE,
-            program_path=mg5_path,
-            description=f"MadGraph's bin/{_MG5_EXECUTABLE}",
-            purpose=_RUN_PURPOSE,
-            details={"process": spec.name},
-            log_name=_LOG_FILE,
-            timeout=timeout,
-        )
+        super().__init__(spec, workdir, program_path=mg5_path, timeout=timeout)
         if any(character.isspace() for character in str(self.workdir)):
             raise ValueError(
                 f"MadGraph cannot run in a path with whitespace: {self.workdir}"
             )
-        self.spec = spec
 
     @property
     def process_dir(self) -> Path:
@@ -306,7 +299,6 @@ class MadGraphWorkspace(Workspace):
 
     @property
     def artifacts(self) -> list[str]:
-        """What a run makes in the directory, as paths relative to it."""
         names = [self.spec.name, _PROCESS_SCRIPT, _LAUNCH_SCRIPT, _LOG_FILE]
         if self.spec.model_dir is not None:
             names.append(f"{_MODELS_DIR}/{self.spec.model_base}")
