@@ -3,8 +3,8 @@
 from collections.abc import Mapping
 from pathlib import Path
 
-from omphjc.jobs.job import Job, StageOutcome, sha256
-from omphjc.jobs.manifest import StageRecord
+from omphjc.jobs.job import Job, sha256
+from omphjc.jobs.manifest import StageOutcome, StageRecord
 from omphjc.jobs.stages.generate import GENERATE
 from omphjc.processes.catalogue import SettingValue
 from omphjc.pythia.driver import shower_events

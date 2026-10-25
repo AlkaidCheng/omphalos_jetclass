@@ -4,8 +4,8 @@ import hashlib
 from pathlib import Path
 
 from omphjc.delphes.driver import detector_card_text, simulate_events
-from omphjc.jobs.job import Job, StageOutcome, sha256
-from omphjc.jobs.manifest import StageRecord
+from omphjc.jobs.job import Job, sha256
+from omphjc.jobs.manifest import StageOutcome, StageRecord
 from omphjc.jobs.stages.shower import SHOWER
 
 SIMULATE = "simulate"

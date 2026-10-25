@@ -3,8 +3,8 @@
 import shutil
 from pathlib import Path
 
-from omphjc.jobs.job import Job, StageOutcome, sha256
-from omphjc.jobs.manifest import StageRecord
+from omphjc.jobs.job import Job, sha256
+from omphjc.jobs.manifest import StageOutcome, StageRecord
 from omphjc.madgraph.driver import generate_events
 
 GENERATE = "generate"
