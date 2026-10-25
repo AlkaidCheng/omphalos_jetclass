@@ -151,6 +151,20 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
     assert calls == [False, True, True]
 
 
+def test_require_done_returns_the_record_or_says_which_stage_to_run(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    not_done = "The x stage of .* has not run to completion; run omphjc x first"
+    with pytest.raises(ValueError, match=not_done):
+        job.require_done("x")
+    record = job.run_stage("x", {}, lambda overwrite: _make_output(job))
+    assert job.require_done("x") == record
+    (job.root_dir / "x" / "out.txt").unlink()
+    with pytest.raises(ValueError, match=not_done):
+        job.require_done("x")
+
+
 def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:

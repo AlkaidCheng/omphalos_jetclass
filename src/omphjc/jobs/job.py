@@ -130,6 +130,22 @@ class Job:
             return False
         return all((self.root_dir / output).exists() for output in record.outputs)
 
+    def require_done(self, stage: str) -> StageRecord:
+        """Return the record of `stage`, which must be done with its outputs present.
+
+        Raises
+        ------
+        ValueError
+            If `stage` is not done or an output is missing; the message names
+            the command to run first.
+        """
+        if not self.is_done(stage):
+            raise ValueError(
+                f"The {stage} stage of {self.root_dir} has not run to completion; "
+                f"run omphjc {stage} first"
+            )
+        return self.manifest.stages[stage]
+
     def run_stage(
         self,
         stage: str,

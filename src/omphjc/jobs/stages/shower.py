@@ -55,12 +55,7 @@ def shower(
     ValueError
         If the generate stage of `job` has not run to completion.
     """
-    generated = job.manifest.stages.get(GENERATE)
-    if generated is None or not job.is_done(GENERATE):
-        raise ValueError(
-            f"The generate stage of {job.root_dir} has not run to completion; run "
-            "omphjc generate first"
-        )
+    generated = job.require_done(GENERATE)
     lhe_path = job.root_dir / generated.outputs[0]
     n_events = int(generated.metadata["events"])
     stage_dir = job.stage_dir(SHOWER)

@@ -75,6 +75,8 @@
 - `StageOutcome` lives in `omphjc.jobs.manifest` beside `StageRecord`, whose
   `running`, `failed` and `done` constructors build the record of each state.
   (#24)
+- `omphjc.jobs.Job.require_done` returns the record of a finished stage or
+  says which command to run first. (#24)
 
 ### Fixed
 

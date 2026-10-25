@@ -55,12 +55,7 @@ def simulate(
     FileNotFoundError
         If `card_path` is given and is not a file.
     """
-    shower_record = job.manifest.stages.get(SHOWER)
-    if shower_record is None or not job.is_done(SHOWER):
-        raise ValueError(
-            f"The shower stage of {job.root_dir} has not run to completion; run "
-            "omphjc shower first"
-        )
+    shower_record = job.require_done(SHOWER)
     events_path = job.root_dir / shower_record.outputs[0]
     stage_dir = job.stage_dir(SIMULATE)
     card_text = detector_card_text(job.spec, card_path)
