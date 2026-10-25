@@ -203,23 +203,22 @@ def _report_generation(job: Job, record: StageRecord, *, kept: bool) -> None:
     """Print what the generate stage of `job` ran with and what it made."""
     metadata = record.metadata
     outcome = "done, kept from an earlier run" if kept else "done"
-    click.echo(f"{job.spec.name} job {job.job_id}: {job.root_dir}")
+    click.echo(_job_line(job))
     click.echo(f"MadGraph generation: {outcome}")
     click.echo(
         f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
     )
-    click.echo(f"  events requested  {record.parameters['events']}")
-    click.echo(f"  events generated  {metadata['events']}")
-    click.echo(
-        f"  cross section     {metadata['cross_section_pb']:g}"
+    click.echo(_row("events requested", record.parameters["events"]))
+    click.echo(_row("events generated", metadata["events"]))
+    cross_section = (
+        f"{metadata['cross_section_pb']:g}"
         f" +- {metadata['cross_section_error_pb']:.3g} pb"
     )
-    click.echo(f"  event file        {record.outputs[0]}")
-    click.echo(f"  log               {record.log}")
-    click.echo(
-        f"  cards             {job.relative_path(job.stage_dir(GENERATE))}/cards/"
-    )
-    click.echo(f"  took              {format_usage(record.usage)}")
+    click.echo(_row("cross section", cross_section))
+    click.echo(_row("event file", record.outputs[0]))
+    click.echo(_row("log", record.log))
+    click.echo(_row("cards", f"{job.relative_path(job.stage_dir(GENERATE))}/cards/"))
+    click.echo(_row("took", format_usage(record.usage)))
     _report_set_aside(job)
 
 
@@ -228,9 +227,12 @@ def _report_set_aside(job: Job) -> None:
     folders = job.set_aside_folders()
     if not folders:
         return
+    count = format_count(len(folders), "folder")
     click.echo(
-        f"  set aside         {format_count(len(folders), 'folder')} left by earlier runs; "
-        "omphjc clean --set-aside deletes them"
+        _row(
+            "set aside",
+            f"{count} left by earlier runs; omphjc clean --set-aside deletes them",
+        )
     )
 
 
@@ -291,19 +293,19 @@ def _report_shower(job: Job, record: StageRecord, *, kept: bool) -> None:
     """Print what the shower stage of `job` ran with and what it made."""
     metadata = record.metadata
     outcome = "done, kept from an earlier run" if kept else "done"
-    click.echo(f"{job.spec.name} job {job.job_id}: {job.root_dir}")
+    click.echo(_job_line(job))
     click.echo(f"Pythia shower: {outcome}")
     click.echo(
         f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
     )
-    click.echo(f"  events read       {metadata['events_read']}")
-    click.echo(f"  events kept       {metadata['events_accepted']}")
+    click.echo(_row("events read", metadata["events_read"]))
+    click.echo(_row("events kept", metadata["events_accepted"]))
     if "matching_efficiency" in metadata:
-        click.echo(f"  kept by matching  {metadata['matching_efficiency']:.1%}")
-    click.echo(f"  output            {record.outputs[0]}")
-    click.echo(f"  log               {record.log}")
-    click.echo(f"  settings          {', '.join(metadata['settings'])}")
-    click.echo(f"  took              {format_usage(record.usage)}")
+        click.echo(_row("kept by matching", f"{metadata['matching_efficiency']:.1%}"))
+    click.echo(_row("output", record.outputs[0]))
+    click.echo(_row("log", record.log))
+    click.echo(_row("settings", ", ".join(metadata["settings"])))
+    click.echo(_row("took", format_usage(record.usage)))
     _report_set_aside(job)
 
 
@@ -369,14 +371,14 @@ def _report_simulation(job: Job, record: StageRecord, *, kept: bool) -> None:
     """Print what the simulation stage of `job` ran with and what it made."""
     metadata = record.metadata
     outcome = "done, kept from an earlier run" if kept else "done"
-    click.echo(f"{job.spec.name} job {job.job_id}: {job.root_dir}")
+    click.echo(_job_line(job))
     click.echo(f"Delphes simulation: {outcome}")
-    click.echo(f"  card              {', '.join(metadata['card'])}")
-    click.echo(f"  seed              {record.parameters['seed']}")
-    click.echo(f"  events            {metadata['events']}")
-    click.echo(f"  output            {record.outputs[0]}")
-    click.echo(f"  log               {record.log}")
-    click.echo(f"  took              {format_usage(record.usage)}")
+    click.echo(_row("card", ", ".join(metadata["card"])))
+    click.echo(_row("seed", record.parameters["seed"]))
+    click.echo(_row("events", metadata["events"]))
+    click.echo(_row("output", record.outputs[0]))
+    click.echo(_row("log", record.log))
+    click.echo(_row("took", format_usage(record.usage)))
     _report_set_aside(job)
 
 
@@ -414,7 +416,7 @@ def clean_job(
             job.clear_set_aside_folders()
     except (ValueError, StampError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(f"{job.spec.name} job {job.job_id}: {job.root_dir}")
+    click.echo(_job_line(job))
     if not folders:
         click.echo("set aside: nothing")
         return
@@ -548,6 +550,16 @@ def delphes_compare(card_path: Path, reference_path: Path | None) -> None:
     for difference in differences:
         click.echo(str(difference), err=True)
     raise SystemExit(1)
+
+
+def _job_line(job: Job) -> str:
+    """Return the line naming `job` and its directory that opens a job's report."""
+    return f"{job.spec.name} job {job.job_id}: {job.root_dir}"
+
+
+def _row(label: str, value: object) -> str:
+    """Return one labelled line of a stage's report, its value at column 20."""
+    return f"  {label:<18}{value}"
 
 
 def _lookup(specs: Catalogue, name: str) -> ProcessSpec:
