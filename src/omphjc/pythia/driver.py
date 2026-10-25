@@ -47,14 +47,13 @@ import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
 
 from omphjc.delphes.card import particles_card_text
 from omphjc.processes.catalogue import ProcessSpec, SettingValue
 from omphjc.programs import ProgramError
 from omphjc.pythia.cmnd import format_cmnd, shower_settings
 from omphjc.safe_paths import require_file, require_unoccupied
-from omphjc.workspace import ProgramRun, Workspace
+from omphjc.workspace import ProgramRun, ProgramWorkspace
 
 # Delphes's program combining Pythia 8 and the detector simulation.
 _DELPHES_PYTHIA8 = "DelphesPythia8"
@@ -263,7 +262,7 @@ def shower_events(
     )
 
 
-class ShowerWorkspace(Workspace):
+class ShowerWorkspace(ProgramWorkspace):
     """The working directory of one process's shower runs, and the steps of a run.
 
     :func:`shower_events` drives a workspace from start to finish; a caller
@@ -291,7 +290,11 @@ class ShowerWorkspace(Workspace):
         ``DelphesPythia8``.
     """
 
-    error_type: ClassVar[type[ProgramError]] = ShowerError
+    purpose = _RUN_PURPOSE
+    program = _DELPHES_PYTHIA8
+    description = f"Delphes's {_DELPHES_PYTHIA8}"
+    log_name = _LOG_FILE
+    error_type = ShowerError
 
     def __init__(
         self,
@@ -302,16 +305,8 @@ class ShowerWorkspace(Workspace):
         timeout: float | None = None,
     ) -> None:
         super().__init__(
-            workdir,
-            program=_DELPHES_PYTHIA8,
-            program_path=delphes_pythia8_path,
-            description=f"Delphes's {_DELPHES_PYTHIA8}",
-            purpose=_RUN_PURPOSE,
-            details={"process": spec.name},
-            log_name=_LOG_FILE,
-            timeout=timeout,
+            spec, workdir, program_path=delphes_pythia8_path, timeout=timeout
         )
-        self.spec = spec
 
     @property
     def events_path(self) -> Path:

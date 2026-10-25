@@ -72,6 +72,10 @@
 - A workspace's `sealed_run` context manager readies the directory on entry and
   seals the run's artifacts on exit, in place of `prepare` and
   `seal_artifacts`. (#22)
+- `omphjc.workspace.Workspace` is the stamped directory alone, whose subclass
+  names its purpose and artifacts, and `ProgramWorkspace` adds the external
+  program, which `MadGraphWorkspace`, `ShowerWorkspace` and
+  `SimulationWorkspace` now name in class attributes. (#23)
 - `StageOutcome` lives in `omphjc.jobs.manifest` beside `StageRecord`, whose
   `running`, `failed` and `done` constructors build the record of each state.
   (#24)

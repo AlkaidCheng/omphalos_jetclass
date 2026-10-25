@@ -1,14 +1,16 @@
-"""A directory an external program runs in, and the care every run takes there.
+"""A directory a run works in, and the care every run takes there.
 
-A workspace carries a stamp (:mod:`omphjc.stamps`) naming its purpose and
-details, such as the process it serves. When a run ends, short of a hard
-kill, it seals its artifacts. A later run deletes an artifact only when it
-was sealed and nothing in it changed since; anything else a run may have left,
-as after a kill before sealing, is moved into ``omphjc-set-aside/`` with its
-contents. Nothing else in the directory is ever touched.
+A workspace carries a stamp (:mod:`omphjc.stamps`) naming its purpose and the
+process it serves. When a run ends, short of a hard kill, it seals its
+artifacts. A later run deletes an artifact only when it was sealed and nothing
+in it changed since; anything else a run may have left, as after a kill before
+sealing, is moved into ``omphjc-set-aside/`` with its contents. Nothing else in
+the directory is ever touched.
 
-A subclass names the program, the purpose, the log and the artifacts a run
-makes, and adds the steps of its program's run;
+:class:`Workspace` is that care alone: a subclass names its purpose and what a
+run makes, and adds the steps of its run. :class:`ProgramWorkspace` adds an
+external program, named in class attributes too: the program file, the time
+its runs may take, the log they append to and what they took.
 :class:`omphjc.madgraph.MadGraphWorkspace` is one.
 
 A run returns a record deriving from :class:`Run`, or from :class:`ProgramRun`
@@ -18,12 +20,14 @@ driver's record adds its own.
 
 import os
 import time
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
+from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import (
     ProgramError,
     ProgramUsage,
@@ -73,97 +77,60 @@ class ProgramRun(Run):
     usage: ProgramUsage
 
 
-class Workspace:
-    """The working directory of one external program's runs.
+class Workspace(ABC):
+    """The directory of one process's runs for one purpose: stamped, cleared and sealed.
+
+    A subclass names its purpose in the class attribute below, lists what a
+    run makes in :attr:`artifacts` and adds the steps of its run, each inside
+    ``with workspace.sealed_run():``.
 
     Parameters
     ----------
+    spec : ProcessSpec
+        The process whose runs the directory holds; its name goes in the stamp.
     workdir : Path
         The working directory, created by :meth:`sealed_run` when missing; it
         must not be a filesystem root.
-    program : str
-        The program's name on PATH.
-    program_path : Path or None
-        The program file to run instead of the one on PATH.
-    description : str
-        How the program is called in messages, for example
-        ``"MadGraph's bin/mg5_aMC"``.
-    purpose : str
-        What the directory is used for, written in its stamp.
-    details : Mapping[str, str]
-        Details of the purpose written in the stamp, for example the process.
-    log_name : str
-        Name of the log file in the directory.
-    timeout : float or None
-        Seconds the run may take from now; ``None`` sets no limit.
 
     Attributes
     ----------
+    spec : ProcessSpec
     workdir : Path
         The working directory, normalized.
-    program_path : Path
-        The program file the run uses.
-    deadline : float or None
-        ``time.monotonic`` value at which a running program is stopped.
-    usage : ProgramUsage
-        What the program's runs in this workspace took so far, combined.
+    details : dict[str, str]
+        Details of the purpose written in the stamp: the process's name.
 
     Raises
     ------
     ValueError
-        If `timeout` is not positive or `workdir` is a filesystem root.
-    FileNotFoundError
-        If `program_path` is not a file, or none is given and PATH has no
-        `program`.
+        If `workdir` is a filesystem root.
     """
 
-    error_type: ClassVar[type[ProgramError]] = ProgramError
-    """The exception a failed run raises; a subclass names its own."""
+    purpose: ClassVar[str]
+    """What the directory is used for, written in its stamp."""
 
-    def __init__(
-        self,
-        workdir: Path,
-        *,
-        program: str,
-        program_path: Path | None,
-        description: str,
-        purpose: str,
-        details: Mapping[str, str],
-        log_name: str,
-        timeout: float | None,
-    ) -> None:
-        if timeout is not None and timeout <= 0:
-            raise ValueError(f"timeout must be positive, got {timeout}")
+    def __init__(self, spec: ProcessSpec, workdir: Path) -> None:
+        self.spec = spec
         self.workdir = working_directory(workdir)
-        self.program_path = find_program(program, program_path, description=description)
-        self.purpose = purpose
-        self.details = dict(details)
-        self.deadline = None if timeout is None else time.monotonic() + timeout
-        self.usage = ProgramUsage(
-            wall_seconds=0.0, cpu_seconds=0.0, peak_memory_mib=None
-        )
-        self._log_name = log_name
+        self.details = {"process": spec.name}
 
     @property
+    @abstractmethod
     def artifacts(self) -> list[str]:
         """What a run makes in the directory, as POSIX paths relative to it."""
-        raise NotImplementedError
-
-    @property
-    def log_path(self) -> Path:
-        """The program's output for the run."""
-        return self.workdir / self._log_name
 
     @contextmanager
     def sealed_run(self) -> Iterator[Path | None]:
         """Make the directory ready for the run in the block, and seal it after.
 
         On entry, clears what an earlier run left (:meth:`clear_earlier_run`)
-        first, so that a directory the program must not touch is refused
-        before anything is created; then creates the directory when it is
-        missing and stamps it when it carries no stamp. On exit, however the
-        block ended, records in the stamp what the run made, so that a later
-        run can tell whether anyone changed it since.
+        first, so that a directory the run must not touch is refused before
+        anything is created; then creates the directory when it is missing
+        and stamps it when it carries no stamp. On exit, however the block
+        ended, records in the stamp what the run made, so that a later run can
+        tell whether anyone changed it since. Anything the caller can refuse,
+        an occupied output or an invalid request, belongs before the block,
+        since entering it removes what an earlier run left.
 
         Yields
         ------
@@ -191,7 +158,7 @@ class Workspace:
         ----------
         unconfirmed : iterable of str, optional
             Artifacts to move aside however they were sealed, because they
-            lack a sign the program's run leaves.
+            lack a sign the run leaves.
 
         Returns
         -------
@@ -212,6 +179,73 @@ class Workspace:
             details=self.details,
             unconfirmed=unconfirmed,
         )
+
+
+class ProgramWorkspace(Workspace):
+    """The directory of one process's runs of one external program.
+
+    A subclass names its program in the class attributes below, as it names
+    its purpose and artifacts for :class:`Workspace`.
+
+    Parameters
+    ----------
+    spec, workdir
+        As :class:`Workspace`.
+    program_path : Path or None
+        The program file to run instead of the one on PATH.
+    timeout : float or None
+        Seconds the run may take from now; ``None`` sets no limit.
+
+    Attributes
+    ----------
+    program_path : Path
+        The program file the run uses.
+    deadline : float or None
+        ``time.monotonic`` value at which a running program is stopped.
+    usage : ProgramUsage
+        What the program's runs in this directory took so far, combined.
+
+    Raises
+    ------
+    ValueError
+        If `timeout` is not positive or `workdir` is a filesystem root.
+    FileNotFoundError
+        If `program_path` is not a file, or none is given and PATH has no
+        `program`.
+    """
+
+    program: ClassVar[str]
+    """The program's name on PATH."""
+    description: ClassVar[str]
+    """How the program is called in messages, for example ``"MadGraph's bin/mg5_aMC"``."""
+    log_name: ClassVar[str]
+    """Name of the log file in the directory."""
+    error_type: ClassVar[type[ProgramError]] = ProgramError
+    """The exception a failed run raises; a subclass names its own."""
+
+    def __init__(
+        self,
+        spec: ProcessSpec,
+        workdir: Path,
+        *,
+        program_path: Path | None,
+        timeout: float | None,
+    ) -> None:
+        if timeout is not None and timeout <= 0:
+            raise ValueError(f"timeout must be positive, got {timeout}")
+        super().__init__(spec, workdir)
+        self.program_path = find_program(
+            self.program, program_path, description=self.description
+        )
+        self.deadline = None if timeout is None else time.monotonic() + timeout
+        self.usage = ProgramUsage(
+            wall_seconds=0.0, cpu_seconds=0.0, peak_memory_mib=None
+        )
+
+    @property
+    def log_path(self) -> Path:
+        """The program's output for the run."""
+        return self.workdir / self.log_name
 
     def run(
         self, command: Sequence[str | os.PathLike[str]], *, failure_message: str
