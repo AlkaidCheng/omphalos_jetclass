@@ -17,17 +17,15 @@ import signal
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
 from pathlib import Path
 from types import FrameType
 from typing import Any
 
 from omphjc.jobs.manifest import (
     DONE,
-    FAILED,
     MANIFEST_FILE,
-    RUNNING,
     Manifest,
+    StageOutcome,
     StageRecord,
     timestamp,
 )
@@ -41,35 +39,6 @@ JOB_DIR_PREFIX = "job_"
 
 class TerminationError(RuntimeError):
     """The process received a termination signal."""
-
-
-@dataclass(frozen=True)
-class StageOutcome:
-    """What a stage hands back once it has run.
-
-    Parameters
-    ----------
-    metadata : dict
-        What is known about the stage and what it made, as JSON values. The
-        keys are the stage's own.
-    outputs : list[Path]
-        The files the stage made, inside the job directory.
-    log_path : Path or None
-        The stage's log, inside the job directory.
-    usage : dict[str, float]
-        What the stage's program took beyond the wall time the job measures
-        itself, such as ``cpu_seconds`` and ``peak_memory_mib``.
-    set_aside : Path or None
-        The folder into which the run moved what an earlier run left and it
-        could not confirm as that run's, inside the job directory; ``None``
-        when it moved nothing.
-    """
-
-    metadata: dict[str, Any]
-    outputs: list[Path]
-    log_path: Path | None = None
-    usage: dict[str, float] = field(default_factory=dict)
-    set_aside: Path | None = None
 
 
 StageBody = Callable[[bool], StageOutcome]
@@ -161,6 +130,22 @@ class Job:
             return False
         return all((self.root_dir / output).exists() for output in record.outputs)
 
+    def require_done(self, stage: str) -> StageRecord:
+        """Return the record of `stage`, which must be done with its outputs present.
+
+        Raises
+        ------
+        ValueError
+            If `stage` is not done or an output is missing; the message names
+            the command to run first.
+        """
+        if not self.is_done(stage):
+            raise ValueError(
+                f"The {stage} stage of {self.root_dir} has not run to completion; "
+                f"run omphjc {stage} first"
+            )
+        return self.manifest.stages[stage]
+
     def run_stage(
         self,
         stage: str,
@@ -215,43 +200,24 @@ class Job:
         overwrite = force or earlier is not None
         started = timestamp()
         clock = time.monotonic()
-        self.manifest.stages[stage] = StageRecord(
-            status=RUNNING, started=started, parameters=parameters
+        self.manifest.stages[stage] = StageRecord.running(
+            started=started, parameters=parameters
         )
         self._write_manifest()
         try:
             outcome = body(overwrite)
         except BaseException as error:
-            self.manifest.stages[stage] = StageRecord(
-                status=FAILED,
-                started=started,
-                finished=timestamp(),
-                parameters=parameters,
-                error=str(error),
+            self.manifest.stages[stage] = StageRecord.failed(
+                started=started, parameters=parameters, error=str(error)
             )
             self._write_manifest()
             raise
-        record = StageRecord(
-            status=DONE,
+        record = StageRecord.done(
+            outcome,
             started=started,
-            finished=timestamp(),
             parameters=parameters,
-            metadata=outcome.metadata,
-            outputs=[self.relative_path(output) for output in outcome.outputs],
-            log=(
-                None
-                if outcome.log_path is None
-                else self.relative_path(outcome.log_path)
-            ),
-            usage={
-                "wall_seconds": round(time.monotonic() - clock, 3),
-                **outcome.usage,
-            },
-            set_aside=(
-                None
-                if outcome.set_aside is None
-                else self.relative_path(outcome.set_aside)
-            ),
+            wall_seconds=time.monotonic() - clock,
+            root_dir=self.root_dir,
         )
         self.manifest.stages[stage] = record
         self._write_manifest()

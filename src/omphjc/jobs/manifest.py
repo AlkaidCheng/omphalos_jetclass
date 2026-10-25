@@ -43,6 +43,11 @@ stage took: its wall time, and the CPU time and peak memory (MiB) of the
 external program's processes where the platform reports them. The file is
 replaced in one step whenever it changes, so a crash never leaves a
 half-written manifest.
+
+:class:`StageRecord` has one constructor per status. :meth:`StageRecord.running`
+records a stage that has started, :meth:`StageRecord.failed` one that raised,
+and :meth:`StageRecord.done` one that returned a :class:`StageOutcome`, whose
+paths it makes relative to the job directory.
 """
 
 import json
@@ -63,6 +68,35 @@ RUNNING = "running"
 FAILED = "failed"
 
 
+@dataclass(frozen=True)
+class StageOutcome:
+    """The result of a stage function, before the job records it.
+
+    Parameters
+    ----------
+    metadata : dict
+        What is known about the stage and the sample it made, as JSON values;
+        the keys are the stage's own.
+    outputs : list[Path]
+        The files the stage made, inside the job directory.
+    log_path : Path or None
+        The log of the stage's program, inside the job directory.
+    usage : dict[str, float]
+        Resources the stage's program used, such as ``cpu_seconds`` and
+        ``peak_memory_mib``; the job adds ``wall_seconds``.
+    set_aside : Path or None
+        The folder, inside the job directory, holding what an earlier run left
+        and this run could not confirm as that run's (:mod:`omphjc.stamps`);
+        ``None`` when nothing was moved.
+    """
+
+    metadata: dict[str, Any]
+    outputs: list[Path]
+    log_path: Path | None = None
+    usage: dict[str, float] = field(default_factory=dict)
+    set_aside: Path | None = None
+
+
 @dataclass
 class StageRecord:
     """What one stage did; the module docstring describes the fields."""
@@ -77,6 +111,57 @@ class StageRecord:
     usage: dict[str, float] = field(default_factory=dict)
     set_aside: str | None = None
     error: str | None = None
+
+    @classmethod
+    def running(cls, *, started: str, parameters: dict[str, Any]) -> "StageRecord":
+        """Return the record of a stage that has started."""
+        return cls(status=RUNNING, started=started, parameters=parameters)
+
+    @classmethod
+    def failed(
+        cls, *, started: str, parameters: dict[str, Any], error: str
+    ) -> "StageRecord":
+        """Return the record of a stage that has just raised `error`."""
+        return cls(
+            status=FAILED,
+            started=started,
+            finished=timestamp(),
+            parameters=parameters,
+            error=error,
+        )
+
+    @classmethod
+    def done(
+        cls,
+        outcome: StageOutcome,
+        *,
+        started: str,
+        parameters: dict[str, Any],
+        wall_seconds: float,
+        root_dir: Path,
+    ) -> "StageRecord":
+        """Return the record of a stage that has just returned `outcome`.
+
+        The paths in `outcome` are made relative to `root_dir`, the job
+        directory, and `wall_seconds` is added to its usage.
+        """
+
+        def relative(path: Path) -> str:
+            return path.relative_to(root_dir).as_posix()
+
+        return cls(
+            status=DONE,
+            started=started,
+            finished=timestamp(),
+            parameters=parameters,
+            metadata=outcome.metadata,
+            outputs=[relative(output) for output in outcome.outputs],
+            log=None if outcome.log_path is None else relative(outcome.log_path),
+            usage={"wall_seconds": round(wall_seconds, 3), **outcome.usage},
+            set_aside=(
+                None if outcome.set_aside is None else relative(outcome.set_aside)
+            ),
+        )
 
 
 @dataclass

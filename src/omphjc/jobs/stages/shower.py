@@ -3,8 +3,8 @@
 from collections.abc import Mapping
 from pathlib import Path
 
-from omphjc.jobs.job import Job, StageOutcome, sha256
-from omphjc.jobs.manifest import StageRecord
+from omphjc.jobs.job import Job, sha256
+from omphjc.jobs.manifest import StageOutcome, StageRecord
 from omphjc.jobs.stages.generate import GENERATE
 from omphjc.processes.catalogue import SettingValue
 from omphjc.pythia.driver import shower_events
@@ -55,12 +55,7 @@ def shower(
     ValueError
         If the generate stage of `job` has not run to completion.
     """
-    generated = job.manifest.stages.get(GENERATE)
-    if generated is None or not job.is_done(GENERATE):
-        raise ValueError(
-            f"The generate stage of {job.root_dir} has not run to completion; run "
-            "omphjc generate first"
-        )
+    generated = job.require_done(GENERATE)
     lhe_path = job.root_dir / generated.outputs[0]
     n_events = int(generated.metadata["events"])
     stage_dir = job.stage_dir(SHOWER)

@@ -72,6 +72,11 @@
 - A workspace's `sealed_run` context manager readies the directory on entry and
   seals the run's artifacts on exit, in place of `prepare` and
   `seal_artifacts`. (#22)
+- `StageOutcome` lives in `omphjc.jobs.manifest` beside `StageRecord`, whose
+  `running`, `failed` and `done` constructors build the record of each state.
+  (#24)
+- `omphjc.jobs.Job.require_done` returns the record of a finished stage or
+  says which command to run first. (#24)
 
 ### Fixed
 
