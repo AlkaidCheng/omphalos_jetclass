@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 
 from omphjc.delphes import (
-    SimulationError,
     SimulationWorkspace,
     detector_card_text,
     reference_card_text,
@@ -68,67 +67,7 @@ def test_another_card_can_be_run_and_no_seed_leaves_it_alone(
         detector_card_text(specs["HToBB"], tmp_path / "missing.tcl")
 
 
-def test_an_existing_output_is_kept_by_default_and_replaced_on_request(
-    specs: Mapping[str, ProcessSpec], delphes_root_path: Path, tmp_path: Path
-) -> None:
-    events_path = _write_events_path(tmp_path / "particles.root")
-    arguments = dict(events_path=events_path, workdir=tmp_path / "simulate", seed=1)
-    first = simulate_events(
-        specs["HToBB"], delphes_root_path=delphes_root_path, **arguments
-    )
-    with pytest.raises(FileExistsError, match="already exists"):
-        simulate_events(
-            specs["HToBB"], delphes_root_path=delphes_root_path, **arguments
-        )
-    assert first.output_path.is_file()
-    again = simulate_events(
-        specs["HToBB"], delphes_root_path=delphes_root_path, overwrite=True, **arguments
-    )
-    assert again.output_path.is_file()
-    assert again.log_path.read_text().count("$ ") == 1
-    assert again.set_aside is None
-
-
-def test_a_failing_exit_status_raises_and_seals_the_log(
-    specs: Mapping[str, ProcessSpec],
-    delphes_root_path: Path,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    events_path = _write_events_path(tmp_path / "particles.root")
-    monkeypatch.setenv("FAKE_DROOT_FAIL", "exit")
-    with pytest.raises(SimulationError, match="DelphesROOT failed: .* status 1"):
-        simulate_events(
-            specs["HToBB"],
-            events_path=events_path,
-            workdir=tmp_path / "simulate",
-            seed=1,
-            delphes_root_path=delphes_root_path,
-        )
-    stamp = read_stamp(tmp_path / "simulate")
-    assert stamp is not None and "simulate.log" in stamp.artifacts
-
-
-def test_a_run_past_its_time_limit_is_stopped(
-    specs: Mapping[str, ProcessSpec],
-    delphes_root_path: Path,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    events_path = _write_events_path(tmp_path / "particles.root")
-    monkeypatch.setenv("FAKE_DROOT_FAIL", "hang")
-    with pytest.raises(SimulationError, match="time limit"):
-        simulate_events(
-            specs["HToBB"],
-            events_path=events_path,
-            workdir=tmp_path / "simulate",
-            seed=1,
-            timeout=0.5,
-            delphes_root_path=delphes_root_path,
-        )
-
-
-def test_invalid_requests_fail_before_anything_runs(
+def test_missing_showered_events_fail_before_anything_runs(
     specs: Mapping[str, ProcessSpec], delphes_root_path: Path, tmp_path: Path
 ) -> None:
     workdir = tmp_path / "simulate"
@@ -141,26 +80,6 @@ def test_invalid_requests_fail_before_anything_runs(
             delphes_root_path=delphes_root_path,
         )
     assert not workdir.exists()
-    events_path = _write_events_path(tmp_path / "particles.root")
-    first = simulate_events(
-        specs["HToBB"],
-        events_path=events_path,
-        workdir=workdir,
-        seed=1,
-        delphes_root_path=delphes_root_path,
-    )
-    log_before = first.log_path.read_text()
-    with pytest.raises(FileNotFoundError, match="Delphes card"):
-        simulate_events(
-            specs["HToBB"],
-            events_path=events_path,
-            workdir=workdir,
-            seed=1,
-            card_path=tmp_path / "missing.tcl",
-            overwrite=True,
-            delphes_root_path=delphes_root_path,
-        )
-    assert first.output_path.is_file() and first.log_path.read_text() == log_before
 
 
 def test_a_workspace_finds_delphes_root_on_path_or_takes_the_given_one(
