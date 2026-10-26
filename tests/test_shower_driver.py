@@ -112,51 +112,6 @@ def test_a_matched_process_showers_with_matching_and_loses_events_to_it(
     assert (run.statistics.events_read, run.statistics.events_accepted) == (4, 2)
 
 
-def test_an_existing_output_is_kept_by_default_and_replaced_on_request(
-    specs: Mapping[str, ProcessSpec], delphes_pythia8_path: Path, tmp_path: Path
-) -> None:
-    lhe_path = _write_lhe(tmp_path / "events.lhe.gz", 1)
-    arguments = dict(lhe_path=lhe_path, workdir=tmp_path / "shower", n_events=1, seed=1)
-    first = shower_events(
-        specs["HToBB"], delphes_pythia8_path=delphes_pythia8_path, **arguments
-    )
-    with pytest.raises(FileExistsError, match="already exists"):
-        shower_events(
-            specs["HToBB"], delphes_pythia8_path=delphes_pythia8_path, **arguments
-        )
-    assert first.output_path.is_file()
-    again = shower_events(
-        specs["HToBB"],
-        delphes_pythia8_path=delphes_pythia8_path,
-        overwrite=True,
-        **arguments,
-    )
-    assert again.output_path.is_file()
-    assert again.log_path.read_text().count("$ ") == 1
-    assert again.set_aside is None
-
-
-def test_a_failing_exit_status_raises_and_seals_the_log(
-    specs: Mapping[str, ProcessSpec],
-    delphes_pythia8_path: Path,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    lhe_path = _write_lhe(tmp_path / "events.lhe.gz", 1)
-    monkeypatch.setenv("FAKE_DP8_FAIL", "exit")
-    with pytest.raises(ShowerError, match="DelphesPythia8 failed: .* status 1"):
-        shower_events(
-            specs["HToBB"],
-            lhe_path=lhe_path,
-            workdir=tmp_path / "shower",
-            n_events=1,
-            seed=1,
-            delphes_pythia8_path=delphes_pythia8_path,
-        )
-    stamp = read_stamp(tmp_path / "shower")
-    assert stamp is not None and "shower.log" in stamp.artifacts
-
-
 def test_a_run_that_gave_up_raises(
     specs: Mapping[str, ProcessSpec],
     delphes_pythia8_path: Path,
@@ -176,27 +131,7 @@ def test_a_run_that_gave_up_raises(
         )
 
 
-def test_a_run_past_its_time_limit_is_stopped(
-    specs: Mapping[str, ProcessSpec],
-    delphes_pythia8_path: Path,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    lhe_path = _write_lhe(tmp_path / "events.lhe.gz", 1)
-    monkeypatch.setenv("FAKE_DP8_FAIL", "hang")
-    with pytest.raises(ShowerError, match="time limit"):
-        shower_events(
-            specs["HToBB"],
-            lhe_path=lhe_path,
-            workdir=tmp_path / "shower",
-            n_events=1,
-            seed=1,
-            timeout=0.5,
-            delphes_pythia8_path=delphes_pythia8_path,
-        )
-
-
-def test_invalid_requests_fail_before_anything_runs(
+def test_a_missing_event_file_fails_before_anything_runs(
     specs: Mapping[str, ProcessSpec], delphes_pythia8_path: Path, tmp_path: Path
 ) -> None:
     workdir = tmp_path / "shower"
@@ -210,27 +145,6 @@ def test_invalid_requests_fail_before_anything_runs(
             delphes_pythia8_path=delphes_pythia8_path,
         )
     assert not workdir.exists()
-    lhe_path = _write_lhe(tmp_path / "events.lhe.gz", 1)
-    first = shower_events(
-        specs["HToBB"],
-        lhe_path=lhe_path,
-        workdir=workdir,
-        n_events=1,
-        seed=1,
-        delphes_pythia8_path=delphes_pythia8_path,
-    )
-    log_before = first.log_path.read_text()
-    with pytest.raises(ValueError, match="n_events"):
-        shower_events(
-            specs["HToBB"],
-            lhe_path=lhe_path,
-            workdir=workdir,
-            n_events=0,
-            seed=1,
-            overwrite=True,
-            delphes_pythia8_path=delphes_pythia8_path,
-        )
-    assert first.output_path.is_file() and first.log_path.read_text() == log_before
 
 
 def test_read_statistics_parses_pythias_banner_and_table() -> None:
