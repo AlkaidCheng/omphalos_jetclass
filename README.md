@@ -41,8 +41,10 @@ key ends up.
 pip install -e .
 ```
 
-The package itself needs Python 3.10 or later. Generating events additionally
-needs MadGraph5_aMC@NLO, Pythia 8 and Delphes built with Pythia support.
+The package itself needs Python 3.10 or later; pip installs the Python
+packages it uses, among them numpy, awkward and uproot, which read event files.
+Generating events additionally needs MadGraph5_aMC@NLO, Pythia 8 and Delphes
+built with Pythia support.
 
 ## Configuration
 

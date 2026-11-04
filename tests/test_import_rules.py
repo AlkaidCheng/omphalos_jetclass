@@ -16,17 +16,25 @@ import omphjc
 
 PACKAGE_DIR = Path(omphjc.__file__).parent
 
-# Modules any layer may import: they run programs, guard paths, stamp outputs
-# and compare values, and know no catalogue, tool, stage or command.
+# Modules any layer may import: they run programs, guard paths, stamp outputs,
+# compare values and read ROOT files, and know no catalogue, tool, stage or
+# command.
 SHARED_MODULES = (
     "omphjc.comparison",
     "omphjc.config_paths",
     "omphjc.filetree",
     "omphjc.programs",
+    "omphjc.root_io",
     "omphjc.safe_paths",
     "omphjc.stamps",
     "omphjc.workspace",
 )
+
+# The modules omphjc.events may import besides its own: the event-file
+# contracts know no tool, stage or command.
+EVENTS_IMPORTS = ("omphjc.root_io",)
+
+ARRAY_LIBRARIES = ("awkward", "numpy", "uproot")
 
 # The one import from one tool into another: the shower runs inside a Delphes
 # program, which reads the card that keeps the generator record.
@@ -149,6 +157,17 @@ def test_shared_modules_import_no_catalogue() -> None:
     assert reaches == set()
 
 
+def test_the_event_files_import_nothing_but_their_own_and_root_io() -> None:
+    reaches = {
+        (name, target)
+        for name, targets in IMPORTS.items()
+        if _within(name, "omphjc.events")
+        for target in targets
+        if not _within(target, "omphjc.events") and target not in EVENTS_IMPORTS
+    }
+    assert reaches == set()
+
+
 def test_the_jobs_layer_imports_no_command() -> None:
     reaches = {
         (name, target)
@@ -185,6 +204,12 @@ def test_importing_the_tools_package_loads_no_tool() -> None:
     assert {name for name in loaded if _within(name, "omphjc.tools")} == {
         "omphjc.tools"
     }
+
+
+@pytest.mark.parametrize("module", ["omphjc.events", "omphjc.events.formats"])
+def test_the_event_file_contracts_load_no_array_library(module: str) -> None:
+    loaded = _loaded_after(f"import {module}")
+    assert {name for name in loaded if name.split(".")[0] in ARRAY_LIBRARIES} == set()
 
 
 def test_a_tool_module_loads_no_driver_and_no_other_tool() -> None:

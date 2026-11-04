@@ -52,6 +52,10 @@
   `DelphesROOT`, with the process's detector card or one given by `--card`. (#15)
 - `omphjc generate` records the cores MadGraph ran on as `n_cores` in the
   stage's metadata. (#30)
+- `omphjc.events.readers.read_particles`, `iterate_particles` and
+  `count_events` read the generator record of a Delphes ROOT file, such as the
+  shower's `particles.root`, as one awkward record per event with `part_t` in
+  mm. (#39)
 
 ### Changed
 
@@ -83,6 +87,7 @@
   (#24)
 - `omphjc.jobs.Job.require_done` returns the record of a finished stage or
   says which command to run first. (#24)
+- Installing omphjc also installs numpy, awkward and uproot. (#39)
 
 ### Fixed
 
