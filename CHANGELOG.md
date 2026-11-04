@@ -52,10 +52,10 @@
   `DelphesROOT`, with the process's detector card or one given by `--card`. (#15)
 - `omphjc generate` records the cores MadGraph ran on as `n_cores` in the
   stage's metadata. (#30)
-- `omphjc.events.readers.read_particles`, `iterate_particles` and
-  `count_events` read the generator record of a Delphes ROOT file, such as the
-  shower's `particles.root`, as one awkward record per event with `part_t` in
-  mm. (#39)
+- `omphjc.events.readers.reader_for` returns the `EventReader` of an event file,
+  whose `read_particles`, `iterate_particles` and `count_events` read the
+  generator record of a Delphes ROOT file, such as the shower's
+  `particles.root`, as one awkward record per event with `part_t` in mm. (#39)
 - `omphjc.events.final_state.mark_final_state` marks the final state a
   simulator receives under a `FinalStateRule`, which can count the long-lived
   hadrons the shower decayed as final, as Parnassus expects. (#39)

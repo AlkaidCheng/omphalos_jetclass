@@ -5,21 +5,18 @@ Delphes writes the generator's particles to branch ``Particle``
 of tree ``Delphes``. DelphesPythia8's record of the shower and DelphesROOT's
 output both carry them (Delphes 3.5.1,
 https://github.com/delphes/delphes/blob/3.5.1/classes/DelphesClasses.h).
-
-Branches are read by their bare names, such as ``Particle.PID``: uproot finds
-a bare name in a file written by ROOT by searching the tree, and a file written
-by uproot has no ``Particle/`` level, so only bare names read both.
 """
 
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 import awkward as ak
 import numpy as np
 import uproot
 
+from omphjc.events.formats import EventFormat
 from omphjc.events.particles import build_record, check_indices
+from omphjc.events.readers import EventReader
 from omphjc.root_io import entries_per_step
 
 TREE_NAME = "Delphes"
@@ -29,6 +26,9 @@ TREE_NAME = "Delphes"
 # https://github.com/delphes/delphes/blob/3.5.1/modules/TreeWriter.cc); the
 # record holds c t in mm. The exact SI value of c, in mm/s:
 SPEED_OF_LIGHT_MM_PER_S = 2.99792458e11
+
+# Branches are named without their parent, such as Particle.PID, the one name
+# uproot finds both in a file ROOT writes and in one uproot writes.
 
 # The record's event fields and the branches they come from. Event.ProcessID is
 # left out: Pythia gives every Les Houches event the code 9999 (SigmaLHAProcess,
@@ -68,115 +68,86 @@ PARTICLE_BRANCHES = {
 BRANCHES = (*EVENT_BRANCHES.values(), *PARTICLE_BRANCHES.values())
 
 
-def count_events(path: Path) -> int:
-    """Return the number of events in the Delphes ROOT file `path`, reading none."""
-    with uproot.open(path) as file:
-        return int(_tree(file, path).num_entries)
+class DelphesRootReader(EventReader):
+    """Reads the generator record of a Delphes ROOT file.
 
-
-def read_particles(
-    path: Path,
-    *,
-    entry_start: int = 0,
-    entry_stop: int | None = None,
-    downcast: bool = True,
-) -> ak.Array:
-    """Return the particle record of the events in [entry_start, entry_stop) of `path`.
-
-    Parameters
-    ----------
-    path : Path
-        A Delphes ROOT file.
-    entry_start, entry_stop : int, int or None, optional
-        The events to read; ``None`` reads to the end of the file.
-    downcast : bool, optional
-        Whether to cast every field to the schema's dtype.
-
-    Returns
-    -------
-    ak.Array
-        One record per event (:mod:`omphjc.events.particles`).
-
-    Raises
-    ------
-    ValueError
-        If the range lies outside the file, a branch is missing, ``Event``
-        holds other than one entry per event, an index lies outside its event,
-        or a value does not fit the schema's dtype when downcasting.
+    The reader refuses a file without tree ``Delphes`` or one of the branches
+    the record is read from, an ``Event`` branch with other than one entry per
+    event, and a mother or daughter index outside its event. A memory step size
+    counts the uncompressed bytes of the branches read
+    (:func:`omphjc.root_io.entries_per_step`).
     """
-    with uproot.open(path) as file:
-        tree = _tree(file, path)
-        n_events = int(tree.num_entries)
-        stop = n_events if entry_stop is None else entry_stop
-        if not 0 <= entry_start <= stop <= n_events:
-            raise ValueError(
-                f"entries [{entry_start}, {stop}) lie outside the {n_events}"
-                f" events of {path}"
+
+    format = EventFormat.DELPHES_ROOT
+
+    def count_events(self) -> int:
+        with uproot.open(self.path) as file:
+            return int(self._tree(file).num_entries)
+
+    def read_particles(
+        self,
+        *,
+        entry_start: int = 0,
+        entry_stop: int | None = None,
+        downcast: bool = True,
+    ) -> ak.Array:
+        with uproot.open(self.path) as file:
+            tree = self._tree(file)
+            n_events = int(tree.num_entries)
+            stop = n_events if entry_stop is None else entry_stop
+            if not 0 <= entry_start <= stop <= n_events:
+                raise ValueError(
+                    f"entries [{entry_start}, {stop}) lie outside the {n_events}"
+                    f" events of {self.path}"
+                )
+            arrays = tree.arrays(
+                list(BRANCHES), entry_start=entry_start, entry_stop=stop
             )
-        arrays = tree.arrays(list(BRANCHES), entry_start=entry_start, entry_stop=stop)
-    return _record(arrays, entry_start, downcast=downcast)
+        return self._record(arrays, entry_start, downcast=downcast)
 
+    def iterate_particles(
+        self, *, step_size: int | str = "100 MB", downcast: bool = True
+    ) -> Iterator[ak.Array]:
+        with uproot.open(self.path) as file:
+            tree = self._tree(file)
+            step = entries_per_step(tree, BRANCHES, step_size)
+            for arrays, report in tree.iterate(
+                list(BRANCHES), step_size=step, report=True
+            ):
+                yield self._record(arrays, report.tree_entry_start, downcast=downcast)
 
-def iterate_particles(
-    path: Path, *, step_size: int | str = "100 MB", downcast: bool = True
-) -> Iterator[ak.Array]:
-    """Yield the particle record of `path` in steps of `step_size`.
+    def _tree(self, file: Any) -> Any:
+        """Return tree Delphes of `file`, after checking that it has every branch read."""
+        if TREE_NAME not in file:
+            raise ValueError(f"{self.path} has no tree {TREE_NAME!r}")
+        tree = file[TREE_NAME]
+        missing = [name for name in BRANCHES if name not in tree]
+        if missing:
+            raise ValueError(
+                f"tree {TREE_NAME!r} of {self.path} lacks {', '.join(missing)}"
+            )
+        return tree
 
-    Parameters
-    ----------
-    path : Path
-        A Delphes ROOT file.
-    step_size : int or str, optional
-        Events per step, or a memory size such as ``"100 MB"`` of the branches
-        read (:func:`omphjc.root_io.entries_per_step`).
-    downcast : bool, optional
-        Whether to cast every field to the schema's dtype.
-
-    Yields
-    ------
-    ak.Array
-        The records of consecutive events.
-
-    Raises
-    ------
-    ValueError
-        As :func:`read_particles` does.
-    """
-    with uproot.open(path) as file:
-        tree = _tree(file, path)
-        step = entries_per_step(tree, BRANCHES, step_size)
-        for arrays, report in tree.iterate(list(BRANCHES), step_size=step, report=True):
-            yield _record(arrays, report.tree_entry_start, downcast=downcast)
-
-
-def _tree(file: Any, path: Path) -> Any:
-    """Return tree Delphes of `file`, after checking that it has every branch read."""
-    if TREE_NAME not in file:
-        raise ValueError(f"{path} has no tree {TREE_NAME!r}")
-    tree = file[TREE_NAME]
-    missing = [name for name in BRANCHES if name not in tree]
-    if missing:
-        raise ValueError(f"tree {TREE_NAME!r} of {path} lacks {', '.join(missing)}")
-    return tree
-
-
-def _record(arrays: ak.Array, entry_start: int, *, downcast: bool) -> ak.Array:
-    """Return the particle record of the branches in `arrays`, the first being `entry_start`."""
-    columns: dict[str, Any] = {
-        "event_index": np.arange(entry_start, entry_start + len(arrays), dtype=np.int64)
-    }
-    for field, branch in EVENT_BRANCHES.items():
-        column = arrays[branch]
-        if not ak.all(ak.num(column, axis=1) == 1):
-            raise ValueError(f"{branch} holds other than one entry per event")
-        columns[field] = column[:, 0]
-    counts = ak.num(arrays[PARTICLE_BRANCHES["part_pid"]], axis=1)
-    for field, branch in PARTICLE_BRANCHES.items():
-        column = arrays[branch]
-        if not ak.all(ak.num(column, axis=1) == counts):
-            raise ValueError(f"{branch} holds other than one entry per particle")
-        columns[field] = column
-    columns["part_t"] = columns["part_t"] * SPEED_OF_LIGHT_MM_PER_S
-    record = build_record(columns, downcast=downcast)
-    check_indices(record)
-    return record
+    @staticmethod
+    def _record(arrays: ak.Array, entry_start: int, *, downcast: bool) -> ak.Array:
+        """Return the particle record of the branches in `arrays`, the first being `entry_start`."""
+        columns: dict[str, Any] = {
+            "event_index": np.arange(
+                entry_start, entry_start + len(arrays), dtype=np.int64
+            )
+        }
+        for field, branch in EVENT_BRANCHES.items():
+            column = arrays[branch]
+            if not ak.all(ak.num(column, axis=1) == 1):
+                raise ValueError(f"{branch} holds other than one entry per event")
+            columns[field] = column[:, 0]
+        counts = ak.num(arrays[PARTICLE_BRANCHES["part_pid"]], axis=1)
+        for field, branch in PARTICLE_BRANCHES.items():
+            column = arrays[branch]
+            if not ak.all(ak.num(column, axis=1) == counts):
+                raise ValueError(f"{branch} holds other than one entry per particle")
+            columns[field] = column
+        columns["part_t"] = columns["part_t"] * SPEED_OF_LIGHT_MM_PER_S
+        record = build_record(columns, downcast=downcast)
+        check_indices(record)
+        return record
