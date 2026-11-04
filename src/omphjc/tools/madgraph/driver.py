@@ -41,6 +41,15 @@ MadGraph resets ``iseed`` to 0 in the kept ``Cards/run_card.dat``; the banner's
 run card holds the seed it used (``reset_iseed_in_run_card``,
 https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/common_run_interface.py#L5367-L5380).
 
+MadSpin decays the events in one separately seeded shard per core, so a sample
+with MadSpin is reproduced only on the same number of cores
+(``_split_production``,
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/MadSpin/interface_madspin.py#L6211-L6226).
+A run with at least ``max(80, ulimit -n - 40)`` channel directories, or 2500
+when ``ulimit -n`` is unlimited, is not reproducible: MadGraph merges its events
+in subprocesses that do not seed Python's generator (``do_combine_events``,
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L3908-L3990).
+
 A working directory holds the runs of one process and carries a stamp
 (:mod:`omphjc.stamps`) naming the process. When a run ends, short of a hard
 kill, it seals its artifacts: the process directory, the model copy, the
@@ -120,10 +129,13 @@ class MadGraphRun(ProgramRun):
         The gzipped LHE file of the sample; after MadSpin, the decayed one.
     banner : Banner
         The banner of `output_path`: version, event count, cross section, run card.
+    n_cores : int
+        Number of cores MadGraph ran its jobs on.
     """
 
     process_dir: Path
     banner: Banner
+    n_cores: int
 
 
 def generate_events(
@@ -176,7 +188,8 @@ def generate_events(
     Returns
     -------
     MadGraphRun
-        The process directory, the event file, its banner and the log.
+        The process directory, the event file, its banner, the core count and
+        the log.
 
     Raises
     ------
@@ -228,6 +241,7 @@ def generate_events(
         process_dir=workspace.process_dir,
         output_path=output_path,
         banner=Banner.read(output_path),
+        n_cores=n_cores,
         log_path=workspace.log_path,
         usage=workspace.usage,
         set_aside=set_aside,

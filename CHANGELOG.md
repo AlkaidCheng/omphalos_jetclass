@@ -50,6 +50,8 @@
   stage reports now count. (#14)
 - `omphjc simulate` runs Delphes on a job's showered events through
   `DelphesROOT`, with the process's detector card or one given by `--card`. (#15)
+- `omphjc generate` records the cores MadGraph ran on as `n_cores` in the
+  stage's metadata. (#30)
 
 ### Changed
 

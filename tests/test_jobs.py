@@ -21,6 +21,7 @@ from omphjc.jobs import (
     simulate,
 )
 from omphjc.processes import ProcessSpec, get_process
+from omphjc.programs import available_cores
 from omphjc.tools.madgraph.driver import MadGraphError
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
 
@@ -226,6 +227,21 @@ def test_generate_records_what_madgraph_made(
     assert (card.parent / "madspin_card.dat").is_file()
     launch = (job.root_dir / "generate" / "launch.mg5").read_text().splitlines()
     assert "set iseed 3" in launch and "set python_seed 3" in launch
+
+
+@pytest.mark.parametrize("n_cores", [2, None])
+def test_generate_records_the_cores_as_metadata(
+    specs: Mapping[str, ProcessSpec],
+    mg5_path: Path,
+    tmp_path: Path,
+    n_cores: int | None,
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    record = generate(job, n_events=10, n_cores=n_cores, mg5_path=mg5_path)
+    expected = available_cores() if n_cores is None else n_cores
+    assert record.metadata["n_cores"] == expected
+    rerun = generate(job, n_events=10, n_cores=expected + 1, mg5_path=mg5_path)
+    assert rerun == record
 
 
 def test_generate_keeps_a_finished_run_unless_forced(

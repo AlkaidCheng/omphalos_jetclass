@@ -101,6 +101,7 @@ def test_madgraph_runs_on_the_requested_cores(
     configuration = (run.process_dir / "Cards" / "me5_configuration.txt").read_text()
     expected = available_cores() if n_cores is None else n_cores
     assert configuration.splitlines()[-2:] == ["run_mode = 2", f"nb_core = {expected}"]
+    assert run.n_cores == expected
 
 
 def test_a_run_stamps_its_directory_and_seals_its_artifacts(

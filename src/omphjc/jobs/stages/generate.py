@@ -36,7 +36,8 @@ def generate(
     The stage's parameters are the event count and the job's seed, so a
     changed seed is refused like any other change unless `force` is set. Its
     metadata are the MadGraph version, the events made, the cross section with
-    its error in pb, and the SHA-256 of each card by path.
+    its error in pb, the cores MadGraph ran on, and the SHA-256 of each card by
+    path.
 
     Parameters
     ----------
@@ -45,7 +46,8 @@ def generate(
     n_events : int
         Events to generate.
     n_cores : int or None, optional
-        Cores MadGraph may use; ``None`` for every usable CPU.
+        Cores MadGraph may use; ``None`` for every usable CPU. A sample with
+        MadSpin is reproduced only on the same number of cores.
     timeout : float or None, optional
         Seconds the stage may take; ``None`` for no limit.
     force : bool, optional
@@ -78,6 +80,7 @@ def generate(
                 "events": run.banner.n_events,
                 "cross_section_pb": run.banner.cross_section_pb,
                 "cross_section_error_pb": run.banner.cross_section_error_pb,
+                "n_cores": run.n_cores,
                 "cards": cards,
             },
             outputs=[run.output_path],
