@@ -341,14 +341,15 @@ status, its start and end times, the parameters it was asked for, the metadata
 of what it made, its outputs, its log, and what it took: the wall time of the
 stage and the CPU time and peak memory of the program's processes. For
 generation the parameters are the event count and the seed, and the metadata the
-MadGraph version, the events, the cross section with its error and the SHA-256
-of each card. For the shower the parameters are the event count, the seed, the
-Pythia overrides and the cards the events were generated with, and the metadata
-the Pythia version, the events read and kept, the fraction kept by matching for
-a matched process, and the SHA-256 of the command file and the record-only card
-as run. For the simulation the parameters are the seed, the SHA-256 of the
-detector card chosen and the settings the events were showered with, and the
-metadata the events simulated and the SHA-256 of the card as run.
+MadGraph version, the events, the cross section with its error, the cores
+MadGraph ran on and the SHA-256 of each card. For the shower the parameters are
+the event count, the seed, the Pythia overrides and the cards the events were
+generated with, and the metadata the Pythia version, the events read and kept,
+the fraction kept by matching for a matched process, and the SHA-256 of the
+command file and the record-only card as run. For the simulation the parameters
+are the seed, the SHA-256 of the detector card chosen and the settings the
+events were showered with, and the metadata the events simulated and the SHA-256
+of the card as run.
 
 Running a stage again keeps a result recorded as done whose outputs are
 present and whose parameters match, runs again a stage that failed or was

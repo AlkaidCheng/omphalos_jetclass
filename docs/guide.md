@@ -55,6 +55,7 @@ launch script (1000 events, random seed):
   done
   set nevents 1000
   set iseed 0
+  set python_seed -1
   set lpp1 1
   …
   set misset 450.0
@@ -138,6 +139,7 @@ processes, with MadGraph's own description where it has one:
 |---|---|
 | `nevents` | Number of events to generate |
 | `iseed` | Random seed; 0 lets MadGraph choose |
+| `python_seed` | Seed of MadGraph's Python random generator, which unweights the events and draws MadSpin's seed; −1 leaves it to the system. A job sets `iseed` and `python_seed` to its seed ([What a rerun reproduces](reproducibility.md)) |
 | `lpp1`, `lpp2` | Beam types; 1 is a proton |
 | `ebeam1`, `ebeam2` | Energy of each beam in GeV; 6500 + 6500 is the 13 TeV LHC |
 | `pdlabel`, `lhaid` | Parton distribution functions. `nn23lo1` is NNPDF 2.3 at leading order, built into MadGraph; `lhaid` is read only when `pdlabel = lhapdf` |
@@ -182,7 +184,9 @@ launch
 
 Both tops decay to a b quark and a hadronically decaying W. TTBarLep's card
 decays both W bosons to `l+ vl` and `l- vl~` instead. An entry runs MadSpin
-when it names a `madspin_card`.
+when it names a `madspin_card`. The file also keeps MadSpin's commented-out
+options, among them `# set seed 1`; in MadSpin's default spin mode that option
+has no effect, since MadSpin draws its seed from MadGraph's Python generator.
 
 ### 2.6 What MadGraph writes
 
