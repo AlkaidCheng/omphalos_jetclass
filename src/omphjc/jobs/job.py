@@ -7,8 +7,8 @@
       <stage>/           one directory per stage, laid out by the stage
 
 The job number fixes the seed of every program the job runs
-(:func:`job_seed`), so a job is reproducible from its process and number
-alone. Paths are built from screened names (:mod:`omphjc.safe_paths`), so a
+(:func:`job_seed`); ``docs/reproducibility.md`` lists what else a rerun's
+events depend on. Paths are built from screened names (:mod:`omphjc.safe_paths`), so a
 process name from a catalogue cannot place a job outside `outdir`.
 """
 
