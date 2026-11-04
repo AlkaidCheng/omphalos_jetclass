@@ -150,10 +150,18 @@ def matching_scale(spec: ProcessSpec) -> float:
 
 
 def max_matched_jets(spec: ProcessSpec) -> int:
-    """Return ``JetMatching:nJetMax``: the most light jets any process line produces.
+    """Return ``JetMatching:nJetMax``: the most jets any process line asks for.
 
-    Only the hard process counts (the part before any decay chain); the
-    jet label is ``j`` as MadGraph's ``max_n_matched_jets`` counts it.
+    A jet is a ``j`` in the final state of a process line, MadGraph's
+    multiparticle label for a light parton: a gluon or a light quark, and a b
+    quark where the catalogue's ``definitions`` add it. Only the hard process
+    counts, the part before any decay chain, so ``p p > ve ve~ j j @1`` asks
+    for 2. MadGraph's own ``max_n_matched_jets`` is the smaller of the highest
+    QCD order of the diagrams and the most massless coloured final-state
+    partons of a process (``madgraph/iolibs/export_v4.py``, MadGraph 3.8.0,
+    https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/iolibs/export_v4.py#L5907-L5921).
+    The two differ when a process line names a parton directly, such as ``g``
+    instead of ``j``.
     """
     return max(_jet_count(process) for process in spec.processes)
 

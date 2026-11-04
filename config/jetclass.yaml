@@ -55,7 +55,8 @@ common:
 
   # Pythia settings for MLM-matched processes: the fixed values set by
   # setup_Pythia8RunAndCard in madgraph/interface/madevent_interface.py,
-  # https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544-L4602.
+  # https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544-L4602,
+  # and doShowerKt as the official cards set it (references/jetclass/<process>/pythia8_card.dat:44).
   pythia_matching:
     Beams:setProductionScalesFromLHEF: on
     JetMatching:merge: on
