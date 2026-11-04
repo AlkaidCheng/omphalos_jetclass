@@ -34,8 +34,8 @@ def test_a_simulation_runs_in_its_own_working_directory(
     )
     assert run.output_path == workdir / "delphes.root" and run.output_path.is_file()
     card = run.card_path.read_text()
-    assert card.startswith("set RandomSeed 7\n")
-    assert card.endswith(reference_card_text())
+    assert card.startswith(reference_card_text())
+    assert card.endswith("\nset RandomSeed 7\n")
     assert run.log_path == workdir / "simulate.log"
     log = run.log_path.read_text()
     assert log.count("$ ") == 1 and f"** Reading {events_path}" in log

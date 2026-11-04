@@ -457,7 +457,7 @@ def test_simulate_records_what_it_made_and_keeps_it(
     assert (job.root_dir / "simulate" / "delphes.root").is_file()
     assert record.log == "simulate/simulate.log"
     card = (job.root_dir / "simulate" / "delphes_card.tcl").read_text()
-    assert card.startswith("set RandomSeed 10000001\n")
+    assert card.endswith("\nset RandomSeed 10000001\n")
     log = (job.root_dir / "simulate" / "simulate.log").read_text()
     assert f"** Reading {job.root_dir / 'shower' / 'particles.root'}" in log
 
@@ -486,5 +486,5 @@ def test_simulate_records_what_it_made_and_keeps_it(
     assert (
         (job.root_dir / "simulate" / "delphes_card.tcl")
         .read_text()
-        .endswith(other.read_text())
+        .startswith(other.read_text())
     )

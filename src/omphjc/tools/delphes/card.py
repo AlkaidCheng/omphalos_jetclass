@@ -162,11 +162,13 @@ def reference_card() -> DelphesCard:
 
 
 def with_random_seed(text: str, seed: int) -> str:
-    """Return `text` with a ``set RandomSeed`` line prepended.
+    """Return `text` with a ``set RandomSeed`` line appended.
 
+    Delphes evaluates a card from top to bottom and uses the last value it sets,
+    so the appended seed applies even when `text` sets ``RandomSeed`` itself.
     Without such a line Delphes seeds its random generator from the clock.
     """
-    return f"set RandomSeed {seed}\n\n{text}"
+    return f"{text}\nset RandomSeed {seed}\n"
 
 
 _PARTICLES_CARD = """\
