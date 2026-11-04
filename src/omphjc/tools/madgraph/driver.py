@@ -45,10 +45,14 @@ MadSpin decays the events in one separately seeded shard per core, so a sample
 with MadSpin is reproduced only on the same number of cores
 (``_split_production``,
 https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/MadSpin/interface_madspin.py#L6211-L6226).
-A run with at least ``max(80, ulimit -n - 40)`` channel directories, or 2500
-when ``ulimit -n`` is unlimited, is not reproducible: MadGraph merges its events
-in subprocesses that do not seed Python's generator (``do_combine_events``,
+MadGraph unweights the events of a run with at least
+``max(80, ulimit -n - 40)`` channel directories, or 2500 when ``ulimit -n`` is
+unlimited, in new Python processes whose random numbers come from the operating
+system (``do_combine_events``,
 https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L3908-L3990).
+A run with a seed raises ``ulimit -n`` to the hard limit while MadGraph runs
+(:class:`omphjc.programs.RaisedOpenFileLimit`), so only a run with at least
+the raised limit minus 40 channel directories is not reproducible.
 
 A working directory holds the runs of one process and carries a stamp
 (:mod:`omphjc.stamps`) naming the process. When a run ends, short of a hard
@@ -67,7 +71,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from omphjc.processes.catalogue import ProcessSpec
-from omphjc.programs import ProgramError, available_cores
+from omphjc.programs import ProgramError, RaisedOpenFileLimit, available_cores
 from omphjc.safe_paths import inside, require_unoccupied
 from omphjc.tools.madgraph.banner import Banner
 from omphjc.tools.madgraph.cards import (
@@ -232,7 +236,9 @@ def generate_events(
             proc_card_commands(local_spec, output_dir=workspace.process_dir),
         )
         workspace.write_cards(n_cores)
-        workspace.run_script(_LAUNCH_SCRIPT, launch)
+        # Keeps MadGraph's unweighting in its seeded process (see the module docstring).
+        with RaisedOpenFileLimit(enabled=seed is not None):
+            workspace.run_script(_LAUNCH_SCRIPT, launch)
 
     output_path = workspace.output_path
     if not output_path.is_file():

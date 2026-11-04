@@ -92,3 +92,5 @@
   decays from the job seed instead of one fixed seed shared by every job. A
   seed therefore no longer reproduces events generated before this change.
   (#30)
+- `omphjc generate` raises the open-file limit while MadGraph runs, so that a
+  run with many channels also unweights its events from the job seed. (#30)

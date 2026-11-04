@@ -104,6 +104,26 @@ def test_madgraph_runs_on_the_requested_cores(
     assert run.n_cores == expected
 
 
+@pytest.mark.parametrize("seed", [1, None])
+def test_a_seeded_run_raises_the_open_file_limit_while_madgraph_runs(
+    specs: Mapping[str, ProcessSpec],
+    mg5_path: Path,
+    tmp_path: Path,
+    low_open_file_limit: int,
+    seed: int | None,
+) -> None:
+    run = generate_events(
+        specs["HToBB"], workdir=tmp_path, n_events=10, seed=seed, mg5_path=mg5_path
+    )
+    line = next(
+        line
+        for line in run.log_path.read_text().splitlines()
+        if line.startswith("open files")
+    )
+    madgraph_limit = int(line.split()[-1])
+    assert (madgraph_limit > low_open_file_limit) == (seed is not None)
+
+
 def test_a_run_stamps_its_directory_and_seals_its_artifacts(
     specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:

@@ -1,5 +1,5 @@
 import sys
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
@@ -12,12 +12,26 @@ def specs() -> Mapping[str, ProcessSpec]:
     return default_catalogue()
 
 
+LOW_OPEN_FILE_LIMIT = 256
+
+
+@pytest.fixture
+def low_open_file_limit() -> Iterator[int]:
+    """Lower the soft limit on open files to LOW_OPEN_FILE_LIMIT for the test."""
+    resource = pytest.importorskip("resource")
+    limits = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (LOW_OPEN_FILE_LIMIT, limits[1]))
+    yield LOW_OPEN_FILE_LIMIT
+    resource.setrlimit(resource.RLIMIT_NOFILE, limits)
+
+
 BANNER = Path(__file__).parent / "data" / "madgraph" / "TTBar_banner.txt"
 
 # Stands in for MadGraph's bin/mg5_aMC: it follows the script it is given,
 # writes the files MadGraph would write, and, like MadGraph, exits with status
 # 0 when a command fails (FAKE_MG5_FAIL names the command to fail). With
-# FAKE_MG5_FAIL=hang it never finishes.
+# FAKE_MG5_FAIL=hang it never finishes. A launch prints the soft limit on open
+# files it runs with.
 FAKE_MG5 = """\
 #!{python}
 import gzip
@@ -48,6 +62,8 @@ for line in lines:
         Path(argument, "Cards", "proc_card_mg5.dat").write_text("\\n".join(lines))
         Path(argument, "Events").mkdir()
     elif word == "launch":
+        import resource
+        print("open files", resource.getrlimit(resource.RLIMIT_NOFILE)[0])
         process = Path(argument)
         seed = next(int(l.split()[2]) for l in lines if l.startswith("set iseed"))
         banner = re.sub(r" 42 = iseed", f" {{seed}} = iseed", Path("{banner}").read_text())
