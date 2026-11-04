@@ -1,5 +1,7 @@
+import hashlib
+import os
 import sys
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,36 @@ def low_open_file_limit() -> Iterator[int]:
     resource.setrlimit(resource.RLIMIT_NOFILE, (LOW_OPEN_FILE_LIMIT, limits[1]))
     yield LOW_OPEN_FILE_LIMIT
     resource.setrlimit(resource.RLIMIT_NOFILE, limits)
+
+
+@pytest.fixture(scope="session")
+def fake_program_store(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return tmp_path_factory.mktemp("fake_programs")
+
+
+@pytest.fixture
+def link_fake_program(
+    fake_program_store: Path, tmp_path: Path
+) -> Callable[[str, str], Path]:
+    """Return a function that puts the program `text` at ``tmp_path/bin/<name>``.
+
+    Each program is written once per session and hard-linked into the test's
+    directory, since on macOS the first run of a newly written executable takes
+    about 0.15 s longer.
+    """
+
+    def link(name: str, text: str) -> Path:
+        source = fake_program_store / hashlib.sha256(text.encode()).hexdigest() / name
+        if not source.exists():
+            source.parent.mkdir()
+            source.write_text(text)
+            source.chmod(0o755)
+        program = tmp_path / "bin" / name
+        program.parent.mkdir(exist_ok=True)
+        os.link(source, program)
+        return program
+
+    return link
 
 
 BANNER = Path(__file__).parent / "data" / "madgraph" / "TTBar_banner.txt"
@@ -81,12 +113,10 @@ print("MadGraph done")
 
 
 @pytest.fixture
-def mg5_path(tmp_path: Path) -> Path:
-    program = tmp_path / "bin" / "mg5_aMC"
-    program.parent.mkdir(exist_ok=True)
-    program.write_text(FAKE_MG5.format(python=sys.executable, banner=BANNER))
-    program.chmod(0o755)
-    return program
+def mg5_path(link_fake_program: Callable[[str, str], Path]) -> Path:
+    return link_fake_program(
+        "mg5_aMC", FAKE_MG5.format(python=sys.executable, banner=BANNER)
+    )
 
 
 # Stands in for Delphes's DelphesPythia8: it takes the card, the Pythia command
@@ -143,12 +173,10 @@ print("** Exiting...")
 
 
 @pytest.fixture
-def delphes_pythia8_path(tmp_path: Path) -> Path:
-    program = tmp_path / "bin" / "DelphesPythia8"
-    program.parent.mkdir(exist_ok=True)
-    program.write_text(FAKE_DELPHES_PYTHIA8.format(python=sys.executable))
-    program.chmod(0o755)
-    return program
+def delphes_pythia8_path(link_fake_program: Callable[[str, str], Path]) -> Path:
+    return link_fake_program(
+        "DelphesPythia8", FAKE_DELPHES_PYTHIA8.format(python=sys.executable)
+    )
 
 
 # Stands in for Delphes's DelphesROOT: it takes the card, the output file and
@@ -188,9 +216,7 @@ print("** Exiting...")
 
 
 @pytest.fixture
-def delphes_root_path(tmp_path: Path) -> Path:
-    program = tmp_path / "bin" / "DelphesROOT"
-    program.parent.mkdir(exist_ok=True)
-    program.write_text(FAKE_DELPHES_ROOT.format(python=sys.executable))
-    program.chmod(0o755)
-    return program
+def delphes_root_path(link_fake_program: Callable[[str, str], Path]) -> Path:
+    return link_fake_program(
+        "DelphesROOT", FAKE_DELPHES_ROOT.format(python=sys.executable)
+    )

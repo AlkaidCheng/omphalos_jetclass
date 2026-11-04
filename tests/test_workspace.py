@@ -1,6 +1,6 @@
 import sys
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pytest
@@ -142,12 +142,8 @@ class ToolWorkspace(ProgramWorkspace):
 
 
 @pytest.fixture
-def tool_path(tmp_path: Path) -> Path:
-    program = tmp_path / "bin" / "fake-tool"
-    program.parent.mkdir()
-    program.write_text(FAKE_TOOL.format(python=sys.executable))
-    program.chmod(0o755)
-    return program
+def tool_path(link_fake_program: Callable[[str, str], Path]) -> Path:
+    return link_fake_program("fake-tool", FAKE_TOOL.format(python=sys.executable))
 
 
 def test_a_program_workspace_takes_the_given_program_or_finds_it_on_path(
