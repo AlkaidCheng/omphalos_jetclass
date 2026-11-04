@@ -228,7 +228,9 @@ class SimulationWorkspace(ProgramWorkspace):
         delphes_root_path: Path | None = None,
         timeout: float | None = None,
     ) -> None:
-        super().__init__(spec, workdir, program_path=delphes_root_path, timeout=timeout)
+        super().__init__(
+            spec.name, workdir, program_path=delphes_root_path, timeout=timeout
+        )
 
     @property
     def card_path(self) -> Path:

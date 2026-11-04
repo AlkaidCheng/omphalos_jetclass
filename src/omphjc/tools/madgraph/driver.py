@@ -309,7 +309,8 @@ class MadGraphWorkspace(ProgramWorkspace):
         mg5_path: Path | None = None,
         timeout: float | None = None,
     ) -> None:
-        super().__init__(spec, workdir, program_path=mg5_path, timeout=timeout)
+        super().__init__(spec.name, workdir, program_path=mg5_path, timeout=timeout)
+        self.spec = spec
         if any(character.isspace() for character in str(self.workdir)):
             raise ValueError(
                 f"MadGraph cannot run in a path with whitespace: {self.workdir}"

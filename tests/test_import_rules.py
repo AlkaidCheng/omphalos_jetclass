@@ -17,7 +17,7 @@ import omphjc
 PACKAGE_DIR = Path(omphjc.__file__).parent
 
 # Modules any layer may import: they run programs, guard paths, stamp outputs
-# and compare values, and know no tool, stage or command.
+# and compare values, and know no catalogue, tool, stage or command.
 SHARED_MODULES = (
     "omphjc.comparison",
     "omphjc.config_paths",
@@ -135,6 +135,16 @@ def test_shared_modules_and_the_catalogue_import_no_tool_stage_or_command() -> N
             _within(target, layer)
             for layer in ("omphjc.tools", "omphjc.jobs", "omphjc.cli")
         )
+    }
+    assert reaches == set()
+
+
+def test_shared_modules_import_no_catalogue() -> None:
+    reaches = {
+        (name, target)
+        for name in SHARED_MODULES
+        for target in IMPORTS[name]
+        if _within(target, "omphjc.processes")
     }
     assert reaches == set()
 

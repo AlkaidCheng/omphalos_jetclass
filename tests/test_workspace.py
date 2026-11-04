@@ -1,11 +1,10 @@
 import sys
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import ProgramError
 from omphjc.stamps import SET_ASIDE_DIR, StampError, read_stamp, write_stamp
 from omphjc.workspace import ProgramWorkspace, Workspace
@@ -24,11 +23,9 @@ class PlainWorkspace(Workspace):
         return ARTIFACTS
 
 
-def test_entering_sealed_run_creates_and_stamps_the_directory(
-    specs: Mapping[str, ProcessSpec], tmp_path: Path
-) -> None:
+def test_entering_sealed_run_creates_and_stamps_the_directory(tmp_path: Path) -> None:
     workdir = tmp_path / "run"
-    workspace = PlainWorkspace(specs["HToBB"], workdir)
+    workspace = PlainWorkspace("HToBB", workdir)
     assert workspace.workdir == workdir.resolve()
     assert workspace.artifacts == ARTIFACTS
     with workspace.sealed_run() as set_aside:
@@ -41,10 +38,8 @@ def test_entering_sealed_run_creates_and_stamps_the_directory(
     assert sealed is not None and "first.txt" in sealed.artifacts
 
 
-def test_a_run_is_sealed_when_its_block_raises(
-    specs: Mapping[str, ProcessSpec], tmp_path: Path
-) -> None:
-    workspace = PlainWorkspace(specs["HToBB"], tmp_path)
+def test_a_run_is_sealed_when_its_block_raises(tmp_path: Path) -> None:
+    workspace = PlainWorkspace("HToBB", tmp_path)
     with pytest.raises(RuntimeError, match="cut short"), workspace.sealed_run():
         (tmp_path / "first.txt").write_text("partial")
         raise RuntimeError("cut short")
@@ -53,9 +48,9 @@ def test_a_run_is_sealed_when_its_block_raises(
 
 
 def test_a_sealed_artifact_is_deleted_and_an_unsealed_one_set_aside(
-    specs: Mapping[str, ProcessSpec], tmp_path: Path
+    tmp_path: Path,
 ) -> None:
-    workspace = PlainWorkspace(specs["HToBB"], tmp_path)
+    workspace = PlainWorkspace("HToBB", tmp_path)
     with workspace.sealed_run():
         (tmp_path / "first.txt").write_text("sealed")
     (tmp_path / "second.txt").write_text("left by a killed run")
@@ -69,12 +64,12 @@ def test_a_sealed_artifact_is_deleted_and_an_unsealed_one_set_aside(
 
 
 def test_a_directory_of_another_purpose_or_process_is_refused_untouched(
-    specs: Mapping[str, ProcessSpec], tmp_path: Path
+    tmp_path: Path,
 ) -> None:
     other_purpose = tmp_path / "other-purpose"
     other_purpose.mkdir()
     write_stamp(other_purpose, "other-purpose", {"process": "HToBB"})
-    refused = PlainWorkspace(specs["HToBB"], other_purpose)
+    refused = PlainWorkspace("HToBB", other_purpose)
     with (
         pytest.raises(StampError, match="other-purpose, not testing"),
         refused.sealed_run(),
@@ -83,7 +78,7 @@ def test_a_directory_of_another_purpose_or_process_is_refused_untouched(
     other_process = tmp_path / "other-process"
     other_process.mkdir()
     write_stamp(other_process, PURPOSE, {"process": "HToBB"})
-    refused = PlainWorkspace(specs["TTBar"], other_process)
+    refused = PlainWorkspace("TTBar", other_process)
     with pytest.raises(StampError, match="'HToBB', not 'TTBar'"), refused.sealed_run():
         raise AssertionError("the block must not run")
     for directory in (other_purpose, other_process):
@@ -91,9 +86,9 @@ def test_a_directory_of_another_purpose_or_process_is_refused_untouched(
         assert stamp is not None and stamp.artifacts == {}
 
 
-def test_a_filesystem_root_is_refused(specs: Mapping[str, ProcessSpec]) -> None:
+def test_a_filesystem_root_is_refused() -> None:
     with pytest.raises(ValueError, match="filesystem root"):
-        PlainWorkspace(specs["HToBB"], Path("/"))
+        PlainWorkspace("HToBB", Path("/"))
 
 
 # Stands in for an external program: it prints its arguments, and with
@@ -128,13 +123,13 @@ class ToolWorkspace(ProgramWorkspace):
 
     def __init__(
         self,
-        spec: ProcessSpec,
+        process_name: str,
         workdir: Path,
         *,
         tool_path: Path | None = None,
         timeout: float | None = None,
     ) -> None:
-        super().__init__(spec, workdir, program_path=tool_path, timeout=timeout)
+        super().__init__(process_name, workdir, program_path=tool_path, timeout=timeout)
 
     @property
     def artifacts(self) -> list[str]:
@@ -147,37 +142,35 @@ def tool_path(link_fake_program: Callable[[str, str], Path]) -> Path:
 
 
 def test_a_program_workspace_takes_the_given_program_or_finds_it_on_path(
-    specs: Mapping[str, ProcessSpec],
     tool_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    spec = specs["HToBB"]
-    workspace = ToolWorkspace(spec, tmp_path, tool_path=tool_path)
+    workspace = ToolWorkspace("HToBB", tmp_path, tool_path=tool_path)
     assert workspace.program_path == tool_path
     assert workspace.log_path == tmp_path.resolve() / "tool.log"
     assert workspace.deadline is None
     monkeypatch.setenv("PATH", str(tool_path.parent))
-    assert ToolWorkspace(spec, tmp_path).program_path == tool_path
+    assert ToolWorkspace("HToBB", tmp_path).program_path == tool_path
     monkeypatch.setenv("PATH", str(tmp_path / "empty"))
     with pytest.raises(FileNotFoundError, match="fake-tool is not on PATH"):
-        ToolWorkspace(spec, tmp_path)
+        ToolWorkspace("HToBB", tmp_path)
     with pytest.raises(FileNotFoundError, match="the fake tool .* not found"):
-        ToolWorkspace(spec, tmp_path, tool_path=tmp_path / "missing")
+        ToolWorkspace("HToBB", tmp_path, tool_path=tmp_path / "missing")
 
 
 @pytest.mark.parametrize("timeout", [0, -1.0])
 def test_a_time_limit_must_be_positive(
-    specs: Mapping[str, ProcessSpec], tool_path: Path, tmp_path: Path, timeout: float
+    tool_path: Path, tmp_path: Path, timeout: float
 ) -> None:
     with pytest.raises(ValueError, match="timeout must be positive"):
-        ToolWorkspace(specs["HToBB"], tmp_path, tool_path=tool_path, timeout=timeout)
+        ToolWorkspace("HToBB", tmp_path, tool_path=tool_path, timeout=timeout)
 
 
 def test_runs_append_to_one_log_and_their_usage_adds_up(
-    specs: Mapping[str, ProcessSpec], tool_path: Path, tmp_path: Path
+    tool_path: Path, tmp_path: Path
 ) -> None:
-    workspace = ToolWorkspace(specs["HToBB"], tmp_path, tool_path=tool_path)
+    workspace = ToolWorkspace("HToBB", tmp_path, tool_path=tool_path)
     with workspace.sealed_run():
         first = workspace.run([tool_path, "one"], failure_message="tool failed")
         second = workspace.run([tool_path, "two"], failure_message="tool failed")
@@ -191,12 +184,11 @@ def test_runs_append_to_one_log_and_their_usage_adds_up(
 
 
 def test_a_failing_program_raises_the_workspaces_error(
-    specs: Mapping[str, ProcessSpec],
     tool_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    workspace = ToolWorkspace(specs["HToBB"], tmp_path, tool_path=tool_path)
+    workspace = ToolWorkspace("HToBB", tmp_path, tool_path=tool_path)
     monkeypatch.setenv("FAKE_TOOL_FAIL", "exit")
     with pytest.raises(ToolError, match="tool failed: "), workspace.sealed_run():
         workspace.run([tool_path], failure_message="tool failed")
@@ -207,14 +199,11 @@ def test_a_failing_program_raises_the_workspaces_error(
 
 
 def test_a_program_still_running_at_the_deadline_is_stopped(
-    specs: Mapping[str, ProcessSpec],
     tool_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    workspace = ToolWorkspace(
-        specs["HToBB"], tmp_path, tool_path=tool_path, timeout=0.1
-    )
+    workspace = ToolWorkspace("HToBB", tmp_path, tool_path=tool_path, timeout=0.1)
     monkeypatch.setenv("FAKE_TOOL_FAIL", "hang")
     started = time.monotonic()
     with pytest.raises(ToolError, match="tool failed: "), workspace.sealed_run():
