@@ -12,15 +12,15 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from omphjc.comparison import Difference
-from omphjc.madgraph.cards import madspin_card_text, proc_card_commands
-from omphjc.madgraph.madspin import compare_madspin_cards, parse_madspin_card
-from omphjc.madgraph.run_card import (
+from omphjc.processes.catalogue import ProcessSpec, RunCardValue, default_catalogue
+from omphjc.tools.madgraph.cards import madspin_card_text, proc_card_commands
+from omphjc.tools.madgraph.madspin import compare_madspin_cards, parse_madspin_card
+from omphjc.tools.madgraph.run_card import (
     format_value,
     parse_launch_overrides,
     parse_run_card,
     values_equal,
 )
-from omphjc.processes.catalogue import ProcessSpec, RunCardValue, default_catalogue
 
 TRACKED_PARAMETERS: frozenset[str] = frozenset(
     {

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from omphjc.processes import ProcessSpec, get_process
-from omphjc.pythia import (
+from omphjc.tools.pythia.cmnd import (
     MADGRAPH_INTERFACE_PREFIXES,
     PYTHIA_SEED_LIMIT,
     compare_settings,
@@ -17,7 +17,7 @@ from omphjc.pythia import (
     shower_settings,
 )
 
-DATA = Path(__file__).parent / "data" / "pythia"
+DATA = Path(__file__).parents[2] / "data" / "pythia"
 LHE = Path("events.lhe")
 
 # Settings this package writes differently from MadGraph's interface on purpose.

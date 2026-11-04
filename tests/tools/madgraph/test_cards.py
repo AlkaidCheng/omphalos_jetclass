@@ -3,19 +3,21 @@ from pathlib import Path
 
 import pytest
 
-from omphjc.madgraph import (
-    DISABLED_DEFAULTS,
-    TRACKED_PARAMETERS,
-    compare_all,
-    compare_process,
+from omphjc.processes import ProcessSpec
+from omphjc.tools.madgraph.cards import (
     launch_commands,
     madspin_card_text,
     model_import_target,
     proc_card_commands,
+)
+from omphjc.tools.madgraph.reference import (
+    DISABLED_DEFAULTS,
+    TRACKED_PARAMETERS,
+    compare_all,
+    compare_process,
     reference_proc_lines,
     reference_run_settings,
 )
-from omphjc.processes import ProcessSpec
 
 
 def test_catalogue_matches_the_official_gridpack_cards() -> None:

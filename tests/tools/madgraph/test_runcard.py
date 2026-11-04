@@ -1,13 +1,13 @@
 import pytest
 
-from omphjc.madgraph import (
+from omphjc.processes import RunCardValue
+from omphjc.tools.madgraph.run_card import (
     format_value,
     parse_launch_overrides,
     parse_run_card,
     parse_value,
     values_equal,
 )
-from omphjc.processes import RunCardValue
 
 RUN_CARD_SNIPPET = """
 #*********************************************************************

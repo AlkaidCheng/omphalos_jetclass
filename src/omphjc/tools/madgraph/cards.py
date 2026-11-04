@@ -8,8 +8,8 @@ values). The MadSpin card is the file the catalogue names.
 
 from pathlib import Path
 
-from omphjc.madgraph.run_card import format_value
 from omphjc.processes.catalogue import ProcessSpec
+from omphjc.tools.madgraph.run_card import format_value
 
 
 def model_import_target(spec: ProcessSpec) -> str:

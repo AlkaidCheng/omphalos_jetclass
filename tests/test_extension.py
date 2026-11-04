@@ -9,16 +9,15 @@ from click.testing import CliRunner
 from omphjc.cli import cli
 from omphjc.config_paths import config_dir
 from omphjc.jobs import job_seed
-from omphjc.madgraph import (
-    compare_all,
+from omphjc.processes import ProcessSpec, read_catalogue
+from omphjc.tools.madgraph.cards import (
     launch_commands,
     madspin_card_text,
     model_import_target,
     proc_card_commands,
-    reference_run_settings,
 )
-from omphjc.processes import ProcessSpec, read_catalogue
-from omphjc.pythia import shower_settings
+from omphjc.tools.madgraph.reference import compare_all, reference_run_settings
+from omphjc.tools.pythia.cmnd import shower_settings
 
 CATALOGUE = """\
 common:

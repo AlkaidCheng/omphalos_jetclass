@@ -20,9 +20,9 @@ from omphjc.jobs import (
     shower,
     simulate,
 )
-from omphjc.madgraph import MadGraphError
 from omphjc.processes import ProcessSpec, get_process
-from omphjc.pythia import PYTHIA_SEED_LIMIT
+from omphjc.tools.madgraph.driver import MadGraphError
+from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
 
 
 def test_job_seed_is_the_process_offset_plus_the_job_number() -> None:

@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from omphjc.delphes import (
-    SimulationWorkspace,
-    detector_card_text,
-    reference_card_text,
-    simulate_events,
-)
 from omphjc.processes import ProcessSpec
 from omphjc.stamps import read_stamp
+from omphjc.tools.delphes.card import reference_card_text
+from omphjc.tools.delphes.driver import (
+    SimulationWorkspace,
+    detector_card_text,
+    simulate_events,
+)
 
 ARTIFACTS = {"delphes_card.tcl", "delphes.root", "simulate.log"}
 

@@ -3,7 +3,8 @@ import re
 import pytest
 
 from omphjc.config_paths import config_dir
-from omphjc.delphes import (
+from omphjc.processes import get_process
+from omphjc.tools.delphes.card import (
     compare_cards,
     parse_card,
     read_card,
@@ -11,7 +12,6 @@ from omphjc.delphes import (
     reference_card_text,
     with_random_seed,
 )
-from omphjc.processes import get_process
 
 
 def test_reference_card_evaluates_to_the_jetclass_configuration() -> None:

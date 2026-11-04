@@ -5,7 +5,7 @@ from pathlib import Path
 
 from omphjc.jobs.job import Job, sha256
 from omphjc.jobs.manifest import StageOutcome, StageRecord
-from omphjc.madgraph.driver import generate_events
+from omphjc.tools.madgraph.driver import generate_events
 
 GENERATE = "generate"
 """The stage's name and directory, ``<job>/generate/``."""
@@ -31,7 +31,7 @@ def generate(
 ) -> StageRecord:
     """Generate the parton-level events of `job` with MadGraph.
 
-    Runs :func:`omphjc.madgraph.generate_events` in the job's ``generate/``
+    Runs :func:`omphjc.tools.madgraph.driver.generate_events` in the job's ``generate/``
     directory and copies the cards MadGraph ran with into ``generate/cards/``.
     The stage's parameters are the event count and the job's seed, so a
     changed seed is refused like any other change unless `force` is set. Its

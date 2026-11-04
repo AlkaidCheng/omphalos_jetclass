@@ -8,7 +8,6 @@ import click
 from omphjc import __version__
 from omphjc.cli.formatting import format_count, format_size, format_usage
 from omphjc.config_paths import config_dir, export_config
-from omphjc.delphes import DelphesCard, compare_cards, read_card, reference_card
 from omphjc.jobs import (
     GENERATE,
     SHOWER,
@@ -21,16 +20,19 @@ from omphjc.jobs import (
     shower,
     simulate,
 )
-from omphjc.madgraph import (
-    compare_all,
-    format_value,
-    launch_commands,
-    proc_card_commands,
-)
 from omphjc.processes import ProcessSpec, default_catalogue, read_catalogue
 from omphjc.programs import ProgramError
-from omphjc.pythia import format_cmnd, shower_settings
 from omphjc.stamps import StampError
+from omphjc.tools.delphes.card import (
+    DelphesCard,
+    compare_cards,
+    read_card,
+    reference_card,
+)
+from omphjc.tools.madgraph.cards import launch_commands, proc_card_commands
+from omphjc.tools.madgraph.reference import compare_all
+from omphjc.tools.madgraph.run_card import format_value
+from omphjc.tools.pythia.cmnd import format_cmnd, shower_settings
 
 Catalogue = Mapping[str, ProcessSpec]
 

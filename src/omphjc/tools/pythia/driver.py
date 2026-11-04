@@ -16,7 +16,7 @@ the LHE file and showers each event, the program copies the event record into
 Delphes's ``allParticles`` array, and the modules of the card run on it
 (``readers/DelphesPythia8.cpp`` in Delphes 3.5.1,
 https://github.com/delphes/delphes/blob/3.5.1/readers/DelphesPythia8.cpp).
-Run with the card of :func:`omphjc.delphes.card.particles_card_text`, whose
+Run with the card of :func:`omphjc.tools.delphes.card.particles_card_text`, whose
 only module is the TreeWriter, it showers, writes the generator record and
 simulates nothing; a detector card is run on that file afterwards with
 ``DelphesROOT``. The MLM matching veto is Pythia's own user hook
@@ -49,11 +49,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from omphjc.delphes.card import particles_card_text
 from omphjc.processes.catalogue import ProcessSpec, SettingValue
 from omphjc.programs import ProgramError
-from omphjc.pythia.cmnd import format_cmnd, shower_settings
 from omphjc.safe_paths import require_file, require_unoccupied
+from omphjc.tools.delphes.card import particles_card_text
+from omphjc.tools.pythia.cmnd import format_cmnd, shower_settings
 from omphjc.workspace import ProgramRun, ProgramWorkspace
 
 # Delphes's program combining Pythia 8 and the detector simulation.

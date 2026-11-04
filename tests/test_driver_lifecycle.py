@@ -16,11 +16,11 @@ from typing import Any
 import pytest
 
 import omphjc.workspace as workspace
-from omphjc.delphes import SimulationWorkspace, simulate_events
-from omphjc.madgraph import MadGraphWorkspace, generate_events
 from omphjc.processes import ProcessSpec
-from omphjc.pythia import ShowerWorkspace, shower_events
 from omphjc.stamps import read_stamp
+from omphjc.tools.delphes.driver import SimulationWorkspace, simulate_events
+from omphjc.tools.madgraph.driver import MadGraphWorkspace, generate_events
+from omphjc.tools.pythia.driver import ShowerWorkspace, shower_events
 from omphjc.workspace import ProgramRun, ProgramWorkspace
 
 

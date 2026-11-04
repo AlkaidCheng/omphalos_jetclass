@@ -4,18 +4,18 @@ from pathlib import Path
 
 import pytest
 
-from omphjc.delphes import parse_card, particles_card_text
 from omphjc.processes import ProcessSpec
-from omphjc.pythia import (
+from omphjc.stamps import read_stamp
+from omphjc.tools.delphes.card import parse_card, particles_card_text
+from omphjc.tools.pythia.driver import (
     ShowerError,
     ShowerWorkspace,
     parse_statistics,
     shower_events,
 )
-from omphjc.stamps import read_stamp
 
 BANNER_TEXT = (
-    Path(__file__).parent / "data" / "madgraph" / "TTBar_banner.txt"
+    Path(__file__).parents[2] / "data" / "madgraph" / "TTBar_banner.txt"
 ).read_text()
 
 ARTIFACTS = {

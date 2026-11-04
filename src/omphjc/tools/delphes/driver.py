@@ -12,7 +12,7 @@ Each run has a working directory of its own::
 order (``readers/DelphesROOT.cpp`` in Delphes 3.5.1,
 https://github.com/delphes/delphes/blob/3.5.1/readers/DelphesROOT.cpp). It
 reads the ``Particle`` and ``Event`` branches of the input, a Delphes ROOT
-file such as the shower stage writes (:mod:`omphjc.pythia.driver`), fills
+file such as the shower stage writes (:mod:`omphjc.tools.pythia.driver`), fills
 Delphes's ``allParticles``, ``stableParticles`` and ``partons`` arrays from
 them exactly as ``DelphesPythia8`` does from a Pythia event, and runs the
 card's modules on every event. It opens the output with ROOT's ``CREATE``
@@ -30,10 +30,10 @@ describes what a later run may delete.
 from dataclasses import dataclass
 from pathlib import Path
 
-from omphjc.delphes.card import reference_card_text, with_random_seed
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import ProgramError
 from omphjc.safe_paths import normalize_path, require_file, require_unoccupied
+from omphjc.tools.delphes.card import reference_card_text, with_random_seed
 from omphjc.workspace import ProgramRun, ProgramWorkspace
 
 # Delphes's program running a card on the generator record of a Delphes ROOT file.
