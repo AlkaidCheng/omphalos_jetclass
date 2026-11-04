@@ -14,9 +14,8 @@ import awkward as ak
 import numpy as np
 import uproot
 
-from omphjc.events.formats import EventFormat
+from omphjc.events.formats import EventFormat, EventReader
 from omphjc.events.particles import build_record, check_indices
-from omphjc.events.readers import EventReader
 from omphjc.root_io import entries_per_step
 
 TREE_NAME = "Delphes"
