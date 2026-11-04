@@ -8,29 +8,27 @@ compared on identical physics.
 The pipeline is MadGraph5_aMC@NLO → Pythia 8 → Delphes. The shower runs as
 `DelphesPythia8` with a card that writes only the generator record, so the
 showered events exist on their own before any detector is simulated; Delphes
-then runs the official JetClass card on that record. The full generated event
-(hard process, decays, parton shower and hadronisation) is extracted into a
-columnar file, from which the Parnassus input is derived in Parnassus's own
-stable-particle convention.
+then runs the official JetClass card on that record. Parnassus, still to come,
+will simulate the same record once the hadrons with cτ above 10 mm are put
+back as final particles, the convention Parnassus was trained with.
 
 ## Pipeline
 
-![The omphjc pipeline: catalogue → MadGraph → DelphesPythia8 → extract → convert → Parnassus and JetClass ntuple](docs/pipeline.svg)
+![The omphjc pipeline: catalogue → MadGraph → Pythia 8 shower → Delphes simulation, with the Parnassus simulation and the JetClass ntuple planned](docs/pipeline.svg)
 
 | Step | What it does | Configuration it reads | What it writes |
 |---|---|---|---|
 | Process catalogue | Defines each process: model, process lines, run-card cuts, MadSpin card, matching, seed offset | `config/jetclass.yaml`, `config/models/`, `config/madspin/` | the MadGraph scripts and Pythia settings of every later step |
 | MadGraph5_aMC@NLO | Generates the hard process (and MadSpin decays) at parton level | process and launch scripts written from the catalogue | `events.lhe.gz`, the banner (cross section, seed, run card as used) |
 | Pythia 8 shower | Showers and hadronises with Pythia 8 inside `DelphesPythia8`, so MLM matching runs where the catalogue asks for it; the card writes the generator record and simulates nothing | `pythia.cmnd` (from `common.pythia`, the matching block and the run's seed), the record-only card the package writes | `particles.root` with the full generator record in its `Particle` branch |
-| Delphes simulation | Runs the detector card on the showered events with `DelphesROOT`; several cards can run on one shower | `config/delphes/delphes_card_JetClass.tcl` (`common.delphes_card`) or `--card`, seeded | `delphes.root` |
-| extract *(planned)* | Reads the generator record out of the Delphes file | — | `simulation.parquet`: every particle with mothers, daughters and vertices |
-| convert *(planned)* | Applies Parnassus's stable-particle convention (cτ > 10 mm) | — | `parnassus.parquet`, or `.hepmc3` for the current Parnassus reader |
+| Delphes simulation | Runs the detector card on the showered events with `DelphesROOT`; a job keeps one simulation, and another card replaces it with `--force` | `config/delphes/delphes_card_JetClass.tcl` (`common.delphes_card`) or `--card`, seeded | `delphes.root` |
+| Parnassus simulation *(planned)* | Simulates the detector response with Parnassus on the same showered events, with the hadrons of cτ > 10 mm kept final | — | `parnassus.root` |
 | ntuple *(planned)* | Builds the JetClass jet table (jets, labels, constituents) from the Delphes output | — | `jetclass.parquet` |
 
 Dashed boxes in the diagram are the stages not yet available, and the
 sections below cover the available ones. Each stage is a command that runs in
-a job's directory and records what it did in the job's manifest; `omphjc
-generate` and `omphjc shower` are the first two (see
+a job's directory and records what it did in the job's manifest: `omphjc
+generate`, `omphjc shower` and `omphjc simulate` (see
 [Running a job](#running-a-job)).
 
 New to MadGraph, Pythia or Delphes? [The guide](docs/guide.md) explains what
@@ -302,7 +300,7 @@ runs in that directory and records what it did in the job's manifest:
 through `DelphesPythia8`, keeping the generator record of every showered event
 and simulating nothing, and `simulate` runs the detector card on that record
 through `DelphesROOT`. A job may stop after `shower` when only the showered
-events are wanted. Extraction and conversion follow.
+events are wanted.
 
 ```
 omphjc generate HToBB --job-id 1 --events 1000 --outdir runs/dev

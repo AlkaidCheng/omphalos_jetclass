@@ -194,9 +194,10 @@ def particles_card_text() -> str:
 
     Run through ``DelphesPythia8``, it turns the program into Pythia's event
     loop with a ROOT writer behind it: the output holds the ``Particle``
-    branch, the complete generator record of every event, and the ``Event``
-    and ``Weight`` branches, and no detector module runs. ``DelphesROOT`` reads
-    such a file to run a detector card on it later.
+    branch, the complete generator record of every event, and the ``Event``,
+    ``Weight``, ``EventLHEF`` and ``WeightLHEF`` branches the program writes
+    itself, the last two because its input is an LHE file; no detector module
+    runs. ``DelphesROOT`` reads such a file to run a detector card on it later.
     """
     return _PARTICLES_CARD
 
