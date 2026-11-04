@@ -113,15 +113,19 @@ def test_without_downcasting_the_stored_dtypes_are_kept(record_file: EventFile) 
     )
 
 
+@pytest.mark.parametrize("value", [40000, -40000])
 def test_a_value_outside_int16_is_refused_when_downcasting(
-    write_file: Callable[..., EventFile],
+    write_file: Callable[..., EventFile], value: int
 ) -> None:
-    event_file = write_file(particles={"Status": ak.Array([[2, 40000, 1], [], [1, 1]])})
-    with pytest.raises(ValueError, match=r"part_status holds values from 1 to 40000"):
+    event_file = write_file(particles={"Status": ak.Array([[2, value, 1], [], [1, 1]])})
+    with pytest.raises(
+        ValueError,
+        match=rf"part_status holds values from {min(value, 1)} to {max(value, 2)}",
+    ):
         reader_for(event_file).read_particles()
     assert (
         reader_for(event_file).read_particles(downcast=False)["part_status"][0, 1]
-        == 40000
+        == value
     )
 
 
@@ -223,11 +227,12 @@ def test_a_file_without_tree_delphes_is_refused(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("member", "values", "field"),
+    ("member", "values", "field", "event"),
     [
-        ("M1", [[-1, 0, 3], [], [-1, -1]], "part_m1"),
-        ("D1", [[1, -2, -1], [], [-1, -1]], "part_d1"),
-        ("D2", [[2, -1, -1], [], [-1, 2]], "part_d2"),
+        ("M1", [[-1, 0, 3], [], [-1, -1]], "part_m1", 0),
+        ("D1", [[1, -2, -1], [], [-1, -1]], "part_d1", 0),
+        ("D2", [[2, -1, -1], [], [-1, 2]], "part_d2", 2),
+        ("M1", [[-1, 0, 0], [], [2, -1]], "part_m1", 2),
     ],
 )
 def test_an_index_outside_its_event_is_refused(
@@ -235,9 +240,12 @@ def test_an_index_outside_its_event_is_refused(
     member: str,
     values: list[list[int]],
     field: str,
+    event: int,
 ) -> None:
     event_file = write_file(particles={member: ak.Array(values)})
-    with pytest.raises(ValueError, match=f"{field} holds an index outside"):
+    with pytest.raises(
+        ValueError, match=f"{field} holds an index outside .* event {event},"
+    ):
         reader_for(event_file).read_particles()
 
 

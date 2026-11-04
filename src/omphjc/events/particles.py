@@ -127,12 +127,20 @@ def _cast(field: RecordField, column: ak.Array) -> ak.Array:
     """Return `column` cast to `field`'s dtype, refusing a value the dtype cannot hold."""
     dtype = np.dtype(field.dtype)
     values = ak.to_numpy(ak.flatten(column, axis=None))
-    with np.errstate(invalid="ignore", over="ignore"):
-        cast = values.astype(dtype)
-        if np.issubdtype(dtype, np.integer):
-            holds = np.array_equal(cast.astype(values.dtype), values)
-        else:
-            holds = not np.any(np.isinf(cast) & np.isfinite(values))
+    if values.dtype == dtype:
+        return column
+    if np.issubdtype(dtype, np.integer) and np.issubdtype(values.dtype, np.integer):
+        limits = np.iinfo(dtype)
+        holds = values.size == 0 or (
+            limits.min <= values.min() and values.max() <= limits.max
+        )
+    else:
+        with np.errstate(invalid="ignore", over="ignore"):
+            cast = values.astype(dtype)
+            if np.issubdtype(dtype, np.integer):
+                holds = np.array_equal(cast.astype(values.dtype), values)
+            else:
+                holds = not np.any(np.isinf(cast) & np.isfinite(values))
     if not holds:
         raise ValueError(
             f"{field.name} holds values from {values.min()} to {values.max()},"
@@ -155,12 +163,15 @@ def check_indices(record: ak.Array) -> None:
     ValueError
         If an index lies outside its event, naming the field and the event.
     """
-    counts = ak.num(record["part_pid"], axis=1)
+    counts = ak.to_numpy(ak.num(record["part_pid"], axis=1))
+    # The particle count of each particle's event, shared by the four fields.
+    sizes = np.repeat(counts, counts)
     for name in INDEX_FIELDS:
-        indices = record[name]
-        outside = ak.any((indices < -1) | (indices >= counts), axis=1)
-        if ak.any(outside):
-            position = int(np.flatnonzero(ak.to_numpy(outside))[0])
+        indices = ak.to_numpy(ak.flatten(record[name]))
+        outside = (indices < -1) | (indices >= sizes)
+        if outside.any():
+            first = int(np.argmax(outside))
+            position = int(np.searchsorted(np.cumsum(counts), first, side="right"))
             event = (
                 int(record["event_index"][position])
                 if "event_index" in record.fields

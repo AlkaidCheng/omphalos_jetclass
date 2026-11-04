@@ -135,17 +135,14 @@ class DelphesRootReader(EventReader):
                 entry_start, entry_start + len(arrays), dtype=np.int64
             )
         }
+        # The members of a branch share its entry count, since Delphes writes each
+        # branch as one TClonesArray, so one member's count stands for all.
+        if not ak.all(ak.num(arrays[EVENT_BRANCHES["event_number"]], axis=1) == 1):
+            raise ValueError("Event holds other than one entry per event")
         for field, branch in EVENT_BRANCHES.items():
-            column = arrays[branch]
-            if not ak.all(ak.num(column, axis=1) == 1):
-                raise ValueError(f"{branch} holds other than one entry per event")
-            columns[field] = column[:, 0]
-        counts = ak.num(arrays[PARTICLE_BRANCHES["part_pid"]], axis=1)
+            columns[field] = ak.flatten(arrays[branch])
         for field, branch in PARTICLE_BRANCHES.items():
-            column = arrays[branch]
-            if not ak.all(ak.num(column, axis=1) == counts):
-                raise ValueError(f"{branch} holds other than one entry per particle")
-            columns[field] = column
+            columns[field] = arrays[branch]
         columns["part_t"] = columns["part_t"] * SPEED_OF_LIGHT_MM_PER_S
         record = build_record(columns, downcast=downcast)
         check_indices(record)
