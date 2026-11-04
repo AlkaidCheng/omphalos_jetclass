@@ -374,7 +374,7 @@ production by the jet-universe project (MIT),
 [Delphes](https://github.com/delphes/delphes) and keeps its license, the GNU
 GPL version 3 or later (`LICENSE` and `COPYING` beside it).
 The vendored `heft` model is the MadGraph5_aMC@NLO Higgs effective-field-theory
-model. Developed with the assistance of Claude Code.
+model.
 
 ## License
 
