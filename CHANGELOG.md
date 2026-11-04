@@ -56,6 +56,9 @@
   `count_events` read the generator record of a Delphes ROOT file, such as the
   shower's `particles.root`, as one awkward record per event with `part_t` in
   mm. (#39)
+- `omphjc.events.final_state.mark_final_state` marks the final state a
+  simulator receives under a `FinalStateRule`, which can count the long-lived
+  hadrons the shower decayed as final, as Parnassus expects. (#39)
 
 ### Changed
 
