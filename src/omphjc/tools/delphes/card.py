@@ -101,8 +101,18 @@ def parse_card(text: str) -> DelphesCard:
     ------
     ValueError
         If the card is not valid Tcl for the Delphes reader.
+    ModuleNotFoundError
+        If this Python has no ``tkinter``, its interface to Tcl.
     """
-    import tkinter
+    try:
+        import tkinter
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "Reading a Delphes card needs Python's tkinter module, which this "
+            "Python lacks; install a Python with Tcl support, as the README's "
+            "Installation section describes",
+            name="tkinter",
+        ) from error
 
     interpreter = tkinter.Tcl()
     interpreter.eval(_READER_PROCEDURES)
