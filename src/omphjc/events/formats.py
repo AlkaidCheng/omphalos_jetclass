@@ -2,7 +2,9 @@
 
 A format names how a file is opened and where its particle-level events are,
 not which reconstructed collections it carries: DelphesPythia8's record of the
-shower and DelphesROOT's output are both ``delphes-root`` files.
+shower and DelphesROOT's output are both ``delphes-root`` files. Each readable
+format has a module with a subclass of :class:`EventReader`, the interface for
+reading a file's particle record, defined here with the formats it serves.
 """
 
 from abc import ABC, abstractmethod

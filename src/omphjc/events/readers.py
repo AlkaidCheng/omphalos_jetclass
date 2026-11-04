@@ -1,8 +1,9 @@
-"""Reading the particle record of an event file, whatever its format.
+"""The reader of an event file, whatever its format.
 
-Importing this module imports the module of every readable format, each of
-which registers its :class:`~omphjc.events.formats.EventReader` when imported.
-The record and its fields are described in :mod:`omphjc.events.particles`.
+This is the one module that imports the module of every readable format, each
+of which registers its :class:`~omphjc.events.formats.EventReader` subclass
+when imported, so :func:`reader_for` finds the reader of any of them. The
+record and its fields are described in :mod:`omphjc.events.particles`.
 """
 
 from omphjc.events import delphes_root
