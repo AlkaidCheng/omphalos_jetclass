@@ -1,27 +1,26 @@
-"""The ``omphjc`` command line."""
+"""The ``omphjc`` command line: its root group and the commands other than the stages.
 
-from collections.abc import Callable, Iterable, Iterator, Mapping
+The stage commands are defined in :mod:`omphjc.cli.stages`.
+"""
+
 from pathlib import Path
 
 import click
 
 from omphjc import __version__
-from omphjc.cli.formatting import format_count, format_size, format_usage
-from omphjc.config_paths import config_dir, export_config
-from omphjc.jobs import (
-    GENERATE,
-    SHOWER,
-    SIMULATE,
-    Job,
-    StageRecord,
-    TerminationError,
-    exception_on_termination,
-    generate,
-    shower,
-    simulate,
+from omphjc.cli.formatting import format_count, format_job_line, format_size
+from omphjc.cli.options import (
+    EXISTING_FILE,
+    OUTDIR_OPTION,
+    SET_OPTION,
+    Catalogue,
+    lookup_process,
+    parse_assignment,
 )
-from omphjc.processes import ProcessSpec, default_catalogue, read_catalogue
-from omphjc.programs import ProgramError
+from omphjc.cli.stages import generate_job, shower_job, simulate_job
+from omphjc.config_paths import config_dir, export_config
+from omphjc.jobs import Job
+from omphjc.processes import default_catalogue, read_catalogue
 from omphjc.stamps import StampError
 from omphjc.tools.delphes.card import (
     DelphesCard,
@@ -34,54 +33,13 @@ from omphjc.tools.madgraph.reference import compare_all
 from omphjc.tools.madgraph.run_card import format_value
 from omphjc.tools.pythia.cmnd import format_cmnd, shower_settings
 
-Catalogue = Mapping[str, ProcessSpec]
-
-_EXISTING_FILE = click.Path(exists=True, dir_okay=False, path_type=Path)
-
-# Options that several commands share. A command applies them in its own
-# decorator stack, which sets their order in its --help.
-_JOB_ID_OPTION = click.option(
-    "--job-id",
-    "job_id",
-    type=int,
-    required=True,
-    help="Job number; the seed of every program follows from it.",
-)
-_OUTDIR_OPTION = click.option(
-    "--outdir",
-    "outdir",
-    type=click.Path(path_type=Path),
-    required=True,
-    help="Directory holding the jobs of every process.",
-)
-_FORCE_OPTION = click.option(
-    "--force", is_flag=True, help="Run the stage again, replacing its outputs."
-)
-_SET_OPTION = click.option(
-    "--set",
-    "assignments",
-    multiple=True,
-    metavar="KEY=VALUE",
-    help="Override one Pythia setting; may be repeated.",
-)
-
-# The errors of a stage command that are reported as a message, not a traceback.
-_STAGE_ERRORS = (
-    ValueError,
-    FileExistsError,
-    FileNotFoundError,
-    StampError,
-    ProgramError,
-    TerminationError,
-)
-
 
 @click.group()
 @click.version_option(__version__, prog_name="omphjc")
 @click.option(
     "--catalogue",
     "catalogue_path",
-    type=_EXISTING_FILE,
+    type=EXISTING_FILE,
     envvar="OMPHJC_CATALOGUE",
     help="Process catalogue to use instead of the default config/jetclass.yaml.",
 )
@@ -93,6 +51,11 @@ def cli(context: click.Context, catalogue_path: Path | None) -> None:
         if catalogue_path is None
         else read_catalogue(catalogue_path)
     )
+
+
+cli.add_command(generate_job)
+cli.add_command(shower_job)
+cli.add_command(simulate_job)
 
 
 @cli.group(invoke_without_command=True)
@@ -115,7 +78,7 @@ def processes(context: click.Context) -> None:
 @click.pass_obj
 def processes_show(specs: Catalogue, name: str) -> None:
     """Print the MadGraph inputs the package writes for one process."""
-    spec = _lookup(specs, name)
+    spec = lookup_process(specs, name)
     click.echo(f"{spec.name}: {spec.description}")
     click.echo(f"class label: {spec.label}")
     click.echo(f"seed offset: {spec.seed_offset}")
@@ -150,215 +113,10 @@ def check_cards(specs: Catalogue) -> None:
     raise SystemExit(1)
 
 
-@cli.command("generate")
-@click.argument("name")
-@_JOB_ID_OPTION
-@click.option(
-    "--events", "n_events", type=int, required=True, help="Events to generate."
-)
-@_OUTDIR_OPTION
-@click.option(
-    "--cores",
-    "n_cores",
-    type=int,
-    default=None,
-    help="Cores MadGraph may use (default: every usable CPU).",
-)
-@click.option("--timeout", type=float, default=None, help="Seconds MadGraph may take.")
-@_FORCE_OPTION
-@click.option(
-    "--mg5",
-    "mg5_path",
-    type=_EXISTING_FILE,
-    default=None,
-    help="MadGraph's bin/mg5_aMC (default: the one on PATH).",
-)
-@click.pass_obj
-def generate_job(
-    specs: Catalogue,
-    name: str,
-    job_id: int,
-    n_events: int,
-    outdir: Path,
-    n_cores: int | None,
-    timeout: float | None,
-    force: bool,
-    mg5_path: Path | None,
-) -> None:
-    """Generate the parton-level events of one job of a process with MadGraph."""
-    spec = _lookup(specs, name)
-
-    def run(job: Job) -> StageRecord:
-        return generate(
-            job,
-            n_events=n_events,
-            n_cores=n_cores,
-            timeout=timeout,
-            force=force,
-            mg5_path=mg5_path,
-        )
-
-    _run_stage_command(
-        spec,
-        job_id,
-        outdir,
-        stage=GENERATE,
-        run=run,
-        title="MadGraph generation",
-        lines=_generation_lines,
-    )
-
-
-def _generation_lines(job: Job, record: StageRecord) -> Iterator[str]:
-    """Yield what the generate stage of `job` ran with and what it made."""
-    metadata = record.metadata
-    yield f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
-    yield _row("events requested", record.parameters["events"])
-    yield _row("events generated", metadata["events"])
-    cross_section = (
-        f"{metadata['cross_section_pb']:g}"
-        f" +- {metadata['cross_section_error_pb']:.3g} pb"
-    )
-    yield _row("cross section", cross_section)
-    yield _row("event file", record.outputs[0])
-    yield _row("log", record.log)
-    yield _row("cards", f"{job.relative_path(job.stage_dir(GENERATE))}/cards/")
-
-
-@cli.command("shower")
-@click.argument("name")
-@_JOB_ID_OPTION
-@_OUTDIR_OPTION
-@_SET_OPTION
-@click.option(
-    "--timeout", type=float, default=None, help="Seconds DelphesPythia8 may take."
-)
-@_FORCE_OPTION
-@click.option(
-    "--delphes-pythia8",
-    "delphes_pythia8_path",
-    type=_EXISTING_FILE,
-    default=None,
-    help="Delphes's DelphesPythia8 (default: the one on PATH).",
-)
-@click.pass_obj
-def shower_job(
-    specs: Catalogue,
-    name: str,
-    job_id: int,
-    outdir: Path,
-    assignments: tuple[str, ...],
-    timeout: float | None,
-    force: bool,
-    delphes_pythia8_path: Path | None,
-) -> None:
-    """Shower one job's generated events with Pythia 8; the detector comes later."""
-    spec = _lookup(specs, name)
-    overrides = dict(_assignment(item) for item in assignments)
-
-    def run(job: Job) -> StageRecord:
-        return shower(
-            job,
-            overrides=overrides,
-            timeout=timeout,
-            force=force,
-            delphes_pythia8_path=delphes_pythia8_path,
-        )
-
-    _run_stage_command(
-        spec,
-        job_id,
-        outdir,
-        stage=SHOWER,
-        run=run,
-        title="Pythia shower",
-        lines=_shower_lines,
-    )
-
-
-def _shower_lines(job: Job, record: StageRecord) -> Iterator[str]:
-    """Yield what the shower stage of `job` ran with and what it made."""
-    metadata = record.metadata
-    yield f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
-    yield _row("events read", metadata["events_read"])
-    yield _row("events kept", metadata["events_accepted"])
-    if "matching_efficiency" in metadata:
-        yield _row("kept by matching", f"{metadata['matching_efficiency']:.1%}")
-    yield _row("output", record.outputs[0])
-    yield _row("log", record.log)
-    yield _row("settings", ", ".join(metadata["settings"]))
-
-
-@cli.command("simulate")
-@click.argument("name")
-@_JOB_ID_OPTION
-@_OUTDIR_OPTION
-@click.option(
-    "--card",
-    "card_path",
-    type=_EXISTING_FILE,
-    default=None,
-    help="Detector card to run instead of the process's.",
-)
-@click.option(
-    "--timeout", type=float, default=None, help="Seconds DelphesROOT may take."
-)
-@_FORCE_OPTION
-@click.option(
-    "--delphes-root",
-    "delphes_root_path",
-    type=_EXISTING_FILE,
-    default=None,
-    help="Delphes's DelphesROOT (default: the one on PATH).",
-)
-@click.pass_obj
-def simulate_job(
-    specs: Catalogue,
-    name: str,
-    job_id: int,
-    outdir: Path,
-    card_path: Path | None,
-    timeout: float | None,
-    force: bool,
-    delphes_root_path: Path | None,
-) -> None:
-    """Simulate the detector on one job's showered events with Delphes."""
-    spec = _lookup(specs, name)
-
-    def run(job: Job) -> StageRecord:
-        return simulate(
-            job,
-            card_path=card_path,
-            timeout=timeout,
-            force=force,
-            delphes_root_path=delphes_root_path,
-        )
-
-    _run_stage_command(
-        spec,
-        job_id,
-        outdir,
-        stage=SIMULATE,
-        run=run,
-        title="Delphes simulation",
-        lines=_simulation_lines,
-    )
-
-
-def _simulation_lines(job: Job, record: StageRecord) -> Iterator[str]:
-    """Yield what the simulation stage of `job` ran with and what it made."""
-    metadata = record.metadata
-    yield _row("card", ", ".join(metadata["card"]))
-    yield _row("seed", record.parameters["seed"])
-    yield _row("events", metadata["events"])
-    yield _row("output", record.outputs[0])
-    yield _row("log", record.log)
-
-
 @cli.command("clean")
 @click.argument("name")
 @click.option("--job-id", "job_id", type=int, required=True, help="Job number.")
-@_OUTDIR_OPTION
+@OUTDIR_OPTION
 @click.option(
     "--set-aside",
     "set_aside",
@@ -380,7 +138,7 @@ def clean_job(
     """Delete what one job of a process no longer needs; an option names what."""
     if not set_aside:
         raise click.UsageError("Name what to delete: --set-aside.")
-    spec = _lookup(specs, name)
+    spec = lookup_process(specs, name)
     try:
         job = Job(spec, outdir, job_id)
         folders = job.set_aside_folders()
@@ -389,7 +147,7 @@ def clean_job(
             job.clear_set_aside_folders()
     except (ValueError, StampError) as error:
         raise click.ClickException(str(error)) from error
-    click.echo(_job_line(job))
+    click.echo(format_job_line(job.spec.name, job.job_id, job.root_dir))
     if not folders:
         click.echo("set aside: nothing")
         return
@@ -454,7 +212,7 @@ def pythia() -> None:
     show_default=True,
     help="Uncompressed LHE file Pythia reads.",
 )
-@_SET_OPTION
+@SET_OPTION
 @click.pass_obj
 def pythia_show(
     specs: Catalogue,
@@ -465,8 +223,8 @@ def pythia_show(
     assignments: tuple[str, ...],
 ) -> None:
     """Print the Pythia command file written for one process."""
-    spec = _lookup(specs, name)
-    overrides = dict(_assignment(item) for item in assignments)
+    spec = lookup_process(specs, name)
+    overrides = dict(parse_assignment(item) for item in assignments)
     settings = shower_settings(
         spec, lhe_path=lhe_path, n_events=n_events, seed=seed, overrides=overrides
     )
@@ -482,7 +240,7 @@ def delphes() -> None:
 @click.argument(
     "card_path",
     metavar="CARD",
-    type=_EXISTING_FILE,
+    type=EXISTING_FILE,
     required=False,
 )
 def delphes_show(card_path: Path | None) -> None:
@@ -503,12 +261,12 @@ def delphes_show(card_path: Path | None) -> None:
 @click.argument(
     "card_path",
     metavar="CARD",
-    type=_EXISTING_FILE,
+    type=EXISTING_FILE,
 )
 @click.option(
     "--reference",
     "reference_path",
-    type=_EXISTING_FILE,
+    type=EXISTING_FILE,
     help="Card to compare against (default: the official JetClass card).",
 )
 def delphes_compare(card_path: Path, reference_path: Path | None) -> None:
@@ -523,81 +281,6 @@ def delphes_compare(card_path: Path, reference_path: Path | None) -> None:
     for difference in differences:
         click.echo(str(difference), err=True)
     raise SystemExit(1)
-
-
-def _run_stage_command(
-    spec: ProcessSpec,
-    job_id: int,
-    outdir: Path,
-    *,
-    stage: str,
-    run: Callable[[Job], StageRecord],
-    title: str,
-    lines: Callable[[Job, StageRecord], Iterable[str]],
-) -> None:
-    """Run `stage` of one job of `spec` through `run` and print its report.
-
-    `title` names the stage in the report and `lines` gives the rows between
-    the title and what the stage took. An error in :data:`_STAGE_ERRORS`
-    becomes a :class:`click.ClickException`.
-    """
-    try:
-        job = Job(spec, outdir, job_id)
-        earlier = job.manifest.stages.get(stage)
-        with exception_on_termination():
-            record = run(job)
-    except _STAGE_ERRORS as error:
-        raise click.ClickException(str(error)) from error
-    outcome = "done, kept from an earlier run" if record is earlier else "done"
-    click.echo(_job_line(job))
-    click.echo(f"{title}: {outcome}")
-    for line in lines(job, record):
-        click.echo(line)
-    click.echo(_row("took", format_usage(record.usage)))
-    _report_set_aside(job)
-
-
-def _report_set_aside(job: Job) -> None:
-    """Print what earlier runs of `job` set aside, when anything is."""
-    folders = job.set_aside_folders()
-    if not folders:
-        return
-    count = format_count(len(folders), "folder")
-    click.echo(
-        _row(
-            "set aside",
-            f"{count} left by earlier runs; omphjc clean --set-aside deletes them",
-        )
-    )
-
-
-def _job_line(job: Job) -> str:
-    """Return the line naming `job` and its directory that opens a job's report."""
-    return f"{job.spec.name} job {job.job_id}: {job.root_dir}"
-
-
-def _row(label: str, value: object) -> str:
-    """Return one labelled line of a stage's report, its value at column 20."""
-    return f"  {label:<18}{value}"
-
-
-def _lookup(specs: Catalogue, name: str) -> ProcessSpec:
-    try:
-        return specs[name]
-    except KeyError:
-        known = ", ".join(specs)
-        raise click.BadParameter(
-            f"unknown process {name!r}; choose from {known}"
-        ) from None
-
-
-def _assignment(text: str) -> tuple[str, str]:
-    key, separator, value = text.partition("=")
-    if not separator or not key.strip() or not value.strip():
-        raise click.BadParameter(
-            f"expected KEY=VALUE, got {text!r}", param_hint="--set"
-        )
-    return key.strip(), value.strip()
 
 
 def _abbreviate(value: tuple[str, ...], limit: int = 8) -> str:

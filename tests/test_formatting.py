@@ -1,6 +1,10 @@
+from pathlib import Path
+
 from omphjc.cli.formatting import (
     format_count,
     format_duration,
+    format_job_line,
+    format_row,
     format_size,
     format_usage,
 )
@@ -37,4 +41,18 @@ def test_usage_lists_what_was_recorded() -> None:
             {"wall_seconds": 90, "cpu_seconds": 3600, "peak_memory_mib": 812.4}
         )
         == "1 min 30 s wall, 1 h 00 min CPU, 812 MiB peak"
+    )
+
+
+def test_a_row_puts_its_value_at_column_20() -> None:
+    assert (
+        format_row("log", "generate/run.log") == "  log               generate/run.log"
+    )
+    assert format_row("events", 100).index("100") == 20
+
+
+def test_the_job_line_names_the_process_the_job_and_its_directory() -> None:
+    assert (
+        format_job_line("HToBB", 3, Path("runs/HToBB/job_3"))
+        == "HToBB job 3: runs/HToBB/job_3"
     )
