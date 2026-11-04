@@ -169,7 +169,7 @@ def test_a_run_killed_before_sealing_is_set_aside(
     ("failure", "timeout", "outcome"),
     [
         ("exit", None, "exited with status"),
-        ("hang", 1.0, "was stopped at the time limit"),
+        ("hang", 0.1, "was stopped at the time limit"),
     ],
     ids=["exit-status", "time-limit"],
 )

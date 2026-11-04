@@ -213,7 +213,7 @@ def test_a_program_still_running_at_the_deadline_is_stopped(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = ToolWorkspace(
-        specs["HToBB"], tmp_path, tool_path=tool_path, timeout=0.5
+        specs["HToBB"], tmp_path, tool_path=tool_path, timeout=0.1
     )
     monkeypatch.setenv("FAKE_TOOL_FAIL", "hang")
     started = time.monotonic()
