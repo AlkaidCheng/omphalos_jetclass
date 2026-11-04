@@ -94,3 +94,5 @@
   (#30)
 - `omphjc generate` raises the open-file limit while MadGraph runs, so that a
   run with many channels also unweights its events from the job seed. (#30)
+- `omphjc simulate` seeds Delphes with the job seed also when the detector card
+  sets `RandomSeed` itself. (#35)

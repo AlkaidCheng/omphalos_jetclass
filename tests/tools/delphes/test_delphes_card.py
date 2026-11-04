@@ -97,6 +97,12 @@ def test_random_seed_becomes_a_top_level_setting() -> None:
     assert differences[0].actual == "12345"
 
 
+@pytest.mark.parametrize("ending", ["\n", ""])
+def test_the_seed_replaces_one_the_card_sets(ending: str) -> None:
+    seeded = with_random_seed(f"set RandomSeed 5{ending}", 12345)
+    assert parse_card(seeded).settings == {"RandomSeed": ("12345",)}
+
+
 def test_invalid_tcl_is_rejected() -> None:
     with pytest.raises(ValueError, match="does not evaluate"):
         parse_card("module FastJetFinder Broken {\n  set ParameterR\n")

@@ -75,10 +75,11 @@ whose seed is larger.
 
 ## simulate: Delphes
 
-omphjc writes `set RandomSeed <seed>` at the top of the detector card. Delphes
-seeds ROOT's random generator, `gRandom`, with it, and every module draws from
-that generator. A card that sets `RandomSeed` itself overrides the job's seed,
-since the card's own line comes later; the cards in `config/` do not set it.
+omphjc adds `set RandomSeed <seed>` as the last line of the detector card.
+Delphes seeds ROOT's random generator, `gRandom`, with it, and every module
+draws from that generator. Delphes evaluates the card from top to bottom and
+uses the last value of `RandomSeed`, so a `set RandomSeed` line in the card
+itself has no effect.
 
 ## Versions and builds
 
