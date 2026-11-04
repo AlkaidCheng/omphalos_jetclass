@@ -30,9 +30,9 @@ from omphjc.jobs.manifest import (
     timestamp,
 )
 from omphjc.processes.catalogue import ProcessSpec
-from omphjc.pythia.cmnd import PYTHIA_SEED_LIMIT
 from omphjc.safe_paths import inside, working_directory
 from omphjc.stamps import SetAsideFolder, clear_set_aside_folders, set_aside_folders
+from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
 
 JOB_DIR_PREFIX = "job_"
 

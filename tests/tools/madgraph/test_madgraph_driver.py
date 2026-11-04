@@ -6,16 +6,15 @@ from pathlib import Path
 import pytest
 
 from omphjc.config_paths import export_config
-from omphjc.madgraph import (
-    MadGraphError,
-    MadGraphWorkspace,
-    generate_events,
-    launch_commands,
-    madspin_card_text,
-)
 from omphjc.processes import ProcessSpec, read_catalogue
 from omphjc.programs import available_cores
 from omphjc.stamps import StampError, read_stamp
+from omphjc.tools.madgraph.cards import launch_commands, madspin_card_text
+from omphjc.tools.madgraph.driver import (
+    MadGraphError,
+    MadGraphWorkspace,
+    generate_events,
+)
 
 
 def test_a_process_runs_in_its_own_working_directory(
@@ -130,7 +129,7 @@ def test_a_process_directory_without_the_process_card_is_set_aside(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import omphjc.madgraph.driver as driver
+    import omphjc.tools.madgraph.driver as driver
 
     generate_events(
         specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path

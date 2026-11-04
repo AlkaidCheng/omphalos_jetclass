@@ -3,10 +3,10 @@
 import hashlib
 from pathlib import Path
 
-from omphjc.delphes.driver import detector_card_text, simulate_events
 from omphjc.jobs.job import Job, sha256
 from omphjc.jobs.manifest import StageOutcome, StageRecord
 from omphjc.jobs.stages.shower import SHOWER
+from omphjc.tools.delphes.driver import detector_card_text, simulate_events
 
 SIMULATE = "simulate"
 """The stage's name and directory, ``<job>/simulate/``."""
@@ -22,7 +22,7 @@ def simulate(
 ) -> StageRecord:
     """Simulate the detector on the showered events of `job` with Delphes.
 
-    Runs :func:`omphjc.delphes.simulate_events` in the job's ``simulate/``
+    Runs :func:`omphjc.tools.delphes.driver.simulate_events` in the job's ``simulate/``
     directory on the file the shower stage made, with the job's seed. The
     stage's parameters are the seed, the SHA-256 of the detector card chosen
     and the settings the events were showered with, so a shower rerun with

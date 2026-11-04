@@ -1,11 +1,8 @@
 from collections.abc import Mapping
 
-from omphjc.madgraph import (
-    compare_madspin_cards,
-    madspin_card_text,
-    parse_madspin_card,
-)
 from omphjc.processes import ProcessSpec
+from omphjc.tools.madgraph.cards import madspin_card_text
+from omphjc.tools.madgraph.madspin import compare_madspin_cards, parse_madspin_card
 
 
 def test_ttbar_card_decays_both_tops_hadronically(

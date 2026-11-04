@@ -49,15 +49,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from omphjc.madgraph.banner import Banner
-from omphjc.madgraph.cards import (
+from omphjc.processes.catalogue import ProcessSpec
+from omphjc.programs import ProgramError, available_cores
+from omphjc.safe_paths import inside, require_unoccupied
+from omphjc.tools.madgraph.banner import Banner
+from omphjc.tools.madgraph.cards import (
     launch_commands,
     madspin_card_text,
     proc_card_commands,
 )
-from omphjc.processes.catalogue import ProcessSpec
-from omphjc.programs import ProgramError, available_cores
-from omphjc.safe_paths import inside, require_unoccupied
 from omphjc.workspace import ProgramRun, ProgramWorkspace
 
 # MadGraph's command-line program, bin/mg5_aMC of an installation.

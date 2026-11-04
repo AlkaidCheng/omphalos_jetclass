@@ -7,7 +7,7 @@ from omphjc.jobs.job import Job, sha256
 from omphjc.jobs.manifest import StageOutcome, StageRecord
 from omphjc.jobs.stages.generate import GENERATE
 from omphjc.processes.catalogue import SettingValue
-from omphjc.pythia.driver import shower_events
+from omphjc.tools.pythia.driver import shower_events
 
 SHOWER = "shower"
 """The stage's name and directory, ``<job>/shower/``."""
@@ -23,7 +23,7 @@ def shower(
 ) -> StageRecord:
     """Shower the generated events of `job` with Pythia 8.
 
-    Runs :func:`omphjc.pythia.shower_events` in the job's ``shower/``
+    Runs :func:`omphjc.tools.pythia.driver.shower_events` in the job's ``shower/``
     directory on the event file the generate stage made, with the job's seed
     and as many events as that stage recorded. The stage's parameters are the
     event count, the seed, the Pythia overrides and the cards the events were

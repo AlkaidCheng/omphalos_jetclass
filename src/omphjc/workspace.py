@@ -11,7 +11,7 @@ the directory is ever touched.
 run makes, and adds the steps of its run. :class:`ProgramWorkspace` adds an
 external program, named in class attributes too: the program file, the time
 its runs may take, the log they append to and what they took.
-:class:`omphjc.madgraph.MadGraphWorkspace` is one.
+:class:`omphjc.tools.madgraph.driver.MadGraphWorkspace` is one.
 
 A run returns a record deriving from :class:`Run`, or from :class:`ProgramRun`
 when an external program ran, which carry the fields every run shares; a

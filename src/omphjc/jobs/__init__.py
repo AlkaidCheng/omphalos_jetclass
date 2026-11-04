@@ -8,7 +8,7 @@ rules; :mod:`omphjc.jobs.manifest` defines the file; the functions in
 :mod:`omphjc.jobs.stages` run the stages: MadGraph generation, the Pythia
 shower, then the Delphes simulation.
 
-Each stage calls a driver, such as :func:`omphjc.madgraph.generate_events`,
+Each stage calls a driver, such as :func:`omphjc.tools.madgraph.driver.generate_events`,
 which returns a run record with absolute paths. The stage function builds a
 :class:`StageOutcome` from it: the metadata, outputs, log and usage to record.
 :meth:`Job.run_stage` adds the status, the start and finish times and the

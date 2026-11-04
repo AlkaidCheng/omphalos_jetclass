@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from omphjc.madgraph import Banner
+from omphjc.tools.madgraph.banner import Banner
 
-BANNER = Path(__file__).parent / "data" / "madgraph" / "TTBar_banner.txt"
+BANNER = Path(__file__).parents[2] / "data" / "madgraph" / "TTBar_banner.txt"
 
 
 def test_banner_of_a_decayed_sample() -> None:

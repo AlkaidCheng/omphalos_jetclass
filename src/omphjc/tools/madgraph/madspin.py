@@ -8,8 +8,8 @@ decay chains configure the same decays, whatever their layout.
 from dataclasses import dataclass
 
 from omphjc.comparison import Difference
-from omphjc.madgraph.run_card import format_value, parse_value, values_equal
 from omphjc.processes.catalogue import RunCardValue
+from omphjc.tools.madgraph.run_card import format_value, parse_value, values_equal
 
 
 @dataclass(frozen=True)

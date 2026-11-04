@@ -191,9 +191,9 @@ The run directory, `Events/run_01/`, holds `unweighted_events.lhe.gz`
 directory of its own, `Events/run_01_decayed_1/`. The banner records the
 MadGraph version, every card as used, the number of events and the integrated
 cross section in pb; the `<init>` block of the event file adds the statistical
-error. `omphjc.madgraph.generate_events` runs both scripts in a working
+error. `omphjc.tools.madgraph.driver.generate_events` runs both scripts in a working
 directory and returns the event file with its banner, which
-`omphjc.madgraph.Banner.read` reads.
+`omphjc.tools.madgraph.banner.Banner.read` reads.
 
 ## 3. Pythia: shower and hadronisation
 
