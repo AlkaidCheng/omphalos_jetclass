@@ -86,3 +86,7 @@
 
 - A model copy cut short in `generate_events` is sealed with the run's other
   artifacts, so the next run deletes it instead of setting it aside. (#20)
+- `omphjc generate` derives the seeds of MadGraph's unweighting and MadSpin's
+  decays from the job seed instead of one fixed seed shared by every job. A
+  seed therefore no longer reproduces events generated before this change.
+  (#30)

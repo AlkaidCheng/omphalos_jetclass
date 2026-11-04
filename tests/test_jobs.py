@@ -224,7 +224,8 @@ def test_generate_records_what_madgraph_made(
         hashlib.sha256(card.read_bytes()).hexdigest()
     )
     assert (card.parent / "madspin_card.dat").is_file()
-    assert "set iseed 3" in (job.root_dir / "generate" / "launch.mg5").read_text()
+    launch = (job.root_dir / "generate" / "launch.mg5").read_text().splitlines()
+    assert "set iseed 3" in launch and "set python_seed 3" in launch
 
 
 def test_generate_keeps_a_finished_run_unless_forced(

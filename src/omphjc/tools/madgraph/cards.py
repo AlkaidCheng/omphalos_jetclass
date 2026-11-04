@@ -11,6 +11,13 @@ from pathlib import Path
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.tools.madgraph.run_card import format_value
 
+PYTHON_SEED_FROM_SYSTEM = -1
+"""``python_seed`` that leaves Python's generator seeded from the system.
+
+"-1 means use default from random module" in the run card's comment,
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/various/banner.py#L4425.
+"""
+
 
 def model_import_target(spec: ProcessSpec) -> str:
     """Return the argument of ``import model`` for `spec`.
@@ -59,7 +66,9 @@ def launch_commands(
     n_events : int
         Number of events to generate.
     seed : int or None
-        MadGraph ``iseed``; ``None`` lets MadGraph pick one at random.
+        MadGraph's ``iseed`` and ``python_seed``, the seed of its Python
+        generator; ``None`` lets MadGraph choose ``iseed`` and leaves the Python
+        generator seeded from the system.
 
     Returns
     -------
@@ -84,6 +93,7 @@ def launch_commands(
         "done",
         f"set nevents {n_events}",
         f"set iseed {0 if seed is None else seed}",
+        f"set python_seed {PYTHON_SEED_FROM_SYSTEM if seed is None else seed}",
     ]
     commands.extend(
         f"set {name} {format_value(value)}" for name, value in spec.run_card.items()

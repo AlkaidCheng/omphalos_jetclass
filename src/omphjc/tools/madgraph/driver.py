@@ -33,6 +33,14 @@ https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/common_run
 so a value in the user's or the installation's configuration does not
 override it.
 
+A run sets MadGraph's ``iseed`` and the seed of its Python generator,
+``python_seed``, to its seed. In its default spin mode, MadSpin draws its own
+seed from that generator (``run_onshell``,
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/MadSpin/interface_madspin.py#L3278-L3292).
+MadGraph resets ``iseed`` to 0 in the kept ``Cards/run_card.dat``; the banner's
+run card holds the seed it used (``reset_iseed_in_run_card``,
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/common_run_interface.py#L5367-L5380).
+
 A working directory holds the runs of one process and carries a stamp
 (:mod:`omphjc.stamps`) naming the process. When a run ends, short of a hard
 kill, it seals its artifacts: the process directory, the model copy, the
@@ -147,7 +155,8 @@ def generate_events(
     n_events : int
         Number of events to generate.
     seed : int or None
-        MadGraph ``iseed``; ``None`` lets MadGraph choose one.
+        MadGraph's ``iseed`` and ``python_seed``; ``None`` lets MadGraph choose
+        ``iseed`` and leaves the Python generator seeded from the system.
     n_cores : int or None, optional
         Number of cores MadGraph runs its jobs on; by default every CPU this
         process may use (:func:`omphjc.programs.available_cores`).
