@@ -2,7 +2,8 @@
 
 A job directory, ``<outdir>/<process>/job_<n>/``, holds ``manifest.json`` and
 one directory per stage. The job number fixes the seed of every program the
-job runs, so a job is reproducible from its process and number alone.
+job runs; ``docs/reproducibility.md`` lists what else a rerun's events depend
+on.
 :class:`Job` builds the directory, keeps the manifest and applies the rerun
 rules; :mod:`omphjc.jobs.manifest` defines the file; the functions in
 :mod:`omphjc.jobs.stages` run the stages: MadGraph generation, the Pythia
