@@ -130,6 +130,15 @@ def test_an_artifact_changed_after_sealing_is_set_aside_whole(
     assert not (run / "output").exists() and not (run / "run.log").exists()
 
 
+def test_every_artifact_is_set_aside_where_changes_leave_ctime_alone(
+    run: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("omphjc.stamps.CHANGES_MOVE_CTIME", False)
+    folder = clear_artifacts(run, ["output", "run.log"], "testing")
+    assert folder is not None
+    assert sorted(path.name for path in folder.iterdir()) == ["output", "run.log"]
+
+
 def test_unsealed_and_doubtful_artifacts_are_set_aside(run: Path) -> None:
     (run / "later").mkdir()
     (run / "later" / "partial.dat").write_text("partial")
