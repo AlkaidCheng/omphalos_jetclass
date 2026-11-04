@@ -373,8 +373,10 @@ from a batch system's time limit, stops its running program and records the
 failure before it exits. A rerun deletes only what it can recognise as the
 earlier run's: anything else in the earlier run's place, as after a hard kill
 or a change made to the files since, is moved into `<stage>/omphjc-set-aside/`
-instead and stays there. On Windows a rerun cannot see changes, so it sets
-aside everything the earlier run left. The stage's report counts those
+instead and stays there. A file a system tool writes into one of the run's
+folders counts as a change too, such as the `.DS_Store` that the macOS Finder
+writes into a folder it opens. On Windows a rerun cannot see changes, so it
+sets aside everything the earlier run left. The stage's report counts those
 folders, the manifest names the folder each run made, and
 `omphjc clean --set-aside` deletes them (`--dry-run` lists them with their
 sizes first).
