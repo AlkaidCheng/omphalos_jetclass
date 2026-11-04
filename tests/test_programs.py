@@ -6,9 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from omphjc import programs
 from omphjc.programs import (
     ProgramError,
     ProgramUsage,
+    RaisedOpenFileLimit,
     available_cores,
     log_tail,
     run_program,
@@ -132,6 +134,84 @@ def test_available_cores_counts_the_cpus_this_process_may_use() -> None:
         assert cores == len(os.sched_getaffinity(0))
     else:
         assert cores == os.cpu_count()
+
+
+class _OpenFileLimits:
+    """Stands in for the resource module, with Linux's RLIM_INFINITY."""
+
+    RLIMIT_NOFILE = 7
+    RLIM_INFINITY = -1
+
+    def __init__(self, soft: int, hard: int, *, refuse: bool = False) -> None:
+        self.limits = (soft, hard)
+        self.refuse = refuse
+
+    def getrlimit(self, which: int) -> tuple[int, int]:
+        assert which == self.RLIMIT_NOFILE
+        return self.limits
+
+    def setrlimit(self, which: int, limits: tuple[int, int]) -> None:
+        assert which == self.RLIMIT_NOFILE
+        if self.refuse:
+            raise ValueError("not allowed")
+        self.limits = limits
+
+
+@pytest.mark.parametrize(
+    ("limits", "raised"),
+    [
+        ((256, 4096), (4096, 4096)),
+        ((256, -1), (10240, -1)),
+        ((20000, -1), (20000, -1)),
+        ((-1, -1), (-1, -1)),
+    ],
+)
+def test_the_soft_open_file_limit_rises_to_the_hard_limit_within_the_block(
+    monkeypatch: pytest.MonkeyPatch,
+    limits: tuple[int, int],
+    raised: tuple[int, int],
+) -> None:
+    fake = _OpenFileLimits(*limits)
+    monkeypatch.setattr(programs, "resource", fake)
+    with RaisedOpenFileLimit():
+        assert fake.limits == raised
+    assert fake.limits == limits
+
+
+def test_the_open_file_limit_is_restored_when_the_block_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _OpenFileLimits(256, 4096)
+    monkeypatch.setattr(programs, "resource", fake)
+    with pytest.raises(KeyError), RaisedOpenFileLimit():
+        raise KeyError("x")
+    assert fake.limits == (256, 4096)
+
+
+def test_the_open_file_limit_is_left_alone_when_disabled_refused_or_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _OpenFileLimits(256, 4096, refuse=True)
+    monkeypatch.setattr(programs, "resource", fake)
+    with RaisedOpenFileLimit():
+        assert fake.limits == (256, 4096)
+    fake.refuse = False
+    with RaisedOpenFileLimit(enabled=False):
+        assert fake.limits == (256, 4096)
+    monkeypatch.setattr(programs, "resource", None)
+    with RaisedOpenFileLimit():
+        pass
+
+
+def test_a_program_started_within_the_block_inherits_the_raised_limit(
+    low_open_file_limit: int, tmp_path: Path
+) -> None:
+    log = tmp_path / "run.log"
+    code = "import resource; print(resource.getrlimit(resource.RLIMIT_NOFILE)[0])"
+    with RaisedOpenFileLimit():
+        run_program(python(code), cwd=tmp_path, log_path=log)
+    raised = int(log.read_text().splitlines()[-1])
+    assert raised > low_open_file_limit
 
 
 def _ends_within(pid: int, *, seconds: float) -> bool:

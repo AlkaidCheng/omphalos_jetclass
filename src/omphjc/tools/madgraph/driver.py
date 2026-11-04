@@ -33,6 +33,27 @@ https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/common_run
 so a value in the user's or the installation's configuration does not
 override it.
 
+A run sets MadGraph's ``iseed`` and the seed of its Python generator,
+``python_seed``, to its seed. In its default spin mode, MadSpin draws its own
+seed from that generator (``run_onshell``,
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/MadSpin/interface_madspin.py#L3278-L3292).
+MadGraph resets ``iseed`` to 0 in the kept ``Cards/run_card.dat``; the banner's
+run card holds the seed it used (``reset_iseed_in_run_card``,
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/common_run_interface.py#L5367-L5380).
+
+MadSpin decays the events in one separately seeded shard per core, so a sample
+with MadSpin is reproduced only on the same number of cores
+(``_split_production``,
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/MadSpin/interface_madspin.py#L6211-L6226).
+MadGraph unweights the events of a run with at least
+``max(80, ulimit -n - 40)`` channel directories, or 2500 when ``ulimit -n`` is
+unlimited, in new Python processes whose random numbers come from the operating
+system (``do_combine_events``,
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L3908-L3990).
+A run with a seed raises ``ulimit -n`` to the hard limit while MadGraph runs
+(:class:`omphjc.programs.RaisedOpenFileLimit`), so only a run with at least
+the raised limit minus 40 channel directories is not reproducible.
+
 A working directory holds the runs of one process and carries a stamp
 (:mod:`omphjc.stamps`) naming the process. When a run ends, short of a hard
 kill, it seals its artifacts: the process directory, the model copy, the
@@ -50,7 +71,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from omphjc.processes.catalogue import ProcessSpec
-from omphjc.programs import ProgramError, available_cores
+from omphjc.programs import ProgramError, RaisedOpenFileLimit, available_cores
 from omphjc.safe_paths import inside, require_unoccupied
 from omphjc.tools.madgraph.banner import Banner
 from omphjc.tools.madgraph.cards import (
@@ -112,10 +133,13 @@ class MadGraphRun(ProgramRun):
         The gzipped LHE file of the sample; after MadSpin, the decayed one.
     banner : Banner
         The banner of `output_path`: version, event count, cross section, run card.
+    n_cores : int
+        Number of cores MadGraph ran its jobs on.
     """
 
     process_dir: Path
     banner: Banner
+    n_cores: int
 
 
 def generate_events(
@@ -147,7 +171,8 @@ def generate_events(
     n_events : int
         Number of events to generate.
     seed : int or None
-        MadGraph ``iseed``; ``None`` lets MadGraph choose one.
+        MadGraph's ``iseed`` and ``python_seed``; ``None`` lets MadGraph choose
+        ``iseed`` and leaves the Python generator seeded from the system.
     n_cores : int or None, optional
         Number of cores MadGraph runs its jobs on; by default every CPU this
         process may use (:func:`omphjc.programs.available_cores`).
@@ -167,7 +192,8 @@ def generate_events(
     Returns
     -------
     MadGraphRun
-        The process directory, the event file, its banner and the log.
+        The process directory, the event file, its banner, the core count and
+        the log.
 
     Raises
     ------
@@ -210,7 +236,9 @@ def generate_events(
             proc_card_commands(local_spec, output_dir=workspace.process_dir),
         )
         workspace.write_cards(n_cores)
-        workspace.run_script(_LAUNCH_SCRIPT, launch)
+        # Keeps MadGraph's unweighting in its seeded process (see the module docstring).
+        with RaisedOpenFileLimit(enabled=seed is not None):
+            workspace.run_script(_LAUNCH_SCRIPT, launch)
 
     output_path = workspace.output_path
     if not output_path.is_file():
@@ -219,6 +247,7 @@ def generate_events(
         process_dir=workspace.process_dir,
         output_path=output_path,
         banner=Banner.read(output_path),
+        n_cores=n_cores,
         log_path=workspace.log_path,
         usage=workspace.usage,
         set_aside=set_aside,

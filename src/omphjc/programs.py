@@ -27,6 +27,13 @@ except ImportError:  # Windows has no resource module.
 # ru_maxrss is in bytes on macOS and in kibibytes elsewhere.
 _MAXRSS_BYTES = 1 if sys.platform == "darwin" else 1024
 
+# The soft limit on open files under an unlimited hard limit: MadGraph reads an
+# unlimited soft limit as 2500 channel directories (do_combine_events,
+# https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L3913-L3914),
+# so a finite one is set, macOS's OPEN_MAX from
+# https://github.com/apple-oss-distributions/xnu/blob/xnu-12377.121.6/bsd/sys/syslimits.h#L108.
+_OPEN_MAX = 10240
+
 _LOG_TAIL_LINES = 20
 
 
@@ -44,6 +51,42 @@ def available_cores() -> int:
     if sys.platform == "linux":
         return len(os.sched_getaffinity(0))
     return os.cpu_count() or 1
+
+
+class RaisedOpenFileLimit:
+    """Raise the soft limit on open files to the hard limit within a ``with`` block.
+
+    Programs started in the block inherit the raised limit. Under an unlimited
+    hard limit the soft limit becomes 10240, macOS's ``OPEN_MAX``. The limit
+    stays as it is when the soft limit is already that high or unlimited, when
+    the system refuses the change, and on a platform without resource limits.
+
+    Parameters
+    ----------
+    enabled : bool, optional
+        Whether to raise the limit; when false, the block runs with the limit
+        as it is.
+    """
+
+    def __init__(self, *, enabled: bool = True) -> None:
+        self.enabled = enabled
+        self._replaced: tuple[int, int] | None = None
+
+    def __enter__(self) -> None:
+        if not self.enabled or resource is None:
+            return
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        target = _OPEN_MAX if hard == resource.RLIM_INFINITY else hard
+        # RLIM_INFINITY is -1 on Linux, so it is compared for equality.
+        if soft != resource.RLIM_INFINITY and soft < target:
+            with contextlib.suppress(ValueError, OSError):
+                resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+                self._replaced = (soft, hard)
+
+    def __exit__(self, *exc_info: object) -> None:
+        if self._replaced is not None:
+            resource.setrlimit(resource.RLIMIT_NOFILE, self._replaced)
+            self._replaced = None
 
 
 def find_program(program: str, program_path: Path | None, *, description: str) -> Path:

@@ -113,6 +113,7 @@ def test_launch_commands_switch_shower_and_detector_off(
     ]
     assert "set nevents 1000" in commands
     assert "set iseed 7" in commands
+    assert commands[commands.index("set iseed 7") + 1] == "set python_seed 7"
     assert "set pt_min_pdg {6: 450.0}" in commands
     assert "set use_syst False" in commands
     assert commands[-1] == "done"
@@ -125,6 +126,7 @@ def test_launch_commands_without_a_seed_let_madgraph_choose(
         specs["HToBB"], process_dir=Path("HToBB"), n_events=10, seed=None
     )
     assert "set iseed 0" in commands
+    assert "set python_seed -1" in commands
     assert "madspin=OFF" in commands
 
 

@@ -50,6 +50,8 @@
   stage reports now count. (#14)
 - `omphjc simulate` runs Delphes on a job's showered events through
   `DelphesROOT`, with the process's detector card or one given by `--card`. (#15)
+- `omphjc generate` records the cores MadGraph ran on as `n_cores` in the
+  stage's metadata. (#30)
 
 ### Changed
 
@@ -86,3 +88,9 @@
 
 - A model copy cut short in `generate_events` is sealed with the run's other
   artifacts, so the next run deletes it instead of setting it aside. (#20)
+- `omphjc generate` derives the seeds of MadGraph's unweighting and MadSpin's
+  decays from the job seed instead of one fixed seed shared by every job. A
+  seed therefore no longer reproduces events generated before this change.
+  (#30)
+- `omphjc generate` raises the open-file limit while MadGraph runs, so that a
+  run with many channels also unweights its events from the job seed. (#30)
