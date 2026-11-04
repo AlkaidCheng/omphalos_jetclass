@@ -306,7 +306,7 @@ class ShowerWorkspace(ProgramWorkspace):
         timeout: float | None = None,
     ) -> None:
         super().__init__(
-            spec, workdir, program_path=delphes_pythia8_path, timeout=timeout
+            spec.name, workdir, program_path=delphes_pythia8_path, timeout=timeout
         )
 
     @property
@@ -337,7 +337,7 @@ class ShowerWorkspace(ProgramWorkspace):
         """Decompress `lhe_path` into the directory and write the command file and the card."""
         _copy_events(lhe_path, self.events_path)
         self.cmnd_path.write_text(
-            format_cmnd(settings, title=self.spec.name), encoding="utf-8"
+            format_cmnd(settings, title=self.process_name), encoding="utf-8"
         )
         self.card_path.write_text(particles_card_text(), encoding="utf-8")
 

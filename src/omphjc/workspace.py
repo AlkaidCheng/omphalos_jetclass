@@ -27,7 +27,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import (
     ProgramError,
     ProgramUsage,
@@ -86,15 +85,15 @@ class Workspace(ABC):
 
     Parameters
     ----------
-    spec : ProcessSpec
-        The process whose runs the directory holds; its name goes in the stamp.
+    process_name : str
+        The process whose runs the directory holds, named in the stamp.
     workdir : Path
         The working directory, created by :meth:`sealed_run` when missing; it
         must not be a filesystem root.
 
     Attributes
     ----------
-    spec : ProcessSpec
+    process_name : str
     workdir : Path
         The working directory, normalized.
     details : dict[str, str]
@@ -109,10 +108,10 @@ class Workspace(ABC):
     purpose: ClassVar[str]
     """What the directory is used for, written in its stamp."""
 
-    def __init__(self, spec: ProcessSpec, workdir: Path) -> None:
-        self.spec = spec
+    def __init__(self, process_name: str, workdir: Path) -> None:
+        self.process_name = process_name
         self.workdir = working_directory(workdir)
-        self.details = {"process": spec.name}
+        self.details = {"process": process_name}
 
     @property
     @abstractmethod
@@ -189,7 +188,7 @@ class ProgramWorkspace(Workspace):
 
     Parameters
     ----------
-    spec, workdir
+    process_name, workdir
         As :class:`Workspace`.
     program_path : Path or None
         The program file to run instead of the one on PATH.
@@ -225,7 +224,7 @@ class ProgramWorkspace(Workspace):
 
     def __init__(
         self,
-        spec: ProcessSpec,
+        process_name: str,
         workdir: Path,
         *,
         program_path: Path | None,
@@ -233,7 +232,7 @@ class ProgramWorkspace(Workspace):
     ) -> None:
         if timeout is not None and timeout <= 0:
             raise ValueError(f"timeout must be positive, got {timeout}")
-        super().__init__(spec, workdir)
+        super().__init__(process_name, workdir)
         self.program_path = find_program(
             self.program, program_path, description=self.description
         )

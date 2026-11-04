@@ -1,6 +1,7 @@
-"""The text the commands print for durations, byte sizes, counts and a stage's usage."""
+"""The text the commands print: durations, byte sizes, counts, usage and report lines."""
 
 from collections.abc import Mapping
+from pathlib import Path
 
 
 def format_usage(usage: Mapping[str, float]) -> str:
@@ -41,3 +42,13 @@ def format_size(n_bytes: int) -> str:
 def format_count(number: int, noun: str) -> str:
     """Return ``1 folder`` or ``3 folders``."""
     return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+
+
+def format_row(label: str, value: object) -> str:
+    """Return one labelled line of a report, its value at column 20."""
+    return f"  {label:<18}{value}"
+
+
+def format_job_line(process: str, job_id: int, root_dir: Path) -> str:
+    """Return the line naming a job and its directory that opens the job's report."""
+    return f"{process} job {job_id}: {root_dir}"
