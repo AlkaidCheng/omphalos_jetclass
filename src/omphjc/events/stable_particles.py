@@ -1,16 +1,17 @@
-"""Long-lived particles that the shower decayed, restored as final for a simulator.
+"""The stable-particle definition: which particles a simulator receives as final.
 
 Pythia decays every species whose nominal c*tau is below 1000 mm and that has
 decay channels (``MAXTAU0FORDECAY``,
 https://gitlab.com/Pythia8/releases/-/raw/pythia8312/src/ParticleData.cc),
 while Parnassus expects the CMS convention, ``ParticleDecays:limitTau0 = on``
 with ``tau0Max = 10`` mm, under which longer-lived hadrons stay final
-(https://github.com/parnassus-hep/parnassus). A :class:`LongLivedRestorer`
-undoes the decays the shower made of the species it counts as long-lived:
-:meth:`~LongLivedRestorer.restore` marks such a particle as final and none of
-its descendants.
+(https://github.com/parnassus-hep/parnassus). A
+:class:`StableParticleDefinition` counts a species as stable when its nominal
+c*tau exceeds a threshold, and :meth:`~StableParticleDefinition.apply` undoes
+the decays the shower made of such particles: it marks each as final and none
+of its descendants.
 
-The restorer acts on a species table, as ``limitTau0`` does on the species'
+The definition acts on a species table, as ``limitTau0`` does on the species'
 nominal lifetimes, not on each particle's decay length. Only listed species can
 count as long-lived, so the table must hold every species with decay channels
 above the threshold; a table with none above it leaves the shower's status-1
@@ -38,8 +39,8 @@ DECAYED_STATUS = 2
 
 
 @dataclass(frozen=True)
-class LongLivedRestorer:
-    """Restores as final the particles of long-lived species that the shower decayed.
+class StableParticleDefinition:
+    """Counts as stable the listed species whose nominal c*tau exceeds a threshold.
 
     Attributes
     ----------
@@ -97,7 +98,7 @@ class LongLivedRestorer:
             "ctau_mm": {str(pid): self.ctau_mm[pid] for pid in sorted(self.ctau_mm)},
         }
 
-    def restore(self, particles: "ak.Array") -> "ak.Array":
+    def apply(self, particles: "ak.Array") -> "ak.Array":
         """Return `particles` marked with ``part_final`` and ``part_promoted``.
 
         A candidate is a particle of a long-lived species that decayed, with
@@ -114,7 +115,7 @@ class LongLivedRestorer:
         final state is the status-1 particles and the promoted ones, without
         the dropped ones. A record whose long-lived species the shower left
         undecayed keeps its status-1 particles as the final state, and
-        restoring the output again gives the same marks.
+        applying the definition to the output again gives the same marks.
 
         Parameters
         ----------
@@ -133,7 +134,7 @@ class LongLivedRestorer:
         ValueError
             If a mother or daughter index points outside its event.
         """
-        # Imported here so that building a restorer loads no array library.
+        # Imported here so that building a definition loads no array library.
         import awkward as ak
         import numpy as np
 

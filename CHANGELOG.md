@@ -56,9 +56,9 @@
   whose `read_particles`, `iterate_particles` and `count_events` read the
   generator record of a Delphes ROOT file, such as the shower's
   `particles.root`, as one awkward record per event with `part_t` in mm. (#39)
-- `omphjc.events.long_lived.LongLivedRestorer` marks as final the long-lived
-  particles the shower decayed, and their decay products as not final, as
-  Parnassus expects. (#39)
+- `omphjc.events.stable_particles.StableParticleDefinition` marks as final the
+  long-lived particles the shower decayed, and their decay products as not
+  final, as Parnassus expects. (#39)
 
 ### Changed
 

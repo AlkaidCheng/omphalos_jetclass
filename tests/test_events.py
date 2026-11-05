@@ -10,9 +10,9 @@ from delphes_records import EVENT_DTYPES, PARTICLE_DTYPES, write_delphes_file
 
 from omphjc.events import EventFile, EventFormat
 from omphjc.events.delphes_root import SPEED_OF_LIGHT_MM_PER_S, DelphesRootReader
-from omphjc.events.long_lived import LongLivedRestorer
 from omphjc.events.particles import FIELDS, build_record
 from omphjc.events.readers import reader_for
+from omphjc.events.stable_particles import StableParticleDefinition
 
 # Three events: K0S -> pi+ pi-, an empty event, and a photon with an electron.
 PARTICLES = {
@@ -258,11 +258,13 @@ def test_the_event_count_is_the_tree_entry_count(record_file: EventFile) -> None
     assert reader_for(record_file).count_events() == 3
 
 
-def test_the_restorer_marks_the_record_a_reader_gives(record_file: EventFile) -> None:
-    restorer = LongLivedRestorer(ctau_min_mm=10.0, ctau_mm={310: 26.844})
+def test_the_definition_applies_to_the_record_a_reader_gives(
+    record_file: EventFile,
+) -> None:
+    definition = StableParticleDefinition(ctau_min_mm=10.0, ctau_mm={310: 26.844})
     for downcast in (True, False):
         record = reader_for(record_file).read_particles(downcast=downcast)
-        marked = restorer.restore(record)
+        marked = definition.apply(record)
         assert marked["part_final"].tolist() == [[True, False, False], [], [True, True]]
         assert marked["part_promoted"].tolist() == [
             [True, False, False],

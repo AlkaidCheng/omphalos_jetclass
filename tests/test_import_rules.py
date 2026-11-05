@@ -212,7 +212,7 @@ def test_importing_the_tools_package_loads_no_tool() -> None:
     [
         "omphjc.events",
         "omphjc.events.formats",
-        "omphjc.events.long_lived",
+        "omphjc.events.stable_particles",
         "omphjc.numeric",
     ],
 )
