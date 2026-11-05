@@ -240,8 +240,35 @@ def test_an_unreadable_format_is_refused(tmp_path: Path) -> None:
         reader_for(event_file)
 
 
-def test_a_record_with_other_fields_than_the_schema_is_refused() -> None:
-    columns = {field.name: ak.Array([0]) for field in FIELDS if field.name != "weight"}
+def test_a_record_holds_the_fields_it_is_given_in_the_schemas_order() -> None:
+    record = build_record(
+        {"part_pid": ak.Array([[211, 22]]), "event_index": ak.Array([0])},
+        downcast=True,
+    )
+    assert record.fields == ["event_index", "part_pid"]
+    assert record["part_pid"].tolist() == [[211, 22]]
+
+
+def test_a_field_the_schema_does_not_know_is_refused() -> None:
+    columns = {field.name: ak.Array([0]) for field in FIELDS[:2]}
     columns["extra"] = ak.Array([0])
-    with pytest.raises(ValueError, match=r"missing \['weight'\], unknown \['extra'\]"):
+    with pytest.raises(ValueError, match=r"no fields \['extra'\]"):
         build_record(columns, downcast=True)
+
+
+def test_floats_are_downcast_as_they_are_and_integers_widened() -> None:
+    record = build_record(
+        {
+            "part_px": ak.Array([[0.1, -2.5]]),
+            "event_number": ak.values_astype(ak.Array([7]), np.int32),
+        },
+        downcast=True,
+    )
+    px = ak.to_numpy(ak.flatten(record["part_px"]))
+    assert px.dtype == np.float32 and px.tolist() == [np.float32(0.1), -2.5]
+    assert ak.to_numpy(record["event_number"]).dtype == np.int64
+
+
+def test_a_cast_that_can_change_a_value_is_refused() -> None:
+    with pytest.raises(ValueError, match="part_pid holds float64 values"):
+        build_record({"part_pid": ak.Array([[211.5]])}, downcast=True)

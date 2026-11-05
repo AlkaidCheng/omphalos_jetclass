@@ -1,7 +1,8 @@
 """The particle record: one awkward record per event, with its fields' dtypes and units.
 
-Event fields are scalars. Particle fields are lists named ``part_*``, with one
-entry per particle of the event. The units are those Delphes stores, except
+A record holds the fields of :data:`FIELDS` that its file carries. Event fields
+are scalars. Particle fields are lists named ``part_*``, with one entry per
+particle of the event. The units are those Delphes stores, except
 ``part_t``, which is in mm (c t) as Pythia and HepMC3 write it. The dtypes
 follow Delphes's ``GenParticle`` and ``HepMCEvent`` (Delphes 3.5.1,
 https://github.com/delphes/delphes/blob/3.5.1/classes/DelphesClasses.h), except
@@ -90,8 +91,8 @@ def build_record(columns: Mapping[str, ak.Array], *, downcast: bool) -> ak.Array
     Parameters
     ----------
     columns : Mapping[str, ak.Array]
-        One array per field of :data:`FIELDS`: event fields with one value per
-        event, particle fields with one list per event.
+        One array per field of :data:`FIELDS` the record holds: event fields
+        with one value per event, particle fields with one list per event.
     downcast : bool
         Whether to cast every field to the schema's dtype; otherwise each keeps
         the dtype it has.
@@ -104,43 +105,59 @@ def build_record(columns: Mapping[str, ak.Array], *, downcast: bool) -> ak.Array
     Raises
     ------
     ValueError
-        If `columns` lacks a field of the schema or has one it does not know,
-        or, when downcasting, if a field holds a value its dtype cannot hold.
+        If `columns` has a field the schema does not know, or, when
+        downcasting, if a field holds a value its dtype cannot hold.
     """
-    names = [field.name for field in FIELDS]
-    if set(columns) != set(names):
-        unknown = sorted(set(columns) - set(names))
-        missing = [name for name in names if name not in columns]
-        raise ValueError(
-            f"the record's fields differ from the schema: missing {missing},"
-            f" unknown {unknown}"
-        )
-    if downcast:
-        columns = {field.name: _cast(field, columns[field.name]) for field in FIELDS}
-    return ak.zip({name: columns[name] for name in names}, depth_limit=1)
+    unknown = sorted(set(columns) - {field.name for field in FIELDS})
+    if unknown:
+        raise ValueError(f"the particle record has no fields {unknown}")
+    return ak.zip(
+        {
+            field.name: (
+                _cast(field, columns[field.name]) if downcast else columns[field.name]
+            )
+            for field in FIELDS
+            if field.name in columns
+        },
+        depth_limit=1,
+    )
 
 
 def _cast(field: RecordField, column: ak.Array) -> ak.Array:
-    """Return `column` cast to `field`'s dtype, refusing a value the dtype cannot hold."""
-    dtype = np.dtype(field.dtype)
-    values = ak.to_numpy(ak.flatten(column, axis=None))
-    if values.dtype == dtype:
+    """Return `column` cast to `field`'s dtype.
+
+    A float is cast as it is. An integer cast to a narrower dtype is refused
+    when a value lies outside it, and so is any other cast that can change a
+    value, such as from a float to an integer.
+    """
+    target = np.dtype(field.dtype)
+    source = _value_dtype(column)
+    if source is None or source == target:
         return column
-    if np.issubdtype(dtype, np.integer) and np.issubdtype(values.dtype, np.integer):
-        limits = np.iinfo(dtype)
-        holds = values.size == 0 or (
-            limits.min <= values.min() and values.max() <= limits.max
-        )
-    else:
-        with np.errstate(invalid="ignore", over="ignore"):
-            cast = values.astype(dtype)
-            if np.issubdtype(dtype, np.integer):
-                holds = np.array_equal(cast.astype(values.dtype), values)
-            else:
-                holds = not np.any(np.isinf(cast) & np.isfinite(values))
-    if not holds:
+    if np.issubdtype(source, np.integer) and np.issubdtype(target, np.integer):
+        if not np.can_cast(source, target):
+            # A view of the stored values, far faster to reduce than ak.min.
+            values = ak.to_numpy(ak.flatten(column, axis=None))
+            limits = np.iinfo(target)
+            if values.size and (values.min() < limits.min or values.max() > limits.max):
+                raise ValueError(
+                    f"{field.name} holds values from {values.min()} to"
+                    f" {values.max()}, which {target} cannot hold; read with"
+                    " downcast=False to keep them"
+                )
+    elif not (
+        np.issubdtype(source, np.floating) and np.issubdtype(target, np.floating)
+    ) and not np.can_cast(source, target):
         raise ValueError(
-            f"{field.name} holds values from {values.min()} to {values.max()},"
-            f" which {dtype} cannot hold; read with downcast=False to keep them"
+            f"{field.name} holds {source} values, which a cast to {target} can"
+            " change; read with downcast=False to keep them"
         )
-    return ak.values_astype(column, dtype)
+    return ak.values_astype(column, target)
+
+
+def _value_dtype(column: ak.Array) -> np.dtype | None:
+    """Return the dtype of `column`'s values, read from its type; None if unknown."""
+    node = ak.type(column).content
+    while not isinstance(node, (ak.types.NumpyType, ak.types.UnknownType)):
+        node = node.content
+    return np.dtype(node.primitive) if isinstance(node, ak.types.NumpyType) else None
