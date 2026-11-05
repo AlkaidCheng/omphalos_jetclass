@@ -61,6 +61,18 @@ def test_an_object_other_than_a_ttree_is_refused(
         count_entries(path, name)
 
 
+def test_a_single_branch_name_is_refused_as_a_string(tree_path: Path) -> None:
+    with pytest.raises(TypeError, match="sequence of names, not the string"):
+        count_entries(tree_path, "Delphes", "Particle.PID")
+
+
+def test_a_read_of_no_branches_is_refused(tree_path: Path) -> None:
+    with pytest.raises(ValueError, match="no branches to read"):
+        read_branches(tree_path, "Delphes", [])
+    with pytest.raises(ValueError, match="no branches to read"):
+        next(iterate_branches(tree_path, "Delphes", [], step_size=10))
+
+
 def test_the_branches_a_tree_lacks_are_named(tree_path: Path) -> None:
     with pytest.raises(
         ValueError, match="'Delphes' of .* lacks Particle.Spin, Event.Run$"
@@ -181,6 +193,7 @@ def test_memory_sizes_take_decimal_and_binary_units(text: str, size: int) -> Non
         ("-1 MB", "must be positive"),
         ("100", "not a memory size"),
         ("MB", "not a memory size"),
+        ("1 iB", "not a memory size"),
         ("lots", "not a memory size"),
     ],
 )

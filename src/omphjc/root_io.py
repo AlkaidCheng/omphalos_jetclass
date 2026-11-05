@@ -22,12 +22,13 @@ from typing import Any
 import awkward as ak
 import uproot
 
-# Memory sizes as uproot writes them, such as "100 MB" or "1 GiB": decimal and
-# binary units, matched without regard to case (uproot._util.memory_size,
-# https://github.com/scikit-hep/uproot5/blob/v5.7.4/src/uproot/_util.py). A sign
+# Memory sizes such as "100 MB" or "1 GiB", in the form uproot accepts
+# (uproot._util.memory_size,
+# https://github.com/scikit-hep/uproot5/blob/v5.7.4/src/uproot/_util.py) without
+# its exponents and its units above tera, matched without regard to case. A sign
 # is matched so that a negative size is refused as such.
 _MEMORY_SIZE = re.compile(
-    r"^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*([kmgt]?i?b)\s*$", re.I
+    r"^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*((?:[kmgt]i?)?b)\s*$", re.I
 )
 _UNIT_BYTES = {
     "B": 1,
@@ -64,10 +65,16 @@ def open_tree(
 
     Raises
     ------
+    TypeError
+        If `branch_names` is a single string.
     ValueError
         If the file has no TTree `tree_name`, or the tree lacks one of
         `branch_names`.
     """
+    if isinstance(branch_names, str):
+        raise TypeError(
+            f"branch_names must be a sequence of names, not the string {branch_names!r}"
+        )
     with uproot.open(path) as file:
         if tree_name not in file:
             raise ValueError(f"{path} has no tree {tree_name!r}")
@@ -133,9 +140,11 @@ def read_branches(
     Raises
     ------
     ValueError
-        As :func:`open_tree` does, or if the range lies outside the tree's
-        entries.
+        If `branch_names` is empty, as :func:`open_tree` does, or if the range
+        lies outside the tree's entries.
     """
+    if not branch_names:
+        raise ValueError("no branches to read")
     with open_tree(path, tree_name, branch_names) as tree:
         n_entries = int(tree.num_entries)
         stop = n_entries if entry_stop is None else entry_stop
@@ -177,9 +186,11 @@ def iterate_branches(
     Raises
     ------
     ValueError
-        As :func:`open_tree` and :func:`entries_per_step` do, once the
-        iteration starts.
+        If `branch_names` is empty, or as :func:`open_tree` and
+        :func:`entries_per_step` do, once the iteration starts.
     """
+    if not branch_names:
+        raise ValueError("no branches to read")
     with open_tree(path, tree_name, branch_names) as tree:
         step = entries_per_step(tree, branch_names, step_size)
         for arrays, report in tree.iterate(
