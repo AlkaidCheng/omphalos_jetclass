@@ -196,7 +196,9 @@ def test_an_event_branch_without_one_entry_per_event_is_refused(
     write_file: Callable[..., EventFile],
 ) -> None:
     event_file = write_file(event_entries=np.array([1, 2, 1]))
-    with pytest.raises(ValueError, match="other than one entry per event"):
+    with pytest.raises(
+        ValueError, match="holds 2 entries at entry 1 of .*changed.root"
+    ):
         reader_for(event_file).read_particles()
 
 

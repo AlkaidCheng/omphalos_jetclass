@@ -102,8 +102,9 @@ class DelphesRootReader(EventReader):
         ):
             yield self._record(arrays, entry_start, downcast=downcast)
 
-    @staticmethod
-    def _record(arrays: ak.Array, entry_start: int, *, downcast: bool) -> ak.Array:
+    def _record(
+        self, arrays: ak.Array, entry_start: int, *, downcast: bool
+    ) -> ak.Array:
         """Return the particle record of the branches in `arrays`, the first being `entry_start`."""
         columns: dict[str, Any] = {
             "event_index": np.arange(
@@ -112,8 +113,14 @@ class DelphesRootReader(EventReader):
         }
         # The members of a branch share its entry count, since Delphes writes each
         # branch as one TClonesArray, so one member's count stands for all.
-        if not ak.all(ak.num(arrays[EVENT_BRANCHES["event_number"]], axis=1) == 1):
-            raise ValueError("Event holds other than one entry per event")
+        counts = ak.to_numpy(ak.num(arrays[EVENT_BRANCHES["event_number"]], axis=1))
+        offenders = np.flatnonzero(counts != 1)
+        if offenders.size:
+            first = int(offenders[0])
+            raise ValueError(
+                f"Event holds {counts[first]} entries at entry {entry_start + first}"
+                f" of {self.path}, not one per event"
+            )
         for field, branch in EVENT_BRANCHES.items():
             columns[field] = ak.flatten(arrays[branch])
         for field, branch in PARTICLE_BRANCHES.items():
