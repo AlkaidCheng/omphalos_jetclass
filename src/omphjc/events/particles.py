@@ -7,9 +7,10 @@ particle of the event. The units are those Delphes stores, except
 follow Delphes's ``GenParticle`` and ``HepMCEvent`` (Delphes 3.5.1,
 https://github.com/delphes/delphes/blob/3.5.1/classes/DelphesClasses.h), except
 ``part_status`` and ``part_charge``, which int16 holds. The mother and daughter
-indices follow Pythia's conventions, one lower since Delphes leaves out
-Pythia's entry 0, so a particle's daughters are not always a range
-(https://pythia8.web.cern.ch/manuals/pythia8318/ParticleProperties.html).
+indices follow Pythia's conventions, under which a particle's daughters are not
+always a range
+(https://pythia8.web.cern.ch/manuals/pythia8318/ParticleProperties.html), and
+are one lower than Pythia's since Delphes leaves out its entry 0.
 """
 
 from collections.abc import Mapping
@@ -40,8 +41,9 @@ EVENT_FIELDS = (
         "event_number",
         "int64",
         "",
-        "Number the generator gave the event; DelphesPythia8 also counts events"
-        " that failed, so numbers can be missing.",
+        "Event.Number as the program wrote it: DelphesPythia8 counts every event"
+        " it attempted, so numbers are missing where one failed; DelphesROOT"
+        " numbers the events of each input file from 0. Not a join key.",
     ),
     RecordField("weight", "float32", "", "Event weight."),
     RecordField("scale", "float32", "GeV", "Renormalisation scale."),

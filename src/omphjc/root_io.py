@@ -130,7 +130,7 @@ def read_branches(
     branch_names : Sequence[str]
         The branches to read.
     entry_start, entry_stop : int, int or None, optional
-        The entries to read; ``None`` reads to the last.
+        The entries to read; ``None`` reads to the end of the tree.
 
     Returns
     -------

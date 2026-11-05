@@ -92,8 +92,7 @@ strict = true
 packages = ["omphjc"]
 exclude = ["^config/", "src/omphjc/config/"]
 
-# awkward and uproot ship no type information (no py.typed in awkward 2.9.1 or
-# uproot 5.7.4).
+# awkward 2.9.1 and uproot 5.7.4 include no type information (no py.typed).
 [[tool.mypy.overrides]]
 module = ["awkward", "awkward.*", "uproot", "uproot.*"]
 ignore_missing_imports = true

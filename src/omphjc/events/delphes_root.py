@@ -25,8 +25,9 @@ TREE_NAME = "Delphes"
 # record holds c t in mm. The exact SI value of c, in mm/s:
 SPEED_OF_LIGHT_MM_PER_S = 2.99792458e11
 
-# Branches are named without their parent, such as Particle.PID, the one name
-# uproot finds both in a file ROOT writes and in one uproot writes.
+# Branches go by their bare names, such as Particle.PID, the one name uproot
+# finds both in a file ROOT writes, where the full path is Particle/Particle.PID,
+# and in one uproot writes, which has no Particle branch above Particle.PID.
 
 # The record's event fields and the branches they come from. Event.ProcessID is
 # left out: Pythia gives every Les Houches event the code 9999 (SigmaLHAProcess,

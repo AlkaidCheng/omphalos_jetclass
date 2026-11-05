@@ -16,9 +16,8 @@ count as long-lived, so the table must hold every species with decay channels
 above the threshold; a table with none above it leaves the shower's status-1
 particles as the final state.
 
-The module imports awkward and numpy only inside
-:meth:`~LongLivedRestorer.restore`, so a catalogue holding a restorer loads no
-array library.
+awkward and numpy are imported only when :meth:`~LongLivedRestorer.restore`
+runs, so importing the module and building a restorer loads no array library.
 """
 
 import math
@@ -83,7 +82,10 @@ class LongLivedRestorer:
         )
 
     def as_record(self) -> dict[str, Any]:
-        """Return the threshold and table as JSON-native values, PDG ids as strings."""
+        """Return the threshold and table as JSON-native values.
+
+        The PDG ids are strings, in ascending numeric order.
+        """
         return {
             "ctau_min_mm": self.ctau_min_mm,
             "ctau_mm": {str(pid): self.ctau_mm[pid] for pid in sorted(self.ctau_mm)},
@@ -100,15 +102,13 @@ class LongLivedRestorer:
         A listed particle the shower branched instead, such as a muon that
         radiated a photon, keeps its shower status and is left as it is, so
         its last copy and the photon stay final.
-        Every descendant of a candidate is dropped, found by walking up from
-        each particle through its mothers ``part_m1`` and ``part_m2``: a decay
-        product has a single mother, so the two give its whole ancestry along
-        decay chains. A candidate that is not itself dropped is promoted, so of
-        the cascade Xi- -> Lambda pi- only the Xi- is. The final state is the
-        status-1 particles and the promoted ones, without the dropped ones. A
-        record whose long-lived species the shower left undecayed keeps its
-        status-1 particles as the final state, and restoring the output again
-        gives the same marks.
+        Every descendant of a candidate, every particle whose mother links lead
+        back to it, is dropped, and a candidate that is not itself dropped is
+        promoted, so of the cascade Xi- -> Lambda pi- only the Xi- is. The
+        final state is the status-1 particles and the promoted ones, without
+        the dropped ones. A record whose long-lived species the shower left
+        undecayed keeps its status-1 particles as the final state, and
+        restoring the output again gives the same marks.
 
         Parameters
         ----------
@@ -168,8 +168,10 @@ class LongLivedRestorer:
             & ~copied
         )
         dropped = np.zeros_like(candidate)
-        # Each pass marks one more generation, so an event settles within its
-        # particle count, and a cyclic record too, since the marks only grow.
+        # A decay product has a single mother, so part_m1 and part_m2 give its
+        # whole ancestry along decay chains. Each pass marks one more generation,
+        # so an event settles within its particle count, and a cyclic record too,
+        # since the marks only grow.
         for _ in range(int(counts.max(initial=0)) + 1):
             flagged = candidate | dropped
             marked = dropped | gather(flagged, m1) | gather(flagged, m2)
