@@ -1,3 +1,4 @@
+import re
 import zlib
 from pathlib import Path
 
@@ -40,6 +41,24 @@ def test_a_tree_opens_with_the_branches_it_must_have(tree_path: Path) -> None:
 def test_a_file_without_the_tree_is_refused(tree_path: Path) -> None:
     with pytest.raises(ValueError, match="has no tree 'Other'"):
         count_entries(tree_path, "Other")
+
+
+@pytest.mark.parametrize(
+    ("name", "classname"),
+    [("Hist", "TH1D"), ("Ntuple", "ROOT::RNTuple"), ("Dir", "TDirectory")],
+)
+def test_an_object_other_than_a_ttree_is_refused(
+    tmp_path: Path, name: str, classname: str
+) -> None:
+    path = tmp_path / "objects.root"
+    with uproot.recreate(path) as file:
+        file["Hist"] = np.histogram([1.0, 2.0], bins=2)
+        file.mkrntuple("Ntuple", {"x": np.int32}).extend({"x": np.array([1], np.int32)})
+        file.mkdir("Dir")
+    with pytest.raises(
+        ValueError, match=re.escape(f"holds {name!r} as a {classname}, not a TTree")
+    ):
+        count_entries(path, name)
 
 
 def test_the_branches_a_tree_lacks_are_named(tree_path: Path) -> None:

@@ -65,13 +65,18 @@ def open_tree(
     Raises
     ------
     ValueError
-        If the file has no tree `tree_name`, or the tree lacks one of
+        If the file has no TTree `tree_name`, or the tree lacks one of
         `branch_names`.
     """
     with uproot.open(path) as file:
         if tree_name not in file:
             raise ValueError(f"{path} has no tree {tree_name!r}")
         tree = file[tree_name]
+        if not isinstance(tree, uproot.TTree):
+            raise ValueError(
+                f"{path} holds {tree_name!r} as a {file.classname_of(tree_name)},"
+                " not a TTree"
+            )
         missing = [name for name in branch_names if name not in tree]
         if missing:
             raise ValueError(f"tree {tree_name!r} of {path} lacks {', '.join(missing)}")
