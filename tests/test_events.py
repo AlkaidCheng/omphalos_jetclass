@@ -1,11 +1,12 @@
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import awkward as ak
 import numpy as np
 import pytest
 import uproot
-from delphes_records import write_delphes_file
+from delphes_records import EVENT_DTYPES, PARTICLE_DTYPES, write_delphes_file
 
 from omphjc.events import EventFile, EventFormat
 from omphjc.events.delphes_root import SPEED_OF_LIGHT_MM_PER_S, DelphesRootReader
@@ -31,6 +32,34 @@ EVENTS = {
     "ProcessID": np.full(3, 9999),
     "ID1": np.array([21, 1, -2]),
 }
+# The GenParticle or HepMCEvent member each record field is read from.
+MEMBER_OF_FIELD = {
+    "event_number": "Number",
+    "weight": "Weight",
+    "scale": "Scale",
+    "alpha_qcd": "AlphaQCD",
+    "alpha_qed": "AlphaQED",
+    "id1": "ID1",
+    "id2": "ID2",
+    "x1": "X1",
+    "x2": "X2",
+    "part_pid": "PID",
+    "part_status": "Status",
+    "part_m1": "M1",
+    "part_m2": "M2",
+    "part_d1": "D1",
+    "part_d2": "D2",
+    "part_charge": "Charge",
+    "part_mass": "Mass",
+    "part_px": "Px",
+    "part_py": "Py",
+    "part_pz": "Pz",
+    "part_e": "E",
+    "part_x": "X",
+    "part_y": "Y",
+    "part_z": "Z",
+    "part_t": "T",
+}
 
 
 @pytest.fixture
@@ -44,7 +73,7 @@ def record_file(tmp_path: Path) -> EventFile:
 def write_file(tmp_path: Path) -> Callable[..., EventFile]:
     """Return a function that writes a Delphes file with the given changes."""
 
-    def write(**changes: object) -> EventFile:
+    def write(**changes: Any) -> EventFile:
         path = tmp_path / "changed.root"
         particles = {**PARTICLES, **changes.pop("particles", {})}
         write_delphes_file(path, particles, EVENTS, **changes)
@@ -74,7 +103,8 @@ def test_formats_and_event_files_round_trip_through_their_values(
         assert EventFormat(event_format.value) is event_format
     event_file = EventFile(tmp_path / "particles.root", EventFormat.DELPHES_ROOT)
     assert EventFile(event_file.path, EventFormat("delphes-root")) == event_file
-    assert EventFormat.DELPHES_ROOT == "delphes-root"
+    name: str = EventFormat.DELPHES_ROOT
+    assert name == "delphes-root"
 
 
 def test_the_record_has_the_schema_fields_in_order_and_dtypes(
@@ -93,6 +123,37 @@ def test_the_record_has_the_schema_fields_in_order_and_dtypes(
     assert record["part_m2"].tolist() == [[-1, -1, -1], [], [-1, -1]]
 
 
+def test_each_field_is_read_from_its_own_member(tmp_path: Path) -> None:
+    counts = [3, 0, 2]
+    n_particles = sum(counts)
+    # Every member gets values of its own, so a field read from another differs.
+    particles = {
+        name: ak.unflatten(np.arange(n_particles) * 100 + k, counts)
+        for k, name in enumerate(PARTICLE_DTYPES)
+    }
+    events = {
+        name: np.arange(len(counts)) * 100 + k for k, name in enumerate(EVENT_DTYPES)
+    }
+    path = tmp_path / "distinct.root"
+    write_delphes_file(path, particles, events)
+    record = reader_for(EventFile(path, EventFormat.DELPHES_ROOT)).read_particles()
+    for field, member in MEMBER_OF_FIELD.items():
+        if field.startswith("part_"):
+            expected = ak.to_numpy(ak.flatten(particles[member])).astype(np.float64)
+            read = ak.to_numpy(ak.flatten(record[field])).astype(np.float64)
+        else:
+            expected = events[member].astype(np.float64)
+            read = ak.to_numpy(record[field]).astype(np.float64)
+        if field == "part_t":
+            expected = expected * SPEED_OF_LIGHT_MM_PER_S
+        np.testing.assert_allclose(read, expected, rtol=1e-5, err_msg=field)
+
+
+def test_each_field_has_a_known_unit_and_a_description() -> None:
+    assert {field.unit for field in FIELDS} <= {"", "GeV", "mm", "e"}
+    assert all(field.description.endswith(".") for field in FIELDS)
+
+
 def test_the_production_time_is_read_as_c_t_in_mm(record_file: EventFile) -> None:
     times = ak.to_numpy(ak.flatten(reader_for(record_file).read_particles()["part_t"]))
     stored = np.array([1e-12, 2e-12, 3e-12, 0.0, 0.0], dtype=np.float32)
@@ -103,8 +164,10 @@ def test_the_production_time_is_read_as_c_t_in_mm(record_file: EventFile) -> Non
 def test_without_downcasting_the_stored_dtypes_are_kept(record_file: EventFile) -> None:
     kept = reader_for(record_file).read_particles(downcast=False)
     cast = reader_for(record_file).read_particles()
+    step = next(iter(reader_for(record_file).iterate_particles(downcast=False)))
     for name in ("part_status", "part_charge"):
         assert ak.to_numpy(ak.flatten(kept[name])).dtype == np.int32
+        assert ak.to_numpy(ak.flatten(step[name])).dtype == np.int32
         assert ak.to_numpy(ak.flatten(cast[name])).dtype == np.int16
         assert kept[name].tolist() == cast[name].tolist()
     np.testing.assert_array_equal(
@@ -128,6 +191,16 @@ def test_a_value_outside_int16_is_refused_when_downcasting(
     )
 
 
+@pytest.mark.parametrize("value", [np.iinfo(np.int16).max, np.iinfo(np.int16).min])
+def test_a_value_at_the_int16_limit_is_kept_when_downcasting(
+    write_file: Callable[..., EventFile], value: int
+) -> None:
+    event_file = write_file(particles={"Status": ak.Array([[2, value, 1], [], [1, 1]])})
+    status = reader_for(event_file).read_particles()["part_status"]
+    assert ak.to_numpy(ak.flatten(status)).dtype == np.int16
+    assert status[0, 1] == value
+
+
 def test_a_charge_unknown_to_root_fits_the_downcast(
     write_file: Callable[..., EventFile],
 ) -> None:
@@ -147,6 +220,8 @@ def test_the_event_index_counts_entries_from_the_file_start(
     part = reader_for(record_file).read_particles(entry_start=1, entry_stop=2)
     assert part["event_index"].tolist() == [1]
     assert part["event_number"].tolist() == [2]
+    kept = reader_for(record_file).read_particles(downcast=False)
+    assert ak.to_numpy(kept["event_index"]).dtype == np.int64
 
 
 @pytest.mark.parametrize(("start", "stop"), [(-1, None), (0, 4)])
@@ -167,6 +242,10 @@ def test_the_steps_of_an_iteration_join_into_the_whole_record(
     whole = reader_for(event_file).read_particles()
     steps = list(reader_for(event_file).iterate_particles(step_size=step_size))
     assert ak.concatenate(steps).tolist() == whole.tolist()
+    if isinstance(step_size, int):
+        assert [len(step) for step in steps] == [
+            min(step_size, 50 - start) for start in range(0, 50, step_size)
+        ]
 
 
 def test_the_reader_of_a_file_follows_its_format(record_file: EventFile) -> None:
@@ -179,9 +258,10 @@ def test_the_event_count_is_the_tree_entry_count(record_file: EventFile) -> None
 
 
 def test_a_missing_branch_is_named(write_file: Callable[..., EventFile]) -> None:
-    event_file = write_file(omit=("Particle.Charge", "Event.Scale"))
-    with pytest.raises(ValueError, match="lacks Event.Scale, Particle.Charge"):
-        reader_for(event_file).read_particles()
+    reader = reader_for(write_file(omit=("Particle.Charge", "Event.Scale")))
+    for read in (reader.read_particles, reader.count_events):
+        with pytest.raises(ValueError, match="lacks Event.Scale, Particle.Charge"):
+            read()
 
 
 def test_a_file_without_tree_delphes_is_refused(tmp_path: Path) -> None:

@@ -65,7 +65,6 @@ def write_delphes_file(
     events: Mapping[str, np.ndarray] | None = None,
     *,
     events_per_basket: int | None = None,
-    particle_dtypes: Mapping[str, type] | None = None,
     event_entries: np.ndarray | None = None,
     omit: Collection[str] = (),
 ) -> None:
@@ -83,8 +82,6 @@ def write_delphes_file(
         are zero, except ``Number``, which counts from 0.
     events_per_basket : int or None, optional
         Events written per basket; ``None`` writes all of them in one.
-    particle_dtypes : Mapping[str, type] or None, optional
-        Types that replace Delphes's for some ``GenParticle`` members.
     event_entries : np.ndarray or None, optional
         Entries of ``Event`` in each event, each repeating the event's values;
         ``None`` writes one.
@@ -93,9 +90,8 @@ def write_delphes_file(
     """
     counts = ak.num(next(iter(particles.values())), axis=1)
     n_events = len(counts)
-    dtypes = {**PARTICLE_DTYPES, **(particle_dtypes or {})}
     particle_columns = {}
-    for name, dtype in dtypes.items():
+    for name, dtype in PARTICLE_DTYPES.items():
         if f"Particle.{name}" in omit:
             continue
         if name in particles:

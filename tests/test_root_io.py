@@ -1,6 +1,7 @@
 import re
 import zlib
 from pathlib import Path
+from typing import Any
 
 import awkward as ak
 import numpy as np
@@ -130,7 +131,7 @@ def test_a_memory_step_size_inflates_each_basket_once(
     calls = 0
     decompress = zlib.decompress
 
-    def counting_decompress(*args: object, **kwargs: object) -> bytes:
+    def counting_decompress(*args: Any, **kwargs: Any) -> bytes:
         nonlocal calls
         calls += 1
         return decompress(*args, **kwargs)
@@ -173,6 +174,9 @@ def test_an_empty_tree_is_read_in_one_step(tmp_path: Path) -> None:
         ("1 kB", 1000),
         ("1KiB", 1024),
         ("1.5 GiB", 3 * 2**29),
+        ("1 GB", 10**9),
+        ("1 MiB", 2**20),
+        ("1 TiB", 2**40),
         ("2 tb", 2 * 10**12),
         ("512 B", 512),
         ("0.5 B", 1),

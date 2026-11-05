@@ -1,5 +1,6 @@
 import json
 import math
+from typing import Any
 
 import awkward as ak
 import numpy as np
@@ -50,7 +51,7 @@ def particle(
     d1: int = -1,
     d2: int = -1,
     charge: int = 0,
-    p: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0),
+    p: tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
 ) -> dict[str, float]:
     """Return one row of an event, with a single mother as decay products have."""
     px, py, pz, e = p
@@ -82,7 +83,7 @@ def record(*events: list[dict[str, float]]) -> ak.Array:
 
 def marks(
     particles: ak.Array, restorer: LongLivedRestorer = CMS_RESTORER
-) -> tuple[list, list]:
+) -> tuple[list[list[bool]], list[list[bool]]]:
     marked = restorer.restore(particles)
     return marked["part_final"].tolist(), marked["part_promoted"].tolist()
 
@@ -252,6 +253,7 @@ def test_empty_events_and_an_empty_record_are_marked() -> None:
         [particle(310, 2, d1=1, d2=3), particle(211, 1, m1=0)],
         [particle(310, 2, d1=-2, d2=-1)],
         [particle(310, 1), particle(211, 1, m1=2)],
+        [particle(310, 1), {**particle(211, 1), "part_m2": 2}],
     ],
 )
 def test_an_index_outside_its_event_is_refused(rows: list[dict[str, float]]) -> None:
@@ -434,7 +436,7 @@ def test_a_restorer_records_its_threshold_and_table() -> None:
         "ctau_min_mm": 10.0,
         "ctau_mm": {"310": 27.0, "3122": 78.45},
     }
-    assert json.dumps(restorer.as_record(), sort_keys=True) == (
+    assert json.dumps(restorer.as_record()) == (
         '{"ctau_min_mm": 10.0, "ctau_mm": {"310": 27.0, "3122": 78.45}}'
     )
 
@@ -474,6 +476,6 @@ def test_a_restorer_keeps_a_copy_of_its_table() -> None:
         ("10", {3122: 78.45}),
     ],
 )
-def test_an_invalid_restorer_is_refused(threshold: object, table: object) -> None:
+def test_an_invalid_restorer_is_refused(threshold: Any, table: Any) -> None:
     with pytest.raises(ValueError):
         LongLivedRestorer(ctau_min_mm=threshold, ctau_mm=table)
