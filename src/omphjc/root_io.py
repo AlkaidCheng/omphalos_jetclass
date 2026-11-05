@@ -230,7 +230,7 @@ def entries_per_step(
         if step_size < 1:
             raise ValueError(f"step_size must be positive, got {step_size}")
         return step_size
-    step_bytes = memory_size(step_size)
+    step_bytes = parse_memory_size(step_size)
     n_entries = int(tree.num_entries)
     total_bytes = sum(int(tree[name].member("fTotBytes")) for name in branch_names)
     if n_entries == 0 or total_bytes == 0:
@@ -238,7 +238,7 @@ def entries_per_step(
     return max(1, step_bytes * n_entries // total_bytes)
 
 
-def memory_size(text: str) -> int:
+def parse_memory_size(text: str) -> int:
     """Return the bytes of a memory size such as ``"100 MB"`` or ``"1 GiB"``.
 
     The size is rounded to whole bytes, and a positive size is at least 1 byte.

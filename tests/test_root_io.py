@@ -12,8 +12,8 @@ from omphjc.root_io import (
     count_entries,
     entries_per_step,
     iterate_branches,
-    memory_size,
     open_tree,
+    parse_memory_size,
     read_branches,
 )
 
@@ -181,7 +181,7 @@ def test_an_empty_tree_is_read_in_one_step(tmp_path: Path) -> None:
     ],
 )
 def test_memory_sizes_take_decimal_and_binary_units(text: str, size: int) -> None:
-    assert memory_size(text) == size
+    assert parse_memory_size(text) == size
 
 
 @pytest.mark.parametrize(
