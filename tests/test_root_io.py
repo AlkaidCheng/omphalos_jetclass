@@ -54,15 +54,29 @@ def test_an_empty_tree_is_read_in_one_step(tmp_path: Path) -> None:
         ("1.5 GiB", 3 * 2**29),
         ("2 tb", 2 * 10**12),
         ("512 B", 512),
+        ("0.5 B", 1),
+        ("4.03 kB", 4030),
+        ("2.01 kB", 2010),
     ],
 )
 def test_memory_sizes_take_decimal_and_binary_units(text: str, size: int) -> None:
     assert memory_size(text) == size
 
 
-@pytest.mark.parametrize("step_size", [0, -1, "0 MB", "100", "MB", "lots"])
+@pytest.mark.parametrize(
+    ("step_size", "message"),
+    [
+        (0, "must be positive"),
+        (-1, "must be positive"),
+        ("0 MB", "must be positive"),
+        ("-1 MB", "must be positive"),
+        ("100", "not a memory size"),
+        ("MB", "not a memory size"),
+        ("lots", "not a memory size"),
+    ],
+)
 def test_a_step_size_that_is_not_a_positive_size_is_refused(
-    step_size: int | str,
+    step_size: int | str, message: str
 ) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=message):
         entries_per_step(None, BRANCHES, step_size)

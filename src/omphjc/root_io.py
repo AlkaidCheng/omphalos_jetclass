@@ -15,8 +15,11 @@ from typing import Any
 
 # Memory sizes as uproot writes them, such as "100 MB" or "1 GiB": decimal and
 # binary units, matched without regard to case (uproot._util.memory_size,
-# https://github.com/scikit-hep/uproot5/blob/v5.7.4/src/uproot/_util.py).
-_MEMORY_SIZE = re.compile(r"^\s*(\d+(?:\.\d*)?|\.\d+)\s*([kmgt]?i?b)\s*$", re.I)
+# https://github.com/scikit-hep/uproot5/blob/v5.7.4/src/uproot/_util.py). A sign
+# is matched so that a negative size is refused as such.
+_MEMORY_SIZE = re.compile(
+    r"^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*([kmgt]?i?b)\s*$", re.I
+)
 _UNIT_BYTES = {
     "B": 1,
     "KB": 1000,
@@ -72,16 +75,17 @@ def entries_per_step(
 def memory_size(text: str) -> int:
     """Return the bytes of a memory size such as ``"100 MB"`` or ``"1 GiB"``.
 
+    The size is rounded to whole bytes, and a positive size is at least 1 byte.
+
     Raises
     ------
     ValueError
-        If `text` is not a positive memory size.
+        If `text` is not a memory size, or its number is not positive.
     """
     match = _MEMORY_SIZE.match(text)
     if match is None:
         raise ValueError(f"not a memory size such as '100 MB': {text!r}")
     number, unit = match.groups()
-    size = int(float(number) * _UNIT_BYTES[unit.upper()])
-    if size < 1:
+    if float(number) <= 0:
         raise ValueError(f"a memory size must be positive, got {text!r}")
-    return size
+    return max(1, round(float(number) * _UNIT_BYTES[unit.upper()]))
