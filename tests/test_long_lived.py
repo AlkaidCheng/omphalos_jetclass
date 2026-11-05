@@ -185,6 +185,23 @@ def test_short_lived_species_are_left_decayed() -> None:
     assert promoted == [[False] * len(short_lived)]
 
 
+def test_beams_and_intermediate_particles_are_not_final() -> None:
+    shower = [
+        particle(2212, 4, d1=2, d2=2),
+        particle(2212, 4, d1=3, d2=3),
+        particle(21, 23, m1=0, d1=4, d2=4),
+        particle(2, 62, m1=1, d1=5, d2=6),
+        particle(21, 62, m1=2, d1=5, d2=6),
+        particle(310, 2, m1=3, d1=7, d2=8),
+        particle(211, 1, m1=3),
+        particle(211, 1, m1=5, charge=1),
+        particle(-211, 1, m1=5, charge=-1),
+    ]
+    final, promoted = marks(record(shower))
+    assert final == [[False, False, False, False, False, True, True, False, False]]
+    assert promoted == [[False, False, False, False, False, True, False, False, False]]
+
+
 def test_marking_again_changes_nothing_and_an_undecayed_k0s_stays_final() -> None:
     particles = record(K0S_TO_PIONS, [particle(310, 1)])
     marked = CMS_RESTORER.restore(particles)
@@ -248,6 +265,9 @@ def test_the_refusal_names_the_particle_and_its_event() -> None:
         ValueError,
         match="part_d1 of particle 0 in event 2 is 2, outside the event's 2 particles",
     ):
+        CMS_RESTORER.restore(events)
+    events = ak.with_field(events, np.array([7, 8, 9]), "event_index")
+    with pytest.raises(ValueError, match="part_d1 of particle 0 in event 9 is 2"):
         CMS_RESTORER.restore(events)
 
 
@@ -398,18 +418,22 @@ def test_with_no_species_above_the_threshold_the_final_state_is_status_1(
 
 
 def test_a_restorer_records_its_threshold_and_table() -> None:
-    restorer = LongLivedRestorer(ctau_min_mm=10, ctau_mm={3122: 78.45, 310: 26.844})
+    restorer = LongLivedRestorer(ctau_min_mm=10, ctau_mm={3122: 78.45, 310: 27})
     assert restorer.as_record() == {
         "ctau_min_mm": 10.0,
-        "ctau_mm": {"310": 26.844, "3122": 78.45},
+        "ctau_mm": {"310": 27.0, "3122": 78.45},
     }
-    assert json.loads(json.dumps(restorer.as_record())) == restorer.as_record()
+    assert json.dumps(restorer.as_record(), sort_keys=True) == (
+        '{"ctau_min_mm": 10.0, "ctau_mm": {"310": 27.0, "3122": 78.45}}'
+    )
 
 
 def test_the_long_lived_species_are_those_above_the_threshold() -> None:
     assert CMS_RESTORER.long_lived == frozenset(PDG_2026_CTAU_MM)
     raised = LongLivedRestorer(ctau_min_mm=25.0, ctau_mm=PDG_2026_CTAU_MM)
     assert raised.long_lived == frozenset(PDG_2026_CTAU_MM) - {3222, 3334}
+    at_k0s = LongLivedRestorer(ctau_min_mm=26.844, ctau_mm=PDG_2026_CTAU_MM)
+    assert at_k0s.long_lived == frozenset(PDG_2026_CTAU_MM) - {310, 3222, 3334}
 
 
 def test_a_restorer_keeps_a_copy_of_its_table() -> None:
