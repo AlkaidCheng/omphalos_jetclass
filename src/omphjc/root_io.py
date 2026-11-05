@@ -22,6 +22,8 @@ from typing import Any
 import awkward as ak
 import uproot
 
+from omphjc.numeric import require_number
+
 # Memory sizes such as "100 MB" or "1 GiB", in the form uproot accepts
 # (uproot._util.memory_size,
 # https://github.com/scikit-hep/uproot5/blob/v5.7.4/src/uproot/_util.py) without
@@ -222,14 +224,14 @@ def entries_per_step(
 
     Raises
     ------
+    TypeError
+        If `step_size` is neither an integer nor a string.
     ValueError
         If `step_size` is not positive or is a string that is not a memory
         size.
     """
-    if isinstance(step_size, int):
-        if step_size < 1:
-            raise ValueError(f"step_size must be positive, got {step_size}")
-        return step_size
+    if not isinstance(step_size, str):
+        return require_number(step_size, what="step_size", kind=int, positive=True)
     step_bytes = parse_memory_size(step_size)
     n_entries = int(tree.num_entries)
     total_bytes = sum(int(tree[name].member("fTotBytes")) for name in branch_names)

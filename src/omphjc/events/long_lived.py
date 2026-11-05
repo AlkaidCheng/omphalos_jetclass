@@ -15,16 +15,14 @@ nominal lifetimes, not on each particle's decay length. Only listed species can
 count as long-lived, so the table must hold every species with decay channels
 above the threshold; a table with none above it leaves the shower's status-1
 particles as the final state.
-
-awkward and numpy are imported only when :meth:`~LongLivedRestorer.restore`
-runs, so importing the module and building a restorer loads no array library.
 """
 
-import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
+
+from omphjc.numeric import require_number
 
 if TYPE_CHECKING:
     import awkward as ak
@@ -52,30 +50,33 @@ class LongLivedRestorer:
 
     Raises
     ------
+    TypeError
+        If `ctau_mm` is not a mapping, a key of it is not an integer, or
+        `ctau_min_mm` or a c*tau is not a number.
     ValueError
-        If `ctau_min_mm` or a c*tau is not a positive finite number, a key of
-        `ctau_mm` is not a positive int, or `ctau_mm` is not a mapping.
+        If `ctau_min_mm` or a c*tau is not positive and finite, or a key is not
+        positive.
     """
 
     ctau_min_mm: float
     ctau_mm: Mapping[int, float] = field(hash=False)
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "ctau_min_mm", _positive_length("ctau_min_mm", self.ctau_min_mm)
-        )
+        threshold = require_number(self.ctau_min_mm, what="ctau_min_mm", positive=True)
+        object.__setattr__(self, "ctau_min_mm", threshold)
         if not isinstance(self.ctau_mm, Mapping):
-            raise ValueError(
+            raise TypeError(
                 f"ctau_mm must map PDG ids to c*tau in mm, got {self.ctau_mm!r}"
             )
         table = {}
-        for pid, ctau in self.ctau_mm.items():
-            if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+        for key, ctau in self.ctau_mm.items():
+            pid = require_number(key, what="a ctau_mm key", kind=int)
+            if pid <= 0:
                 raise ValueError(
-                    f"ctau_mm keys must be positive PDG ids, got {pid!r}; an"
+                    f"ctau_mm keys must be positive PDG ids, got {pid}; an"
                     f" antiparticle shares its particle's entry"
                 )
-            table[pid] = _positive_length(f"ctau_mm[{pid}]", ctau)
+            table[pid] = require_number(ctau, what=f"ctau_mm[{pid}]", positive=True)
         object.__setattr__(self, "ctau_mm", MappingProxyType(table))
 
     @property
@@ -131,6 +132,7 @@ class LongLivedRestorer:
         ValueError
             If a mother or daughter index points outside its event.
         """
+        # Imported here so that building a restorer loads no array library.
         import awkward as ak
         import numpy as np
 
@@ -230,17 +232,3 @@ def _flat(column: "ak.Array") -> "np.ndarray":
     import numpy as np
 
     return np.asarray(ak.flatten(column, axis=1), dtype=np.int64)
-
-
-def _positive_length(name: str, value: Any) -> float:
-    """Return `value` as a float, refusing one that is not a positive finite number."""
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, int | float)
-        or not math.isfinite(value)
-        or value <= 0
-    ):
-        raise ValueError(
-            f"{name} must be a positive finite length in mm, got {value!r}"
-        )
-    return float(value)

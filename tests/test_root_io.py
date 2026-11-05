@@ -188,6 +188,14 @@ def test_memory_sizes_take_decimal_and_binary_units(text: str, size: int) -> Non
     assert parse_memory_size(text) == size
 
 
+@pytest.mark.parametrize("step_size", [2.0, True, None])
+def test_a_step_size_that_is_neither_an_entry_count_nor_text_is_refused(
+    step_size: Any,
+) -> None:
+    with pytest.raises(TypeError, match="step_size must be an integer"):
+        entries_per_step(None, BRANCHES, step_size)
+
+
 @pytest.mark.parametrize(
     ("step_size", "message"),
     [

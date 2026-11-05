@@ -458,25 +458,39 @@ def test_a_restorer_keeps_a_copy_of_its_table() -> None:
 
 
 @pytest.mark.parametrize(
-    ("threshold", "table"),
+    ("threshold", "table", "message"),
     [
-        (10.0, {-3122: 78.45}),
-        (10.0, {0: 78.45}),
-        (10.0, {"3122": 78.45}),
-        (10.0, {True: 78.45}),
-        (10.0, {3122: 0.0}),
-        (10.0, {3122: -1.0}),
-        (10.0, {3122: math.inf}),
-        (10.0, {3122: math.nan}),
-        (10.0, {3122: "78.45"}),
-        (0.0, {3122: 78.45}),
-        (-10.0, {3122: 78.45}),
-        (math.inf, {3122: 78.45}),
-        (True, {3122: 78.45}),
-        ("10", {3122: 78.45}),
-        (10.0, [310, 3122]),
+        (10.0, {-3122: 78.45}, "an antiparticle shares its particle's entry"),
+        (10.0, {0: 78.45}, "must be positive PDG ids, got 0"),
+        (10.0, {3122: 0.0}, r"ctau_mm\[3122\] must be positive"),
+        (10.0, {3122: -1.0}, r"ctau_mm\[3122\] must be positive"),
+        (10.0, {3122: math.inf}, r"ctau_mm\[3122\] must be finite"),
+        (10.0, {3122: math.nan}, r"ctau_mm\[3122\] must be finite"),
+        (0.0, {3122: 78.45}, "ctau_min_mm must be positive"),
+        (-10.0, {3122: 78.45}, "ctau_min_mm must be positive"),
+        (math.inf, {3122: 78.45}, "ctau_min_mm must be finite"),
     ],
 )
-def test_an_invalid_restorer_is_refused(threshold: Any, table: Any) -> None:
-    with pytest.raises(ValueError):
+def test_a_restorer_with_a_length_or_id_out_of_range_is_refused(
+    threshold: Any, table: Any, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        LongLivedRestorer(ctau_min_mm=threshold, ctau_mm=table)
+
+
+@pytest.mark.parametrize(
+    ("threshold", "table", "message"),
+    [
+        (10.0, {"3122": 78.45}, "a ctau_mm key must be an integer"),
+        (10.0, {True: 78.45}, "a ctau_mm key must be an integer"),
+        (10.0, {3122: "78.45"}, r"ctau_mm\[3122\] must be a number"),
+        (True, {3122: 78.45}, "ctau_min_mm must be a number"),
+        ("10", {3122: 78.45}, "ctau_min_mm must be a number"),
+        (10.0, [310, 3122], "ctau_mm must map PDG ids"),
+    ],
+)
+def test_a_restorer_with_a_value_of_the_wrong_type_is_refused(
+    threshold: Any, table: Any, message: str
+) -> None:
+    with pytest.raises(TypeError, match=message):
         LongLivedRestorer(ctau_min_mm=threshold, ctau_mm=table)
