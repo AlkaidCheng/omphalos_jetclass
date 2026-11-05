@@ -240,3 +240,8 @@ def test_floats_are_downcast_as_they_are_and_integers_widened() -> None:
 def test_a_cast_that_can_change_a_value_is_refused() -> None:
     with pytest.raises(ValueError, match="part_pid holds float64 values"):
         build_record({"part_pid": ak.Array([[211.5]])}, downcast=True)
+
+
+def test_a_column_with_no_values_takes_the_schemas_dtype() -> None:
+    record = build_record({"part_pid": ak.Array([[]])}, downcast=True)
+    assert str(ak.type(record["part_pid"]).content) == "var * int32"

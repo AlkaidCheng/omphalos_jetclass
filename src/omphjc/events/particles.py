@@ -132,8 +132,11 @@ def _cast(field: RecordField, column: ak.Array) -> ak.Array:
     """
     target = np.dtype(field.dtype)
     source = _value_dtype(column)
-    if source is None or source == target:
+    if source == target:
         return column
+    if source is None:
+        # Every list is empty, so the values have no dtype yet.
+        return ak.values_astype(column, target, including_unknown=True)
     if np.issubdtype(source, np.integer) and np.issubdtype(target, np.integer):
         if not np.can_cast(source, target):
             # A view of the stored values, far faster to reduce than ak.min.
