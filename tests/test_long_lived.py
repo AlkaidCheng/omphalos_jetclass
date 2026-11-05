@@ -304,7 +304,8 @@ def _random_event(rng: np.random.Generator) -> list[dict[str, float]]:
     while index < len(rows) and len(rows) < 60:
         row = rows[index]
         if rng.random() < 0.6:
-            row["part_status"] = 2
+            # Most decay; some branch in the shower instead and keep its status.
+            row["part_status"] = 2 if rng.random() < 0.8 else 51
             case = int(rng.integers(4))
             if case == 0:
                 row["part_d1"] = row["part_d2"] = add(int(row["part_pid"]), index)
@@ -338,6 +339,7 @@ def _walk_down(
 
     candidate = [
         abs(int(row["part_pid"])) in long_lived
+        and row["part_status"] == 2
         and row["part_d1"] >= 0
         and not (
             row["part_d1"] == row["part_d2"]
@@ -391,6 +393,15 @@ def test_the_last_copy_of_a_carbon_copy_chain_is_promoted() -> None:
 def test_a_decayed_charged_pion_is_promoted_and_its_muon_dropped() -> None:
     pion = [particle(211, 2, d1=1, d2=2), particle(-13, 1, m1=0), particle(14, 1, m1=0)]
     assert marks(record(pion)) == ([[True, False, False]], [[True, False, False]])
+
+
+def test_a_muon_that_radiated_a_photon_is_left_to_the_shower() -> None:
+    radiating = [
+        particle(13, 23, d1=1, d2=2),
+        particle(13, 1, m1=0),
+        particle(22, 1, m1=0),
+    ]
+    assert marks(record(radiating)) == ([[False, True, True]], [[False] * 3])
 
 
 @pytest.mark.parametrize(

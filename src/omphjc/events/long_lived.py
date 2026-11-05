@@ -31,6 +31,13 @@ if TYPE_CHECKING:
     import awkward as ak
     import numpy as np
 
+# HepMC status codes as Pythia's statusHepMC gives them and Delphes stores them
+# (https://pythia8.web.cern.ch/manuals/pythia8318/ParticleProperties.html): 1 is
+# final; 2 is a hadron, muon or tau that decayed, never a particle the shower
+# branched.
+FINAL_STATUS = 1
+DECAYED_STATUS = 2
+
 
 @dataclass(frozen=True)
 class LongLivedRestorer:
@@ -85,10 +92,14 @@ class LongLivedRestorer:
     def restore(self, particles: "ak.Array") -> "ak.Array":
         """Return `particles` marked with ``part_final`` and ``part_promoted``.
 
-        A candidate is a particle of a long-lived species that has a daughter
-        and is not copied into one: of a chain of copies, the last one, which
-        carries the momentum after any recoil (``ParticleProperties``,
+        A candidate is a particle of a long-lived species that decayed, with
+        HepMC status 2, has a daughter and is not copied into one: of a chain
+        of copies, the last one, which carries the momentum after any recoil
+        (``ParticleProperties``,
         https://pythia8.web.cern.ch/manuals/pythia8318/ParticleProperties.html).
+        A listed particle the shower branched instead, such as a muon that
+        radiated a photon, keeps its shower status and is left as it is, so
+        its last copy and the photon stay final.
         Every descendant of a candidate is dropped, found by walking up from
         each particle through its mothers ``part_m1`` and ``part_m2``: a decay
         product has a single mother, so the two give its whole ancestry along
@@ -121,13 +132,13 @@ class LongLivedRestorer:
 
         counts = ak.to_numpy(ak.num(particles["part_pid"], axis=1)).astype(np.int64)
         status = _flat(particles["part_status"])
-        promoted, dropped = self._promoted_and_dropped(particles, counts)
-        final = ((status == 1) | promoted) & ~dropped
+        promoted, dropped = self._promoted_and_dropped(particles, counts, status)
+        final = ((status == FINAL_STATUS) | promoted) & ~dropped
         marked = ak.with_field(particles, ak.unflatten(final, counts), "part_final")
         return ak.with_field(marked, ak.unflatten(promoted, counts), "part_promoted")
 
     def _promoted_and_dropped(
-        self, particles: "ak.Array", counts: "np.ndarray"
+        self, particles: "ak.Array", counts: "np.ndarray", status: "np.ndarray"
     ) -> tuple["np.ndarray", "np.ndarray"]:
         """Return the flat masks of the promoted and the dropped particles."""
         import numpy as np
@@ -150,7 +161,12 @@ class LongLivedRestorer:
 
         copied = (d1 >= 0) & (d1 == d2) & (gather(pid, d1) == pid)
         long_lived = np.fromiter(self.long_lived, dtype=np.int64)
-        candidate = np.isin(np.abs(pid), long_lived) & (d1 >= 0) & ~copied
+        candidate = (
+            np.isin(np.abs(pid), long_lived)
+            & (status == DECAYED_STATUS)
+            & (d1 >= 0)
+            & ~copied
+        )
         dropped = np.zeros_like(candidate)
         # Each pass marks one more generation, so an event settles within its
         # particle count, and a cyclic record too, since the marks only grow.
