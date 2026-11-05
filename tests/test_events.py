@@ -7,7 +7,7 @@ import pytest
 import uproot
 from delphes_records import write_delphes_file
 
-from omphjc.events import EventFile, EventFormat, EventReader
+from omphjc.events import EventFile, EventFormat
 from omphjc.events.delphes_root import SPEED_OF_LIGHT_MM_PER_S, DelphesRootReader
 from omphjc.events.particles import FIELDS, build_record
 from omphjc.events.readers import reader_for
@@ -172,16 +172,6 @@ def test_the_steps_of_an_iteration_join_into_the_whole_record(
 def test_the_reader_of_a_file_follows_its_format(record_file: EventFile) -> None:
     reader = reader_for(record_file)
     assert isinstance(reader, DelphesRootReader) and reader.path == record_file.path
-    assert EventReader.for_format(EventFormat.DELPHES_ROOT) is DelphesRootReader
-
-
-def test_a_second_reader_of_a_format_is_refused() -> None:
-    with pytest.raises(TypeError, match="both read delphes-root files"):
-
-        class OtherReader(DelphesRootReader):
-            format = EventFormat.DELPHES_ROOT
-
-    assert EventReader.for_format(EventFormat.DELPHES_ROOT) is DelphesRootReader
 
 
 def test_the_event_count_is_the_tree_entry_count(record_file: EventFile) -> None:

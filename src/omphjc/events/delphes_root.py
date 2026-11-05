@@ -13,7 +13,7 @@ from typing import Any
 import awkward as ak
 import numpy as np
 
-from omphjc.events.formats import EventFormat, EventReader
+from omphjc.events.formats import EventReader
 from omphjc.events.particles import build_record
 from omphjc.root_io import count_entries, iterate_branches, read_branches
 
@@ -74,8 +74,6 @@ class DelphesRootReader(EventReader):
     per event. A memory step size counts the uncompressed bytes of the branches
     read (:func:`omphjc.root_io.entries_per_step`).
     """
-
-    format = EventFormat.DELPHES_ROOT
 
     def count_events(self) -> int:
         return count_entries(self.path, TREE_NAME, BRANCHES)

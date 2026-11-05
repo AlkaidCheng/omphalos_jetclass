@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import awkward as ak
@@ -47,51 +47,11 @@ class EventFile:
 class EventReader(ABC):
     """Reads the particle record of an event file of one format.
 
-    A subclass that sets `format` registers itself as the reader of that format
-    when it is defined; :meth:`for_format` returns it.
-
     Parameters
     ----------
     path : Path
         The file to read.
     """
-
-    format: ClassVar[EventFormat]
-    """The format the reader reads."""
-
-    _registered: ClassVar[dict[EventFormat, type["EventReader"]]] = {}
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
-        if "format" not in vars(cls):
-            return
-        registered = EventReader._registered.setdefault(cls.format, cls)
-        if registered is not cls:
-            raise TypeError(
-                f"{cls.__qualname__} and {registered.__qualname__} both read"
-                f" {cls.format.value} files"
-            )
-
-    @staticmethod
-    def for_format(event_format: EventFormat) -> type["EventReader"]:
-        """Return the reader class registered for `event_format`.
-
-        A format's reader is registered when its module is imported, as
-        importing :mod:`omphjc.events.readers` does for every format.
-
-        Raises
-        ------
-        ValueError
-            If no reader is registered for `event_format`.
-        """
-        try:
-            return EventReader._registered[event_format]
-        except KeyError:
-            readable = ", ".join(sorted(fmt.value for fmt in EventReader._registered))
-            raise ValueError(
-                f"cannot read particles from {event_format.value} files; readable"
-                f" formats: {readable or 'none until omphjc.events.readers is imported'}"
-            ) from None
 
     def __init__(self, path: Path) -> None:
         self.path = path
