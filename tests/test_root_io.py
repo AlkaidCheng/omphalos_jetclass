@@ -1,3 +1,4 @@
+import zlib
 from pathlib import Path
 
 import awkward as ak
@@ -6,7 +7,14 @@ import pytest
 import uproot
 from delphes_records import write_delphes_file
 
-from omphjc.root_io import entries_per_step, memory_size
+from omphjc.root_io import (
+    count_entries,
+    entries_per_step,
+    iterate_branches,
+    memory_size,
+    open_tree,
+    read_branches,
+)
 
 BRANCHES = ["Particle.PID", "Particle.Px", "Event.Number"]
 
@@ -21,6 +29,88 @@ def tree_path(tmp_path: Path) -> Path:
     path = tmp_path / "tree.root"
     write_delphes_file(path, particles, events_per_basket=10)
     return path
+
+
+def test_a_tree_opens_with_the_branches_it_must_have(tree_path: Path) -> None:
+    with open_tree(tree_path, "Delphes", BRANCHES) as tree:
+        assert tree.num_entries == 100
+    assert count_entries(tree_path, "Delphes", BRANCHES) == 100
+
+
+def test_a_file_without_the_tree_is_refused(tree_path: Path) -> None:
+    with pytest.raises(ValueError, match="has no tree 'Other'"):
+        count_entries(tree_path, "Other")
+
+
+def test_the_branches_a_tree_lacks_are_named(tree_path: Path) -> None:
+    with pytest.raises(
+        ValueError, match="'Delphes' of .* lacks Particle.Spin, Event.Run$"
+    ):
+        count_entries(
+            tree_path, "Delphes", ["Particle.PID", "Particle.Spin", "Event.Run"]
+        )
+
+
+def test_branches_are_read_at_a_range_of_entries(tree_path: Path) -> None:
+    whole = read_branches(tree_path, "Delphes", BRANCHES)
+    part = read_branches(tree_path, "Delphes", BRANCHES, entry_start=10, entry_stop=25)
+    assert whole.fields == BRANCHES and len(whole) == 100
+    assert part.tolist() == whole[10:25].tolist()
+    assert len(read_branches(tree_path, "Delphes", BRANCHES, entry_start=100)) == 0
+
+
+@pytest.mark.parametrize(("start", "stop"), [(-1, None), (20, 10), (0, 101)])
+def test_a_range_outside_the_tree_is_refused(
+    tree_path: Path, start: int, stop: int | None
+) -> None:
+    with pytest.raises(
+        ValueError, match="lie outside the 100 entries of tree 'Delphes'"
+    ):
+        read_branches(
+            tree_path, "Delphes", BRANCHES, entry_start=start, entry_stop=stop
+        )
+
+
+@pytest.mark.parametrize("step_size", [1, 7, "1 kB", "1 GB"])
+def test_the_steps_hold_the_entries_asked_and_follow_each_other(
+    tree_path: Path, step_size: int | str
+) -> None:
+    with open_tree(tree_path, "Delphes") as tree:
+        step = entries_per_step(tree, BRANCHES, step_size)
+    steps = list(iterate_branches(tree_path, "Delphes", BRANCHES, step_size=step_size))
+    lengths = [len(arrays) for _, arrays in steps]
+    assert lengths == [step] * (100 // step) + ([100 % step] if 100 % step else [])
+    assert [start for start, _ in steps] == np.cumsum([0, *lengths[:-1]]).tolist()
+    joined = ak.concatenate([arrays for _, arrays in steps])
+    assert joined.tolist() == read_branches(tree_path, "Delphes", BRANCHES).tolist()
+
+
+def test_an_iteration_refuses_a_missing_branch_once_it_starts(
+    tree_path: Path,
+) -> None:
+    steps = iterate_branches(tree_path, "Delphes", ["Particle.Spin"], step_size=10)
+    with pytest.raises(ValueError, match="lacks Particle.Spin"):
+        next(steps)
+
+
+def test_a_memory_step_size_inflates_each_basket_once(
+    tree_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = 0
+    decompress = zlib.decompress
+
+    def counting_decompress(*args: object, **kwargs: object) -> bytes:
+        nonlocal calls
+        calls += 1
+        return decompress(*args, **kwargs)
+
+    monkeypatch.setattr(zlib, "decompress", counting_decompress)
+    read_branches(tree_path, "Delphes", BRANCHES)
+    whole_tree_calls, calls = calls, 0
+    list(iterate_branches(tree_path, "Delphes", BRANCHES, step_size="1 GB"))
+    # 3 branches of 10 baskets each, besides the tree's own metadata.
+    assert whole_tree_calls >= 30
+    assert calls == whole_tree_calls
 
 
 def test_an_entry_count_is_returned_unchanged() -> None:

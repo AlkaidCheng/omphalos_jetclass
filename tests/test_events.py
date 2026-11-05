@@ -1,4 +1,3 @@
-import zlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -150,11 +149,11 @@ def test_the_event_index_counts_entries_from_the_file_start(
     assert part["event_number"].tolist() == [2]
 
 
-@pytest.mark.parametrize(("start", "stop"), [(-1, None), (2, 1), (0, 4)])
+@pytest.mark.parametrize(("start", "stop"), [(-1, None), (0, 4)])
 def test_a_range_outside_the_file_is_refused(
     record_file: EventFile, start: int, stop: int | None
 ) -> None:
-    with pytest.raises(ValueError, match="lie outside the 3 events"):
+    with pytest.raises(ValueError, match="lie outside the 3 entries"):
         reader_for(record_file).read_particles(entry_start=start, entry_stop=stop)
 
 
@@ -168,29 +167,6 @@ def test_the_steps_of_an_iteration_join_into_the_whole_record(
     whole = reader_for(event_file).read_particles()
     steps = list(reader_for(event_file).iterate_particles(step_size=step_size))
     assert ak.concatenate(steps).tolist() == whole.tolist()
-
-
-def test_a_memory_step_size_inflates_each_basket_once(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    event_file = _random_file(
-        tmp_path / "random.root", n_events=200, events_per_basket=20
-    )
-    calls = 0
-    decompress = zlib.decompress
-
-    def counting_decompress(*args: object, **kwargs: object) -> bytes:
-        nonlocal calls
-        calls += 1
-        return decompress(*args, **kwargs)
-
-    monkeypatch.setattr(zlib, "decompress", counting_decompress)
-    reader_for(event_file).read_particles()
-    whole_file_calls, calls = calls, 0
-    list(reader_for(event_file).iterate_particles(step_size="1 GB"))
-    # 25 branches of 10 baskets each, besides the tree's own metadata.
-    assert whole_file_calls >= 250
-    assert calls == whole_file_calls
 
 
 def test_the_reader_of_a_file_follows_its_format(record_file: EventFile) -> None:

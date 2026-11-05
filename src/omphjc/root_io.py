@@ -1,4 +1,8 @@
-"""Reading ROOT files with uproot: the step size of a read, as entries.
+"""Reading ROOT trees with uproot.
+
+:func:`open_tree` opens a tree after checking that it has the branches a read
+takes, and :func:`count_entries`, :func:`read_branches` and
+:func:`iterate_branches` count, read and iterate over its entries.
 
 Every uproot read in omphjc passes an entry count as its step size, never a
 memory size. uproot 5.7 turns a memory size into entries by inflating every
@@ -10,8 +14,13 @@ instead, which needs no basket.
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
+
+import awkward as ak
+import uproot
 
 # Memory sizes as uproot writes them, such as "100 MB" or "1 GiB": decimal and
 # binary units, matched without regard to case (uproot._util.memory_size,
@@ -31,6 +40,147 @@ _UNIT_BYTES = {
     "GIB": 1024**3,
     "TIB": 1024**4,
 }
+
+
+@contextmanager
+def open_tree(
+    path: Path, tree_name: str, branch_names: Sequence[str] = ()
+) -> Iterator[Any]:
+    """Open tree `tree_name` of the ROOT file `path` until the context exits.
+
+    Parameters
+    ----------
+    path : Path
+        The ROOT file.
+    tree_name : str
+        The tree to open.
+    branch_names : Sequence[str], optional
+        Branches the tree must have.
+
+    Yields
+    ------
+    uproot.TTree
+        The tree.
+
+    Raises
+    ------
+    ValueError
+        If the file has no tree `tree_name`, or the tree lacks one of
+        `branch_names`.
+    """
+    with uproot.open(path) as file:
+        if tree_name not in file:
+            raise ValueError(f"{path} has no tree {tree_name!r}")
+        tree = file[tree_name]
+        missing = [name for name in branch_names if name not in tree]
+        if missing:
+            raise ValueError(f"tree {tree_name!r} of {path} lacks {', '.join(missing)}")
+        yield tree
+
+
+def count_entries(path: Path, tree_name: str, branch_names: Sequence[str] = ()) -> int:
+    """Return the entry count of tree `tree_name` in `path`, reading no basket.
+
+    Parameters
+    ----------
+    path : Path
+        The ROOT file.
+    tree_name : str
+        The tree to count.
+    branch_names : Sequence[str], optional
+        Branches the tree must have.
+
+    Raises
+    ------
+    ValueError
+        As :func:`open_tree` does.
+    """
+    with open_tree(path, tree_name, branch_names) as tree:
+        return int(tree.num_entries)
+
+
+def read_branches(
+    path: Path,
+    tree_name: str,
+    branch_names: Sequence[str],
+    *,
+    entry_start: int = 0,
+    entry_stop: int | None = None,
+) -> ak.Array:
+    """Return branches of tree `tree_name` at entries [entry_start, entry_stop).
+
+    Parameters
+    ----------
+    path : Path
+        The ROOT file.
+    tree_name : str
+        The tree to read.
+    branch_names : Sequence[str]
+        The branches to read.
+    entry_start, entry_stop : int, int or None, optional
+        The entries to read; ``None`` reads to the last.
+
+    Returns
+    -------
+    ak.Array
+        One record per entry, with a field per branch.
+
+    Raises
+    ------
+    ValueError
+        As :func:`open_tree` does, or if the range lies outside the tree's
+        entries.
+    """
+    with open_tree(path, tree_name, branch_names) as tree:
+        n_entries = int(tree.num_entries)
+        stop = n_entries if entry_stop is None else entry_stop
+        if not 0 <= entry_start <= stop <= n_entries:
+            raise ValueError(
+                f"entries [{entry_start}, {stop}) lie outside the {n_entries}"
+                f" entries of tree {tree_name!r} in {path}"
+            )
+        return tree.arrays(list(branch_names), entry_start=entry_start, entry_stop=stop)
+
+
+def iterate_branches(
+    path: Path,
+    tree_name: str,
+    branch_names: Sequence[str],
+    *,
+    step_size: int | str,
+) -> Iterator[tuple[int, ak.Array]]:
+    """Yield branches of tree `tree_name` in steps of `step_size`.
+
+    Parameters
+    ----------
+    path : Path
+        The ROOT file.
+    tree_name : str
+        The tree to read.
+    branch_names : Sequence[str]
+        The branches to read.
+    step_size : int or str
+        Entries per step, or a memory size such as ``"100 MB"``, as
+        :func:`entries_per_step` takes them.
+
+    Yields
+    ------
+    tuple[int, ak.Array]
+        The first entry of a step and its arrays, as :func:`read_branches`
+        returns them.
+
+    Raises
+    ------
+    ValueError
+        As :func:`open_tree` and :func:`entries_per_step` do, once the
+        iteration starts.
+    """
+    with open_tree(path, tree_name, branch_names) as tree:
+        step = entries_per_step(tree, branch_names, step_size)
+        for arrays, report in tree.iterate(
+            list(branch_names), step_size=step, report=True
+        ):
+            yield report.tree_entry_start, arrays
 
 
 def entries_per_step(

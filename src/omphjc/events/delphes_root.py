@@ -12,11 +12,10 @@ from typing import Any
 
 import awkward as ak
 import numpy as np
-import uproot
 
 from omphjc.events.formats import EventFormat, EventReader
 from omphjc.events.particles import build_record
-from omphjc.root_io import entries_per_step
+from omphjc.root_io import count_entries, iterate_branches, read_branches
 
 TREE_NAME = "Delphes"
 
@@ -72,16 +71,14 @@ class DelphesRootReader(EventReader):
 
     The reader refuses a file without tree ``Delphes`` or one of the branches
     the record is read from, and an ``Event`` branch with other than one entry
-    per event. A memory step size
-    counts the uncompressed bytes of the branches read
-    (:func:`omphjc.root_io.entries_per_step`).
+    per event. A memory step size counts the uncompressed bytes of the branches
+    read (:func:`omphjc.root_io.entries_per_step`).
     """
 
     format = EventFormat.DELPHES_ROOT
 
     def count_events(self) -> int:
-        with uproot.open(self.path) as file:
-            return int(self._tree(file).num_entries)
+        return count_entries(self.path, TREE_NAME, BRANCHES)
 
     def read_particles(
         self,
@@ -90,42 +87,22 @@ class DelphesRootReader(EventReader):
         entry_stop: int | None = None,
         downcast: bool = True,
     ) -> ak.Array:
-        with uproot.open(self.path) as file:
-            tree = self._tree(file)
-            n_events = int(tree.num_entries)
-            stop = n_events if entry_stop is None else entry_stop
-            if not 0 <= entry_start <= stop <= n_events:
-                raise ValueError(
-                    f"entries [{entry_start}, {stop}) lie outside the {n_events}"
-                    f" events of {self.path}"
-                )
-            arrays = tree.arrays(
-                list(BRANCHES), entry_start=entry_start, entry_stop=stop
-            )
+        arrays = read_branches(
+            self.path,
+            TREE_NAME,
+            BRANCHES,
+            entry_start=entry_start,
+            entry_stop=entry_stop,
+        )
         return self._record(arrays, entry_start, downcast=downcast)
 
     def iterate_particles(
         self, *, step_size: int | str = "100 MB", downcast: bool = True
     ) -> Iterator[ak.Array]:
-        with uproot.open(self.path) as file:
-            tree = self._tree(file)
-            step = entries_per_step(tree, BRANCHES, step_size)
-            for arrays, report in tree.iterate(
-                list(BRANCHES), step_size=step, report=True
-            ):
-                yield self._record(arrays, report.tree_entry_start, downcast=downcast)
-
-    def _tree(self, file: Any) -> Any:
-        """Return tree Delphes of `file`, after checking that it has every branch read."""
-        if TREE_NAME not in file:
-            raise ValueError(f"{self.path} has no tree {TREE_NAME!r}")
-        tree = file[TREE_NAME]
-        missing = [name for name in BRANCHES if name not in tree]
-        if missing:
-            raise ValueError(
-                f"tree {TREE_NAME!r} of {self.path} lacks {', '.join(missing)}"
-            )
-        return tree
+        for entry_start, arrays in iterate_branches(
+            self.path, TREE_NAME, BRANCHES, step_size=step_size
+        ):
+            yield self._record(arrays, entry_start, downcast=downcast)
 
     @staticmethod
     def _record(arrays: ak.Array, entry_start: int, *, downcast: bool) -> ak.Array:
