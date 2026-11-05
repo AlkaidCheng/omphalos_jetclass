@@ -474,6 +474,7 @@ def test_a_restorer_keeps_a_copy_of_its_table() -> None:
         (math.inf, {3122: 78.45}),
         (True, {3122: 78.45}),
         ("10", {3122: 78.45}),
+        (10.0, [310, 3122]),
     ],
 )
 def test_an_invalid_restorer_is_refused(threshold: Any, table: Any) -> None:

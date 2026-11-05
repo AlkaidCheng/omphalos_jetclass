@@ -53,8 +53,8 @@ class LongLivedRestorer:
     Raises
     ------
     ValueError
-        If `ctau_min_mm` or a c*tau is not a positive finite number, or a key of
-        `ctau_mm` is not a positive int.
+        If `ctau_min_mm` or a c*tau is not a positive finite number, a key of
+        `ctau_mm` is not a positive int, or `ctau_mm` is not a mapping.
     """
 
     ctau_min_mm: float
@@ -64,6 +64,10 @@ class LongLivedRestorer:
         object.__setattr__(
             self, "ctau_min_mm", _positive_length("ctau_min_mm", self.ctau_min_mm)
         )
+        if not isinstance(self.ctau_mm, Mapping):
+            raise ValueError(
+                f"ctau_mm must map PDG ids to c*tau in mm, got {self.ctau_mm!r}"
+            )
         table = {}
         for pid, ctau in self.ctau_mm.items():
             if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
