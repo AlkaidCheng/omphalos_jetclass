@@ -235,8 +235,17 @@ def test_empty_events_and_an_empty_record_are_marked() -> None:
     ],
 )
 def test_an_index_outside_its_event_is_refused(rows: list[dict[str, float]]) -> None:
-    with pytest.raises(ValueError, match="holds an index outside"):
+    with pytest.raises(ValueError, match="outside the event's"):
         mark_final_state(record(rows), CMS_RULE)
+
+
+def test_the_refusal_names_the_particle_and_its_event() -> None:
+    events = record(K0S_TO_PIONS, [], [particle(310, 2, d1=2, d2=2), particle(22, 1)])
+    with pytest.raises(
+        ValueError,
+        match="part_d1 of particle 0 in event 2 is 2, outside the event's 2 particles",
+    ):
+        mark_final_state(events, CMS_RULE)
 
 
 def test_a_cyclic_record_is_marked_in_finite_passes() -> None:

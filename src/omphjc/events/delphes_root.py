@@ -15,7 +15,7 @@ import numpy as np
 import uproot
 
 from omphjc.events.formats import EventFormat, EventReader
-from omphjc.events.particles import build_record, check_indices
+from omphjc.events.particles import build_record
 from omphjc.root_io import entries_per_step
 
 TREE_NAME = "Delphes"
@@ -71,8 +71,8 @@ class DelphesRootReader(EventReader):
     """Reads the generator record of a Delphes ROOT file.
 
     The reader refuses a file without tree ``Delphes`` or one of the branches
-    the record is read from, an ``Event`` branch with other than one entry per
-    event, and a mother or daughter index outside its event. A memory step size
+    the record is read from, and an ``Event`` branch with other than one entry
+    per event. A memory step size
     counts the uncompressed bytes of the branches read
     (:func:`omphjc.root_io.entries_per_step`).
     """
@@ -144,6 +144,4 @@ class DelphesRootReader(EventReader):
         for field, branch in PARTICLE_BRANCHES.items():
             columns[field] = arrays[branch]
         columns["part_t"] = columns["part_t"] * SPEED_OF_LIGHT_MM_PER_S
-        record = build_record(columns, downcast=downcast)
-        check_indices(record)
-        return record
+        return build_record(columns, downcast=downcast)

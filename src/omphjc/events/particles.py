@@ -83,9 +83,6 @@ PARTICLE_FIELDS = (
 
 FIELDS = EVENT_FIELDS + PARTICLE_FIELDS
 
-# The particle fields that index rows of the same event.
-INDEX_FIELDS = ("part_m1", "part_m2", "part_d1", "part_d2")
-
 
 def build_record(columns: Mapping[str, ak.Array], *, downcast: bool) -> ak.Array:
     """Return the particle record made of `columns`, in the schema's field order.
@@ -147,37 +144,3 @@ def _cast(field: RecordField, column: ak.Array) -> ak.Array:
             f" which {dtype} cannot hold; read with downcast=False to keep them"
         )
     return ak.values_astype(column, dtype)
-
-
-def check_indices(record: ak.Array) -> None:
-    """Check that every mother and daughter index lies in [-1, n) of its event.
-
-    Parameters
-    ----------
-    record : ak.Array
-        Particle records with the fields of :data:`INDEX_FIELDS` and
-        ``part_pid``.
-
-    Raises
-    ------
-    ValueError
-        If an index lies outside its event, naming the field and the event.
-    """
-    counts = ak.to_numpy(ak.num(record["part_pid"], axis=1))
-    # The particle count of each particle's event, shared by the four fields.
-    sizes = np.repeat(counts, counts)
-    for name in INDEX_FIELDS:
-        indices = ak.to_numpy(ak.flatten(record[name]))
-        outside = (indices < -1) | (indices >= sizes)
-        if outside.any():
-            first = int(np.argmax(outside))
-            position = int(np.searchsorted(np.cumsum(counts), first, side="right"))
-            event = (
-                int(record["event_index"][position])
-                if "event_index" in record.fields
-                else position
-            )
-            raise ValueError(
-                f"{name} holds an index outside [-1, {int(counts[position])}) in"
-                f" event {event}, which has {int(counts[position])} particles"
-            )

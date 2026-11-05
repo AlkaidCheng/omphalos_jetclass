@@ -131,14 +131,12 @@ def mark_final_state(particles: "ak.Array", rule: FinalStateRule) -> "ak.Array":
     Raises
     ------
     ValueError
-        If a mother or daughter index lies outside its event.
+        If `rule` restores long-lived hadrons and a mother or daughter index
+        points outside its event.
     """
     import awkward as ak
     import numpy as np
 
-    from omphjc.events.particles import check_indices
-
-    check_indices(particles)
     counts = ak.to_numpy(ak.num(particles["part_pid"], axis=1)).astype(np.int64)
     status = _flat(particles["part_status"])
     if rule.restore_long_lived:
@@ -162,6 +160,9 @@ def _promote_long_lived(
         for name in ("part_pid", "part_m1", "part_m2", "part_d1", "part_d2")
     )
     first = np.repeat(np.cumsum(counts) - counts, counts)
+    _check_links(
+        particles, counts, first, part_m1=m1, part_m2=m2, part_d1=d1, part_d2=d2
+    )
 
     def gather(values: "np.ndarray", index: "np.ndarray") -> "np.ndarray":
         """Return the values at the event's rows `index`, False or 0 at -1."""
@@ -186,6 +187,38 @@ def _promote_long_lived(
     else:
         raise ValueError("the mother links did not settle")
     return candidate & ~dropped, dropped
+
+
+def _check_links(
+    particles: "ak.Array",
+    counts: "np.ndarray",
+    first: "np.ndarray",
+    **links: "np.ndarray",
+) -> None:
+    """Refuse a mother or daughter index that points outside its event.
+
+    The indices are positions in the particle's own event, -1 for none, as
+    Delphes writes them (``GenParticle.M1``: Pythia's ``mother1()`` minus 1).
+    `first` holds each particle's event start in the flat arrays.
+    """
+    import numpy as np
+
+    sizes = np.repeat(counts, counts)
+    for name, index in links.items():
+        outside = (index < -1) | (index >= sizes)
+        if outside.any():
+            row = int(np.argmax(outside))
+            position = int(np.searchsorted(np.cumsum(counts), row, side="right"))
+            event = (
+                int(particles["event_index"][position])
+                if "event_index" in particles.fields
+                else position
+            )
+            raise ValueError(
+                f"{name} of particle {row - int(first[row])} in event {event} is"
+                f" {int(index[row])}, outside the event's {int(counts[position])}"
+                " particles"
+            )
 
 
 def _flat(column: "ak.Array") -> "np.ndarray":

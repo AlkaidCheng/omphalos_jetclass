@@ -226,29 +226,6 @@ def test_a_file_without_tree_delphes_is_refused(tmp_path: Path) -> None:
         reader_for(EventFile(path, EventFormat.DELPHES_ROOT)).count_events()
 
 
-@pytest.mark.parametrize(
-    ("member", "values", "field", "event"),
-    [
-        ("M1", [[-1, 0, 3], [], [-1, -1]], "part_m1", 0),
-        ("D1", [[1, -2, -1], [], [-1, -1]], "part_d1", 0),
-        ("D2", [[2, -1, -1], [], [-1, 2]], "part_d2", 2),
-        ("M1", [[-1, 0, 0], [], [2, -1]], "part_m1", 2),
-    ],
-)
-def test_an_index_outside_its_event_is_refused(
-    write_file: Callable[..., EventFile],
-    member: str,
-    values: list[list[int]],
-    field: str,
-    event: int,
-) -> None:
-    event_file = write_file(particles={member: ak.Array(values)})
-    with pytest.raises(
-        ValueError, match=f"{field} holds an index outside .* event {event},"
-    ):
-        reader_for(event_file).read_particles()
-
-
 def test_an_event_branch_without_one_entry_per_event_is_refused(
     write_file: Callable[..., EventFile],
 ) -> None:
