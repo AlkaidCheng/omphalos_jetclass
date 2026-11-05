@@ -147,16 +147,22 @@ class LongLivedRestorer:
             _flat(particles[name])
             for name in ("part_pid", "part_m1", "part_m2", "part_d1", "part_d2")
         )
-        first = np.repeat(np.cumsum(counts) - counts, counts)
+        event_start = np.repeat(np.cumsum(counts) - counts, counts)
         _check_links(
-            particles, counts, first, part_m1=m1, part_m2=m2, part_d1=d1, part_d2=d2
+            particles,
+            counts,
+            event_start,
+            part_m1=m1,
+            part_m2=m2,
+            part_d1=d1,
+            part_d2=d2,
         )
 
         def gather(values: "np.ndarray", index: "np.ndarray") -> "np.ndarray":
             """Return the values at the event's rows `index`, False or 0 at -1."""
             gathered = np.zeros_like(values)
             present = index >= 0
-            gathered[present] = values[(first + index)[present]]
+            gathered[present] = values[(event_start + index)[present]]
             return gathered
 
         copied = (d1 >= 0) & (d1 == d2) & (gather(pid, d1) == pid)
@@ -186,14 +192,13 @@ class LongLivedRestorer:
 def _check_links(
     particles: "ak.Array",
     counts: "np.ndarray",
-    first: "np.ndarray",
+    event_start: "np.ndarray",
     **links: "np.ndarray",
 ) -> None:
     """Refuse a mother or daughter index that points outside its event.
 
     The indices are positions in the particle's own event, -1 for none, as
     Delphes writes them (``GenParticle.M1``: Pythia's ``mother1()`` minus 1).
-    `first` holds each particle's event start in the flat arrays.
     """
     import numpy as np
 
@@ -209,7 +214,7 @@ def _check_links(
                 else position
             )
             raise ValueError(
-                f"{name} of particle {row - int(first[row])} in event {event} is"
+                f"{name} of particle {row - int(event_start[row])} in event {event} is"
                 f" {int(index[row])}, outside the event's {int(counts[position])}"
                 " particles"
             )
