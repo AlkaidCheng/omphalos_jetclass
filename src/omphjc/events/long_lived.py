@@ -19,6 +19,7 @@ particles as the final state.
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
@@ -79,7 +80,7 @@ class LongLivedRestorer:
             table[pid] = require_number(ctau, what=f"ctau_mm[{pid}]", positive=True)
         object.__setattr__(self, "ctau_mm", MappingProxyType(table))
 
-    @property
+    @cached_property
     def long_lived(self) -> frozenset[int]:
         """The absolute PDG ids whose c*tau exceeds `ctau_min_mm`."""
         return frozenset(

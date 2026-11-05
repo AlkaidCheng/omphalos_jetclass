@@ -449,6 +449,13 @@ def test_the_long_lived_species_are_those_above_the_threshold() -> None:
     assert at_k0s.long_lived == frozenset(PDG_2026_CTAU_MM) - {310, 3222, 3334}
 
 
+def test_the_long_lived_species_are_found_once_and_leave_equality_alone() -> None:
+    restorer = LongLivedRestorer(ctau_min_mm=10.0, ctau_mm={310: 26.844})
+    assert restorer.long_lived is restorer.long_lived
+    assert restorer == LongLivedRestorer(ctau_min_mm=10.0, ctau_mm={310: 26.844})
+    assert hash(restorer) == hash(LongLivedRestorer(10.0, {310: 26.844}))
+
+
 def test_a_restorer_keeps_a_copy_of_its_table() -> None:
     table = {310: 26.844}
     restorer = LongLivedRestorer(ctau_min_mm=10.0, ctau_mm=table)
