@@ -151,15 +151,12 @@ class LongLivedRestorer:
         copied = (d1 >= 0) & (d1 == d2) & (gather(pid, d1) == pid)
         long_lived = np.fromiter(self.long_lived, dtype=np.int64)
         candidate = np.isin(np.abs(pid), long_lived) & (d1 >= 0) & ~copied
-        second_mother = m2 != m1
         dropped = np.zeros_like(candidate)
         # Each pass marks one more generation, so an event settles within its
         # particle count, and a cyclic record too, since the marks only grow.
         for _ in range(int(counts.max(initial=0)) + 1):
             flagged = candidate | dropped
-            marked = (
-                dropped | gather(flagged, m1) | (gather(flagged, m2) & second_mother)
-            )
+            marked = dropped | gather(flagged, m1) | gather(flagged, m2)
             if np.array_equal(marked, dropped):
                 break
             dropped = marked
