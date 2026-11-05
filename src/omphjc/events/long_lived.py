@@ -164,36 +164,34 @@ class LongLivedRestorer:
             part_d1=d1,
             part_d2=d2,
         )
-
-        def gather(values: "np.ndarray", index: "np.ndarray") -> "np.ndarray":
-            """Return the values at the event's rows `index`, False or 0 at -1."""
-            gathered = np.zeros_like(values)
-            present = index >= 0
-            gathered[present] = values[(event_start + index)[present]]
-            return gathered
-
-        copied = (d1 >= 0) & (d1 == d2) & (gather(pid, d1) == pid)
+        # Only the particles that decayed are tested further, which are few.
+        decayed = np.flatnonzero((status == DECAYED_STATUS) & (d1 >= 0))
+        first_daughter = pid[event_start[decayed] + d1[decayed]]
+        copied = (d1[decayed] == d2[decayed]) & (first_daughter == pid[decayed])
         long_lived = np.fromiter(self.long_lived, dtype=np.int64)
-        candidate = (
-            np.isin(np.abs(pid), long_lived)
-            & (status == DECAYED_STATUS)
-            & (d1 >= 0)
-            & ~copied
-        )
-        dropped = np.zeros_like(candidate)
+        candidate = np.zeros(pid.size, dtype=bool)
+        candidate[decayed] = np.isin(np.abs(pid[decayed]), long_lived) & ~copied
         # A decay product has a single mother, so part_m1 and part_m2 give its
-        # whole ancestry along decay chains. Each pass marks one more generation,
-        # so an event settles within its particle count, and a cyclic record too,
-        # since the marks only grow.
+        # whole ancestry along decay chains. Each pass follows the links from
+        # the particles the pass before dropped, one generation further, so an
+        # event settles within its particle count, and a cyclic record too,
+        # since a particle is dropped once.
+        with_mother = np.flatnonzero(m1 >= 0)
+        mother = event_start[with_mother] + m1[with_mother]
+        with_second = np.flatnonzero((m2 >= 0) & (m2 != m1))
+        second = event_start[with_second] + m2[with_second]
+        dropped = np.zeros_like(candidate)
+        frontier = candidate
         for _ in range(int(counts.max(initial=0)) + 1):
-            flagged = candidate | dropped
-            marked = dropped | gather(flagged, m1) | gather(flagged, m2)
-            if np.array_equal(marked, dropped):
-                break
-            dropped = marked
-        else:
-            raise ValueError("the mother links did not settle")
-        return candidate & ~dropped, dropped
+            reached = np.zeros_like(candidate)
+            reached[with_mother] = frontier[mother]
+            reached[with_second] |= frontier[second]
+            reached &= ~dropped
+            if not reached.any():
+                return candidate & ~dropped, dropped
+            dropped |= reached
+            frontier = reached
+        raise ValueError("the mother links did not settle")
 
 
 def _check_links(
