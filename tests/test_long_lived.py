@@ -5,7 +5,7 @@ import awkward as ak
 import numpy as np
 import pytest
 
-from omphjc.events.final_state import FinalStateRule, mark_final_state
+from omphjc.events.long_lived import LongLivedRestorer
 
 # Nominal c*tau in mm, PDG 2026 (https://pdg.lbl.gov/2026/tables/rpp2026-sum-mesons.pdf,
 # rpp2026-sum-baryons.pdf and rpp2026-sum-leptons.pdf), with the CMS threshold of
@@ -24,8 +24,7 @@ PDG_2026_CTAU_MM = {
     13: 658638.4,
     2112: 2.633e14,
 }
-CMS_RULE = FinalStateRule(True, 10.0, PDG_2026_CTAU_MM)
-SHOWER_RULE = FinalStateRule(False, 10.0, PDG_2026_CTAU_MM)
+CMS_RESTORER = LongLivedRestorer(ctau_min_mm=10.0, ctau_mm=PDG_2026_CTAU_MM)
 
 FIELDS = (
     "part_pid",
@@ -81,8 +80,10 @@ def record(*events: list[dict[str, float]]) -> ak.Array:
     return ak.zip(columns, depth_limit=1)
 
 
-def marks(particles: ak.Array, rule: FinalStateRule = CMS_RULE) -> tuple[list, list]:
-    marked = mark_final_state(particles, rule)
+def marks(
+    particles: ak.Array, restorer: LongLivedRestorer = CMS_RESTORER
+) -> tuple[list, list]:
+    marked = restorer.restore(particles)
     return marked["part_final"].tolist(), marked["part_promoted"].tolist()
 
 
@@ -186,8 +187,8 @@ def test_short_lived_species_are_left_decayed() -> None:
 
 def test_marking_again_changes_nothing_and_an_undecayed_k0s_stays_final() -> None:
     particles = record(K0S_TO_PIONS, [particle(310, 1)])
-    marked = mark_final_state(particles, CMS_RULE)
-    again = mark_final_state(marked, CMS_RULE)
+    marked = CMS_RESTORER.restore(particles)
+    again = CMS_RESTORER.restore(marked)
     assert again.tolist() == marked.tolist()
     assert marked["part_final"].tolist()[1] == [True]
     assert marked["part_promoted"].tolist()[1] == [False]
@@ -209,13 +210,15 @@ def test_the_final_four_momentum_and_charge_are_conserved() -> None:
         ]
     )
 
-    def totals(rule: FinalStateRule) -> np.ndarray:
-        marked = mark_final_state(particles, rule)
-        final = marked[marked["part_final"]]
+    def totals(final: ak.Array) -> np.ndarray:
         names = ("part_px", "part_py", "part_pz", "part_e", "part_charge")
         return np.array([ak.sum(final[name]) for name in names], dtype=np.float64)
 
-    np.testing.assert_allclose(totals(CMS_RULE), totals(SHOWER_RULE), atol=1e-6)
+    restored = CMS_RESTORER.restore(particles)
+    showered = particles[particles["part_status"] == 1]
+    np.testing.assert_allclose(
+        totals(restored[restored["part_final"]]), totals(showered), atol=1e-6
+    )
 
 
 def test_empty_events_and_an_empty_record_are_marked() -> None:
@@ -236,7 +239,7 @@ def test_empty_events_and_an_empty_record_are_marked() -> None:
 )
 def test_an_index_outside_its_event_is_refused(rows: list[dict[str, float]]) -> None:
     with pytest.raises(ValueError, match="outside the event's"):
-        mark_final_state(record(rows), CMS_RULE)
+        CMS_RESTORER.restore(record(rows))
 
 
 def test_the_refusal_names_the_particle_and_its_event() -> None:
@@ -245,7 +248,7 @@ def test_the_refusal_names_the_particle_and_its_event() -> None:
         ValueError,
         match="part_d1 of particle 0 in event 2 is 2, outside the event's 2 particles",
     ):
-        mark_final_state(events, CMS_RULE)
+        CMS_RESTORER.restore(events)
 
 
 def test_a_cyclic_record_is_marked_in_finite_passes() -> None:
@@ -343,7 +346,7 @@ def test_the_walk_up_the_mothers_agrees_with_one_down_the_daughters() -> None:
     rng = np.random.default_rng(2026)
     events = [_random_event(rng) for _ in range(300)]
     final, promoted = marks(record(*events))
-    expected = [_walk_down(rows, CMS_RULE.long_lived) for rows in events]
+    expected = [_walk_down(rows, CMS_RESTORER.long_lived) for rows in events]
     assert final == [marks_of_event[0] for marks_of_event in expected]
     assert promoted == [marks_of_event[1] for marks_of_event in expected]
     assert sum(map(sum, promoted)) > 50
@@ -358,7 +361,7 @@ def test_the_last_copy_of_a_carbon_copy_chain_is_promoted() -> None:
             particle(-211, 1, m1=1),
         ]
     )
-    marked = mark_final_state(copies, CMS_RULE)
+    marked = CMS_RESTORER.restore(copies)
     assert marked["part_final"].tolist() == [[False, True, False, False]]
     assert marked["part_promoted"].tolist() == [[False, True, False, False]]
     kept = marked[marked["part_final"]]
@@ -371,15 +374,14 @@ def test_a_decayed_charged_pion_is_promoted_and_its_muon_dropped() -> None:
 
 
 @pytest.mark.parametrize(
-    "rule",
+    "restorer",
     [
-        SHOWER_RULE,
-        FinalStateRule(False, 1.0, {3122: 78.45}),
-        FinalStateRule(False, 50.0, {}),
+        LongLivedRestorer(ctau_min_mm=100.0, ctau_mm={3312: 49.1, 3122: 78.45}),
+        LongLivedRestorer(ctau_min_mm=10.0, ctau_mm={}),
     ],
 )
-def test_without_restoring_the_final_state_is_the_shower_status_1(
-    rule: FinalStateRule,
+def test_with_no_species_above_the_threshold_the_final_state_is_status_1(
+    restorer: LongLivedRestorer,
 ) -> None:
     cascade = record(
         [
@@ -390,58 +392,53 @@ def test_without_restoring_the_final_state_is_the_shower_status_1(
             particle(-211, 1, m1=1),
         ]
     )
-    final, promoted = marks(cascade, rule)
+    final, promoted = marks(cascade, restorer)
     assert final == [[False, False, True, True, True]]
     assert promoted == [[False] * 5]
-    assert rule.as_record() == {"restore_long_lived": False}
 
 
-def test_a_restoring_rule_records_its_threshold_and_table() -> None:
-    rule = FinalStateRule(True, 10, {3122: 78.45, 310: 26.844})
-    assert rule.as_record() == {
-        "restore_long_lived": True,
+def test_a_restorer_records_its_threshold_and_table() -> None:
+    restorer = LongLivedRestorer(ctau_min_mm=10, ctau_mm={3122: 78.45, 310: 26.844})
+    assert restorer.as_record() == {
         "ctau_min_mm": 10.0,
         "ctau_mm": {"310": 26.844, "3122": 78.45},
     }
-    assert json.loads(json.dumps(rule.as_record())) == rule.as_record()
+    assert json.loads(json.dumps(restorer.as_record())) == restorer.as_record()
 
 
 def test_the_long_lived_species_are_those_above_the_threshold() -> None:
-    assert CMS_RULE.long_lived == frozenset(PDG_2026_CTAU_MM)
-    raised = FinalStateRule(True, 25.0, PDG_2026_CTAU_MM)
+    assert CMS_RESTORER.long_lived == frozenset(PDG_2026_CTAU_MM)
+    raised = LongLivedRestorer(ctau_min_mm=25.0, ctau_mm=PDG_2026_CTAU_MM)
     assert raised.long_lived == frozenset(PDG_2026_CTAU_MM) - {3222, 3334}
 
 
-def test_a_rule_keeps_a_copy_of_its_table() -> None:
+def test_a_restorer_keeps_a_copy_of_its_table() -> None:
     table = {310: 26.844}
-    rule = FinalStateRule(True, 10.0, table)
+    restorer = LongLivedRestorer(ctau_min_mm=10.0, ctau_mm=table)
     table[3122] = 78.45
-    assert rule.long_lived == {310}
-    assert rule == FinalStateRule(True, 10.0, {310: 26.844})
+    assert restorer.long_lived == {310}
+    assert restorer == LongLivedRestorer(ctau_min_mm=10.0, ctau_mm={310: 26.844})
 
 
 @pytest.mark.parametrize(
-    ("restore", "threshold", "table"),
+    ("threshold", "table"),
     [
-        (True, 10.0, {-3122: 78.45}),
-        (True, 10.0, {0: 78.45}),
-        (True, 10.0, {"3122": 78.45}),
-        (True, 10.0, {True: 78.45}),
-        (True, 10.0, {3122: 0.0}),
-        (True, 10.0, {3122: -1.0}),
-        (True, 10.0, {3122: math.inf}),
-        (True, 10.0, {3122: math.nan}),
-        (True, 10.0, {3122: "78.45"}),
-        (True, 0.0, {3122: 78.45}),
-        (True, -10.0, {3122: 78.45}),
-        (True, math.inf, {3122: 78.45}),
-        (True, True, {3122: 78.45}),
-        ("false", 10.0, {3122: 78.45}),
-        (1, 10.0, {3122: 78.45}),
+        (10.0, {-3122: 78.45}),
+        (10.0, {0: 78.45}),
+        (10.0, {"3122": 78.45}),
+        (10.0, {True: 78.45}),
+        (10.0, {3122: 0.0}),
+        (10.0, {3122: -1.0}),
+        (10.0, {3122: math.inf}),
+        (10.0, {3122: math.nan}),
+        (10.0, {3122: "78.45"}),
+        (0.0, {3122: 78.45}),
+        (-10.0, {3122: 78.45}),
+        (math.inf, {3122: 78.45}),
+        (True, {3122: 78.45}),
+        ("10", {3122: 78.45}),
     ],
 )
-def test_an_invalid_rule_is_refused(
-    restore: object, threshold: object, table: object
-) -> None:
+def test_an_invalid_restorer_is_refused(threshold: object, table: object) -> None:
     with pytest.raises(ValueError):
-        FinalStateRule(restore, threshold, table)
+        LongLivedRestorer(ctau_min_mm=threshold, ctau_mm=table)

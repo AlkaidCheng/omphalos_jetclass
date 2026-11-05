@@ -207,7 +207,7 @@ def test_importing_the_tools_package_loads_no_tool() -> None:
 
 
 @pytest.mark.parametrize(
-    "module", ["omphjc.events", "omphjc.events.formats", "omphjc.events.final_state"]
+    "module", ["omphjc.events", "omphjc.events.formats", "omphjc.events.long_lived"]
 )
 def test_the_event_file_contracts_load_no_array_library(module: str) -> None:
     loaded = _loaded_after(f"import {module}")
