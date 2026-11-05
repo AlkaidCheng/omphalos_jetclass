@@ -6,11 +6,9 @@ when imported, so :func:`reader_for` finds the reader of any of them. The
 record and its fields are described in :mod:`omphjc.events.particles`.
 """
 
-from omphjc.events import delphes_root
+# Imported for its effect: each format's module registers its reader.
+import omphjc.events.delphes_root  # noqa: F401
 from omphjc.events.formats import EventFile, EventReader
-
-# The modules of the readable formats.
-FORMAT_MODULES = (delphes_root,)
 
 
 def reader_for(event_file: EventFile) -> EventReader:
