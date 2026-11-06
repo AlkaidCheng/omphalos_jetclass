@@ -24,8 +24,11 @@ classifiers = [
     "Operating System :: MacOS",
 ]
 dependencies = [
+    "awkward>=2.8.2",
     "click>=8.1",
+    "numpy",
     "PyYAML>=6.0",
+    "uproot>=5.7",
 ]
 
 [project.optional-dependencies]
@@ -88,6 +91,11 @@ python_version = "3.10"
 strict = true
 packages = ["omphjc"]
 exclude = ["^config/", "src/omphjc/config/"]
+
+# awkward 2.9.1 and uproot 5.7.4 include no type information (no py.typed).
+[[tool.mypy.overrides]]
+module = ["awkward", "awkward.*", "uproot", "uproot.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

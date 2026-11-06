@@ -41,8 +41,22 @@ key ends up.
 pip install -e .
 ```
 
-The package itself needs Python 3.10 or later. Generating events additionally
-needs MadGraph5_aMC@NLO, Pythia 8 and Delphes built with Pythia support.
+omphjc needs Python 3.10 or later. Its Python dependencies are installed with
+it:
+
+| Package | Used for |
+|---|---|
+| click | the commands |
+| PyYAML | the catalogue |
+| numpy, awkward, uproot | reading event files |
+
+Generating events also needs three programs, installed separately:
+
+| Program | Stage |
+|---|---|
+| MadGraph5_aMC@NLO | `generate` |
+| Pythia 8 | `shower`, run by Delphes's `DelphesPythia8` |
+| Delphes, built with Pythia support | `shower` and `simulate` |
 
 ## Configuration
 
