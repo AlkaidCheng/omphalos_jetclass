@@ -42,7 +42,6 @@ def particle(
     m1: int = -1,
     d1: int = -1,
     d2: int = -1,
-    final: bool | None = None,
     p: tuple[float, float, float, float] = (1.0, 2.0, 3.0, 4.0),
     mass: float = 0.0,
     at: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0),
@@ -57,7 +56,7 @@ def particle(
         "part_m2": -1,
         "part_d1": d1,
         "part_d2": d2,
-        "part_final": status == 1 if final is None else final,
+        "part_final": status == 1,
         "part_px": px,
         "part_py": py,
         "part_pz": pz,
@@ -75,6 +74,9 @@ BEAMS = [
     particle(2212, 4, p=(0.0, 0.0, -6500.0, 6500.0), mass=0.938),
 ]
 DECAY_VERTEX = (0.25, -0.5, 1.75, 2.0)
+OTHER_DECAY_VERTEX = (-0.75, 1.25, -2.5, 3.0)
+# A float32 that needs all 9 significant digits: 1.0352942e+01 is another float32.
+NINE_DIGITS = float(np.float32(176 / 17))
 
 
 def record(*events: list[dict[str, float]], first_index: int = 0) -> ak.Array:
@@ -104,15 +106,33 @@ def pi0_to_two_photons() -> list[dict[str, float]]:
     ]
 
 
-def b_to_partons_to_string() -> list[dict[str, float]]:
-    """A B+ decayed into partons whose string hadrons start at the B's decay vertex."""
+def b_to_psi2s_to_gluons() -> list[dict[str, float]]:
+    """A B+ -> psi(2S) K+ decay whose psi(2S) -> ggg string starts at the B's vertex.
+
+    Pythia hadronizes the gluons of an onium decay in a string (``meMode`` 92),
+    so the string's pions take its first gluon as their mother.
+    """
     return [
         *BEAMS,
         particle(521, 2, d1=3, d2=4, mass=5.279),
-        particle(2, 71, m1=2, d1=5, d2=6),
-        particle(-2, 71, m1=2, d1=5, d2=6),
-        particle(211, 1, m1=3, at=DECAY_VERTEX),
-        particle(-211, 1, m1=3, at=DECAY_VERTEX),
+        particle(100443, 2, m1=2, d1=5, d2=7, mass=3.686, at=DECAY_VERTEX),
+        particle(321, 1, m1=2, at=DECAY_VERTEX),
+        *(particle(21, 71, m1=3, d1=8, d2=9) for _ in range(3)),
+        particle(211, 1, m1=5, at=DECAY_VERTEX),
+        particle(-211, 1, m1=5, at=DECAY_VERTEX),
+    ]
+
+
+def two_pi0s_at_two_vertices() -> list[dict[str, float]]:
+    """Two pi0s decayed at different points, their photons listed alternately."""
+    return [
+        *BEAMS,
+        particle(111, 2, d1=6, d2=4, mass=0.135),
+        particle(111, 2, d1=7, d2=5, mass=0.135),
+        particle(22, 1, m1=2, at=DECAY_VERTEX),
+        particle(22, 1, m1=3, at=OTHER_DECAY_VERTEX),
+        particle(22, 1, m1=2, at=DECAY_VERTEX),
+        particle(22, 1, m1=3, at=OTHER_DECAY_VERTEX),
     ]
 
 
@@ -135,15 +155,40 @@ def test_a_displaced_photon_hangs_from_its_mothers_decay_vertex() -> None:
     )
 
 
-def test_string_hadrons_hang_from_their_first_parton_and_the_b_is_left_out() -> None:
-    arrays = hepevt_arrays(record(b_to_partons_to_string())[0])
-    assert arrays.pid.tolist() == [2212, 2212, 2, 211, -211]
-    assert arrays.status.tolist() == [4, 4, 71, 1, 1]
-    assert arrays.parents.tolist() == [[-1, -1], [-1, -1], [0, 1], [2, 2], [2, 2]]
-    assert [arrays.vx[3], arrays.vy[3], arrays.vz[3], arrays.vt[3]] == list(
-        DECAY_VERTEX
+def test_string_hadrons_hang_from_the_first_gluon_and_the_onium_is_left_out() -> None:
+    arrays = hepevt_arrays(record(b_to_psi2s_to_gluons())[0])
+    assert arrays.pid.tolist() == [2212, 2212, 521, 321, 21, 211, -211]
+    assert arrays.status.tolist() == [4, 4, 2, 1, 71, 1, 1]
+    assert arrays.parents.tolist() == [
+        [-1, -1],
+        [-1, -1],
+        [0, 1],
+        [2, 2],
+        [0, 1],
+        [4, 4],
+        [4, 4],
+    ]
+    vertices = np.column_stack([arrays.vx, arrays.vy, arrays.vz, arrays.vt])
+    np.testing.assert_array_equal(vertices[[3, 5, 6]], np.float32([DECAY_VERTEX] * 3))
+    assert not vertices[[0, 1, 2, 4]].any()
+
+
+def test_the_photons_of_two_decays_hang_from_their_own_mothers_vertex() -> None:
+    arrays = hepevt_arrays(record(two_pi0s_at_two_vertices())[0])
+    assert arrays.parents.tolist() == [
+        [-1, -1],
+        [-1, -1],
+        [0, 1],
+        [0, 1],
+        [2, 2],
+        [3, 3],
+        [2, 2],
+        [3, 3],
+    ]
+    vertices = np.column_stack([arrays.vx, arrays.vy, arrays.vz, arrays.vt])
+    np.testing.assert_array_equal(
+        vertices[4:], np.float32([DECAY_VERTEX, OTHER_DECAY_VERTEX] * 2)
     )
-    assert arrays.vx[2] == arrays.vz[2] == 0.0
 
 
 def test_the_event_number_momenta_and_masses_are_the_records() -> None:
@@ -189,8 +234,30 @@ def test_a_promoted_hadron_is_written_as_final_and_its_decay_left_out() -> None:
             "part_m1 = 0 is none, outside the event or a beam",
         ),
         (
+            [*BEAMS, particle(22, 1, m1=1, at=DECAY_VERTEX)],
+            "part_m1 = 1 is none, outside the event or a beam",
+        ),
+        (
+            [*BEAMS, particle(22, 1, m1=3, at=DECAY_VERTEX)],
+            "part_m1 = 3 is none, outside the event or a beam",
+        ),
+        (
+            [
+                *BEAMS,
+                particle(111, 2),
+                particle(22, 1, m1=2, at=DECAY_VERTEX),
+                particle(22, 1, at=OTHER_DECAY_VERTEX),
+            ],
+            "final particle 4 of event 0 lies away from the origin, and its mother"
+            " part_m1 = -1",
+        ),
+        (
             [BEAMS[0], particle(22, 1)],
             "event 0 has 1 beam particles",
+        ),
+        (
+            [*BEAMS, BEAMS[0], particle(22, 1)],
+            "event 0 has 3 beam particles",
         ),
         (
             [
@@ -200,6 +267,18 @@ def test_a_promoted_hadron_is_written_as_final_and_its_decay_left_out() -> None:
                 particle(22, 1, m1=2, at=(0.25, -0.5, 1.75, 2.5)),
             ],
             "daughters of particle 2 in event 0 lie at different positions",
+        ),
+        (
+            [
+                *BEAMS,
+                particle(111, 2),
+                particle(111, 2),
+                particle(22, 1, m1=2, at=DECAY_VERTEX),
+                particle(22, 1, m1=3, at=OTHER_DECAY_VERTEX),
+                particle(22, 1, m1=2, at=DECAY_VERTEX),
+                particle(22, 1, m1=3, at=DECAY_VERTEX),
+            ],
+            "daughters of particle 3 in event 0 lie at different positions",
         ),
     ],
 )
@@ -217,6 +296,26 @@ def test_a_record_not_yet_marked_is_refused() -> None:
         ValueError, match="lacks .*part_final; mark it with StableParticleDefinition"
     ):
         hepevt_arrays(unmarked[0])
+
+
+@pytest.mark.usefixtures("hepmc")
+@pytest.mark.parametrize(
+    ("missing", "message"),
+    [
+        (
+            "part_final",
+            r"lacks part_final; mark it with StableParticleDefinition\.apply first$",
+        ),
+        (EVENT_COLUMN, "lacks event_index$"),
+        ("part_mass", "lacks part_mass$"),
+    ],
+)
+def test_writing_a_record_that_lacks_a_field_is_refused(
+    missing: str, message: str, tmp_path: Path
+) -> None:
+    particles = ak.without_field(record(pi0_to_two_photons()), missing)
+    with pytest.raises(ValueError, match=message):
+        write_hepmc_input([particles], tmp_path / "input.hepmc")
 
 
 def test_parnassus_reads_hepmc_only_from_a_plain_hepmc_file(
@@ -273,9 +372,11 @@ def test_parnassus_reads_the_suffix_in_any_case(tmp_path: Path) -> None:
 
 @pytest.mark.usefixtures("hepmc")
 def test_parnassus_finds_every_particles_recorded_position(tmp_path: Path) -> None:
-    events = record(pi0_to_two_photons(), b_to_partons_to_string())
+    events = record(
+        pi0_to_two_photons(), b_to_psi2s_to_gluons(), two_pi0s_at_two_vertices()
+    )
     path = tmp_path / "input.hepmc"
-    assert write_hepmc_input([events], path) == 2
+    assert write_hepmc_input([events], path) == 3
     positions = _positions_as_parnassus_reads_them(path.read_text())
     for event, read in zip(events, positions, strict=True):
         arrays = hepevt_arrays(event)
@@ -286,9 +387,7 @@ def test_parnassus_finds_every_particles_recorded_position(tmp_path: Path) -> No
 
 @pytest.mark.usefixtures("hepmc")
 def test_chunks_give_the_file_one_array_gives(tmp_path: Path) -> None:
-    events = record(
-        pi0_to_two_photons(), b_to_partons_to_string(), pi0_to_two_photons()
-    )
+    events = record(pi0_to_two_photons(), b_to_psi2s_to_gluons(), pi0_to_two_photons())
     whole, chunked = tmp_path / "whole.hepmc", tmp_path / "chunked.hepmc"
     assert write_hepmc_input([events], whole) == 3
     assert write_hepmc_input([events[:1], events[1:1], events[1:]], chunked) == 3
@@ -298,7 +397,7 @@ def test_chunks_give_the_file_one_array_gives(tmp_path: Path) -> None:
 def test_hepmc3_reads_back_the_record_in_gev_and_mm(
     tmp_path: Path, hepmc: ModuleType
 ) -> None:
-    events = record(pi0_to_two_photons(), b_to_partons_to_string(), first_index=7)
+    events = record(pi0_to_two_photons(), b_to_psi2s_to_gluons(), first_index=7)
     path = tmp_path / "input.hepmc"
     write_hepmc_input([events], path)
     assert "\nU GEV MM\n" in path.read_text()
@@ -316,9 +415,42 @@ def test_hepmc3_reads_back_the_record_in_gev_and_mm(
             np.column_stack([arrays.px, arrays.py, arrays.pz, arrays.e])
         )
         np.testing.assert_array_equal(momenta, expected)
-        displaced = [
+        vertices = np.column_stack([arrays.vx, arrays.vy, arrays.vz, arrays.vt])
+        displaced = (arrays.status == 1) & vertices.any(axis=1)
+        positions = [
             list(p.production_vertex.position)
             for p in event.particles
             if p.status == 1 and any(p.production_vertex.position)
         ]
-        assert len(displaced) == 2
+        np.testing.assert_array_equal(
+            np.float32(positions), np.float32(vertices[displaced])
+        )
+
+
+@pytest.mark.usefixtures("hepmc")
+def test_the_events_before_a_refused_one_stay_in_the_file(tmp_path: Path) -> None:
+    refused = [*BEAMS, particle(22, 1, at=DECAY_VERTEX)]
+    path = tmp_path / "input.hepmc"
+    with pytest.raises(ValueError, match="particle 2 of event 1 lies away"):
+        write_hepmc_input([record(pi0_to_two_photons(), refused)], path)
+    lines = path.read_text().splitlines()
+    assert [line.split()[1] for line in lines if line.startswith("E ")] == ["0"]
+
+
+def test_every_float32_is_read_back_unchanged(
+    tmp_path: Path, hepmc: ModuleType
+) -> None:
+    photon = particle(22, 1, p=(NINE_DIGITS, 0.0, 0.0, NINE_DIGITS))
+    path = tmp_path / "input.hepmc"
+    write_hepmc_input([record([*BEAMS, photon])], path)
+    with hepmc.open(path) as stream:
+        (event,) = list(stream)
+    assert np.float32(event.particles[2].momentum.px) == np.float32(NINE_DIGITS)
+
+
+@pytest.mark.usefixtures("hepmc")
+def test_the_precision_sets_the_digits_after_the_point(tmp_path: Path) -> None:
+    photon = particle(22, 1, p=(NINE_DIGITS, 0.0, 0.0, NINE_DIGITS))
+    path = tmp_path / "input.hepmc"
+    write_hepmc_input([record([*BEAMS, photon])], path, precision=3)
+    assert " 1.035e+01 " in path.read_text()
