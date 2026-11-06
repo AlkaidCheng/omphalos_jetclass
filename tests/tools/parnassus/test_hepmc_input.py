@@ -234,7 +234,8 @@ def _positions_as_parnassus_reads_them(text: str) -> list[list[list[float]]]:
 
     A particle's position is that of the vertex line its parent field names,
     when the line carries one after ``@``; otherwise it is the origin
-    (``data/hepmc.py``, ``_assign_vertices_and_events``, at c9f8bd9e4c).
+    (``_assign_vertices_and_events`` in ``src/parnassus/data/hepmc.py`` at
+    c9f8bd9e4c).
     """
     events: list[list[list[float]]] = []
     vertices: dict[int, list[float]] = {}
@@ -262,6 +263,12 @@ def _positions_as_parnassus_reads_them(text: str) -> list[list[list[float]]]:
 @pytest.fixture
 def hepmc() -> ModuleType:
     return pytest.importorskip("pyhepmc")
+
+
+@pytest.mark.usefixtures("hepmc")
+def test_parnassus_reads_the_suffix_in_any_case(tmp_path: Path) -> None:
+    path = tmp_path / "input.HEPMC"
+    assert write_hepmc_input([record(pi0_to_two_photons())], path) == 1
 
 
 @pytest.mark.usefixtures("hepmc")

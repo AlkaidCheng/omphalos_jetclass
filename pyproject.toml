@@ -41,7 +41,8 @@ dev = [
     "mypy>=1.10",
     "types-PyYAML",
     # Writes the Parnassus input in the tests; Parnassus brings it at run time
-    # (pyhepmc>=2.14.0 in its pyproject.toml, https://github.com/parnassus-hep/parnassus).
+    # (pyhepmc>=2.14.0 in its pyproject.toml at c9f8bd9e4c,
+    # https://github.com/parnassus-hep/parnassus).
     "pyhepmc>=2.14",
 ]
 

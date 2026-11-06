@@ -1,10 +1,11 @@
 """Parnassus's input: the final state of the shower's events as a HepMC3 file.
 
-Parnassus reads HepMC3 ASCII from an uncompressed ``.hepmc`` file, choosing its
-reader by the suffix (``data/__init__.py`` at c9f8bd9e4c,
-https://github.com/parnassus-hep/parnassus). Of each particle it reads the PDG
-id, status, momentum, generated mass and production position, and of each
-event its number; it never follows mother or daughter links. The file
+Parnassus's generate pipeline picks its dataset by the input file's suffix,
+lower-cased, and reads HepMC3 ASCII only from a ``.hepmc`` file, which it opens
+uncompressed (``build_dataset`` in ``src/parnassus/data/__init__.py`` at
+c9f8bd9e4c, https://github.com/parnassus-hep/parnassus). Of each particle it
+reads the PDG id, status, momentum, generated mass and production position, and
+of each event its number; it never follows mother or daughter links. The file
 therefore holds the smallest valid record of each event: the two beams; every
 final particle, with status 1, promoted long-lived particles among them; and,
 once, the mother of each final particle produced away from the origin, with
@@ -13,15 +14,15 @@ its own status.
 Parnassus finds a particle's production position only as the position of the
 vertex line the particle names as its parent; a particle whose parent is
 another particle's number is read at the origin without a warning
-(``data/hepmc.py``, ``_assign_vertices_and_events``). A displaced final
-particle therefore takes its mother as its parent, which makes the mother's
-end a vertex at the daughters' common position, and every other particle takes
-the beams, whose vertex is the origin.
+(``_assign_vertices_and_events`` in ``src/parnassus/data/hepmc.py`` at
+c9f8bd9e4c). A displaced final particle therefore takes its mother as its
+parent, which makes the mother's end a vertex at the daughters' common
+position, and every other particle takes the beams, whose vertex is the origin.
 
-pyhepmc builds each event from these HEPEVT arrays (``GenEvent.from_hepevt``)
-in its default units, GeV and mm, and HepMC3's own writer writes it, so every
-vertex has its incoming particles and every number is in range. pyhepmc is
-imported only by :func:`write_hepmc_input`.
+pyhepmc builds each event from the HEPEVT arrays that :func:`hepevt_arrays`
+returns (``GenEvent.from_hepevt``), in its default units, GeV and mm, and
+HepMC3's own writer writes the event, so the file is in the format HepMC3's
+reader takes. pyhepmc is imported only by :func:`write_hepmc_input`.
 """
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
@@ -32,8 +33,9 @@ import awkward as ak
 import numpy as np
 import numpy.typing as npt
 
-# Parnassus reads HepMC3 ASCII only from a file with this suffix
-# (data/__init__.py at c9f8bd9e4c, https://github.com/parnassus-hep/parnassus).
+# Parnassus's generate pipeline reads HepMC3 ASCII only from a file with this
+# suffix, compared lower-cased (build_dataset in src/parnassus/data/__init__.py
+# at c9f8bd9e4c, https://github.com/parnassus-hep/parnassus).
 HEPMC_SUFFIX = ".hepmc"
 
 # HepMC status codes as Pythia writes them, statusHepMC
@@ -41,8 +43,10 @@ HEPMC_SUFFIX = ".hepmc"
 FINAL_STATUS = 1
 BEAM_STATUS = 4
 
-# Digits after the decimal point of each number: 8 give the 9 significant digits
-# that hold any float32 exactly (FLT_DECIMAL_DIG, ISO C11 5.2.4.2.2).
+# Digits after the decimal point of each number, which HepMC3 writes in exponent
+# form: 8 give 9 significant digits, from which any float32 is read back
+# unchanged (FLT_DECIMAL_DIG of IEEE binary32, 1 + ceil(24 log10 2); ISO C11
+# 5.2.4.2.2).
 DEFAULT_PRECISION = 8
 
 # The fields of the particle record the input is made of.
@@ -114,10 +118,11 @@ def write_hepmc_input(
     Raises
     ------
     ValueError
-        If `path` does not end in ``.hepmc``, or as :func:`hepevt_arrays` does
-        for an event; the events before that one are then in the file.
+        If `path` does not end in ``.hepmc``, in any case, or as
+        :func:`hepevt_arrays` does for an event; the events before that one are
+        then in the file.
     """
-    if path.suffix != HEPMC_SUFFIX:
+    if path.suffix.lower() != HEPMC_SUFFIX:
         raise ValueError(
             f"Parnassus reads HepMC3 only from a file ending in {HEPMC_SUFFIX},"
             f" not {path.name}"
@@ -178,14 +183,14 @@ def hepevt_arrays(event: ak.Record) -> HepevtArrays:
         outside the event or a beam, or whose siblings in the file lie at
         another position.
     """
-    _require_fields(event.fields)
+    _check_fields(event.fields)
     columns = {name: ak.to_numpy(event[name]) for name in PARTICLE_COLUMNS}
     return _event_arrays(int(event[EVENT_COLUMN]), columns)
 
 
 def _events_of(chunk: ak.Array) -> Iterator[HepevtArrays]:
     """Yield the HEPEVT arrays of each event in `chunk`."""
-    _require_fields(chunk.fields)
+    _check_fields(chunk.fields)
     counts = ak.to_numpy(ak.num(chunk["part_pid"], axis=1))
     stops = np.cumsum(counts)
     flat = {
@@ -197,7 +202,7 @@ def _events_of(chunk: ak.Array) -> Iterator[HepevtArrays]:
         yield _event_arrays(int(number), columns)
 
 
-def _require_fields(fields: Sequence[str]) -> None:
+def _check_fields(fields: Sequence[str]) -> None:
     """Refuse a record that lacks a field the input is made of."""
     missing = [name for name in (EVENT_COLUMN, *PARTICLE_COLUMNS) if name not in fields]
     if missing:
