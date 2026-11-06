@@ -1,7 +1,15 @@
 """Walks over directory trees that never follow symbolic links."""
 
 import os
+import sys
 from pathlib import Path
+
+# Whether adding, removing or renaming an entry moves its folder's st_ctime. On
+# Windows st_ctime holds the creation time
+# (https://docs.python.org/3/library/os.html#os.stat_result.st_ctime), and
+# sys.platform is "win32" on every Windows build, 64-bit x86 and ARM included
+# (https://github.com/python/cpython/blob/v3.12.0/PC/pyconfig.h#L321-L325).
+CHANGES_MOVE_CTIME = sys.platform != "win32"
 
 
 def latest_change_ns(path: Path) -> int:

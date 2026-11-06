@@ -104,3 +104,5 @@
   run with many channels also unweights its events from the job seed. (#30)
 - `omphjc simulate` seeds Delphes with the job seed also when the detector card
   sets `RandomSeed` itself. (#37)
+- On Windows, rerunning a stage sets aside what the earlier run left instead of
+  deleting it, since a folder's `ctime` there does not show changes. (#40)

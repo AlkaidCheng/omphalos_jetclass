@@ -11,14 +11,15 @@ forward, and no ordinary tool can set it back. A later run therefore reads the
 ``ctime`` of an artifact and of the folders in it, without keeping a list of
 files, and learns whether anything was added, removed or renamed since the
 seal. Editing a file in place inside a folder changes the file alone and is not
-detected. An artifact that was sealed and shows no such change is deleted; one
-the run cannot confirm as its own, such as one left by a run killed before sealing, is
-moved into ``omphjc-set-aside/`` instead, with its contents. Nothing else in the
-directory is ever touched. What was set aside stays until someone deletes it:
-:func:`set_aside_folders` shows the folders with their sizes and
-:func:`clear_set_aside_folders` deletes them. Stamps guard against mistakes, such as a
-mistyped path or a user's file left in a run's folder; anyone who can write to
-a directory can also edit its stamp.
+detected. On Windows, where ``st_ctime`` is the creation time, no change can be
+seen, so no artifact counts as unchanged. An artifact that was sealed and shows
+no such change is deleted; one the run cannot confirm as its own, such as one
+left by a run killed before sealing, is moved into ``omphjc-set-aside/``
+instead, with its contents. Nothing else in the directory is ever touched. What
+was set aside stays until someone deletes it: :func:`set_aside_folders` shows
+the folders with their sizes and :func:`clear_set_aside_folders` deletes them.
+Stamps guard against mistakes, such as a mistyped path or a user's file left in
+a run's folder; anyone who can write to a directory can also edit its stamp.
 """
 
 import json
@@ -32,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from omphjc import __version__
-from omphjc.filetree import latest_change_ns, tree_size
+from omphjc.filetree import CHANGES_MOVE_CTIME, latest_change_ns, tree_size
 from omphjc.safe_paths import inside, is_occupied, remove_inside
 
 STAMP_FILE = "omphjc-stamp.json"
@@ -186,7 +187,8 @@ def clear_artifacts(
     that was sealed and shows no change since is deleted. Any other artifact
     present, unsealed (as after a run killed before sealing), changed since
     sealing, a symbolic link, or named in `unconfirmed`, is moved with its
-    contents into a new folder under ``omphjc-set-aside/`` in `directory`.
+    contents into a new folder under ``omphjc-set-aside/`` in `directory`, as is
+    every artifact on Windows, where a change cannot be seen.
     Every check runs before anything is moved or deleted, and the stamp
     forgets the cleared artifacts.
 
@@ -236,7 +238,8 @@ def clear_artifacts(
     confirmed = {
         name: path
         for name, path in present.items()
-        if name not in unconfirmed_names
+        if CHANGES_MOVE_CTIME
+        and name not in unconfirmed_names
         and not path.is_symlink()
         and name in stamp.artifacts
         and latest_change_ns(path) <= stamp.artifacts[name]
