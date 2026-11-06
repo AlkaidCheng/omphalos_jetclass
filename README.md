@@ -50,6 +50,11 @@ it:
 | PyYAML | the catalogue |
 | numpy, awkward, uproot | reading event files |
 
+Installing from source compiles a C++ extension, which writes Parnassus's
+input, so it needs a C++17 compiler with a standard library that formats
+floating-point numbers: libstdc++ from GCC 11, libc++ 14 (on macOS, building
+for macOS 13.3 or later), or the library of MSVC 2019 16.4, or a later one.
+
 Generating events also needs three programs, installed separately:
 
 | Program | Stage |
