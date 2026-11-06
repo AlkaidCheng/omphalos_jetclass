@@ -8,9 +8,13 @@
 #include <algorithm>
 #include <charconv>
 #include <cstdint>
+#include <cstring>
+#include <exception>
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
+#include <system_error>
+#include <thread>
 #include <type_traits>
 #include <vector>
 
@@ -255,31 +259,99 @@ Chunk<Real> chunk_of(const Array<int64_t>& counts, const Array<int64_t>& numbers
           x.data(),      y.data(),      z.data(),       t.data()};
 }
 
+// Bytes of text to reserve per particle of the record: Pythia dijet events
+// write about 42.
+constexpr std::size_t kTextPerParticle = 48;
+
 // The text of the chunk's events up to the first refused one, the number of
-// events in it, and the refusal ("" if none).
+// events in it, and the refusal ("" if none). Each of `threads` threads builds
+// and writes a run of consecutive events of about equal particle count, and the
+// runs' texts are joined in order up to the first refusal, so the text does not
+// depend on the number of threads.
 template <typename Real>
 py::tuple format_events(const Array<int64_t>& counts, const Array<int64_t>& numbers,
                         const Array<int32_t>& pid, const Array<int32_t>& status,
                         const Array<int32_t>& m1, const Array<bool>& final, const Array<Real>& px,
                         const Array<Real>& py, const Array<Real>& pz, const Array<Real>& e,
                         const Array<Real>& mass, const Array<Real>& x, const Array<Real>& y,
-                        const Array<Real>& z, const Array<Real>& t, int precision) {
+                        const Array<Real>& z, const Array<Real>& t, int precision, int threads) {
   const Chunk<Real> c =
       chunk_of(counts, numbers, pid, status, m1, final, px, py, pz, e, mass, x, y, z, t);
-  std::string text, error;
-  text.reserve(static_cast<std::size_t>(pid.size()) * 112);
-  py::ssize_t k = 0;
+  if (threads < 1) throw std::invalid_argument("threads must be at least 1");
+  // first[k] is the first row of event k; first[n_events] is past the last.
+  std::vector<int64_t> first(static_cast<std::size_t>(c.n_events) + 1, 0);
+  for (py::ssize_t k = 0; k < c.n_events; ++k) first[k + 1] = first[k] + c.counts[k];
+  const int n_runs =
+      static_cast<int>(std::max<py::ssize_t>(1, std::min<py::ssize_t>(threads, c.n_events)));
+  std::vector<py::ssize_t> bounds(static_cast<std::size_t>(n_runs) + 1, c.n_events);
+  bounds[0] = 0;
+  for (int r = 1; r < n_runs; ++r) {
+    const int64_t target = first.back() * r / n_runs;
+    bounds[r] = std::lower_bound(first.begin(), first.end() - 1, target) - first.begin();
+  }
+  struct Run {
+    std::string text, error;
+    py::ssize_t stop = 0;  // the event the run stopped at
+    bool refused = false;
+    std::exception_ptr failure;
+  };
+  std::vector<Run> runs(static_cast<std::size_t>(n_runs));
   {
     py::gil_scoped_release release;
-    Builder<Real> builder(c);
-    Event event;
-    std::vector<int> vertex_of;
-    for (int64_t base = 0; k < c.n_events; base += c.counts[k], ++k) {
-      if (!builder.build(k, base, event, error)) break;
-      format_event(c, event, precision, vertex_of, text);
+    const auto write_run = [&](int r) {
+      Run& run = runs[r];
+      try {
+        Builder<Real> builder(c);
+        Event event;
+        std::vector<int> vertex_of;
+        run.text.reserve(
+            static_cast<std::size_t>(first[bounds[r + 1]] - first[bounds[r]]) * kTextPerParticle);
+        py::ssize_t k = bounds[r];
+        for (; k < bounds[r + 1]; ++k) {
+          if (!builder.build(k, first[k], event, run.error)) {
+            run.refused = true;
+            break;
+          }
+          format_event(c, event, precision, vertex_of, run.text);
+        }
+        run.stop = k;
+      } catch (...) {
+        run.failure = std::current_exception();
+      }
+    };
+    std::vector<std::thread> pool;
+    for (int r = 1; r < n_runs; ++r) {
+      try {
+        pool.emplace_back(write_run, r);
+      } catch (const std::system_error&) {
+        write_run(r);  // no thread to spare: this one writes the run
+      }
+    }
+    write_run(0);
+    for (auto& thread : pool) thread.join();
+  }
+  std::size_t size = 0;
+  py::ssize_t written = 0;
+  std::string error;
+  int used = 0;  // the runs whose text the result holds
+  while (used < n_runs) {
+    const Run& run = runs[used++];
+    if (run.failure) std::rethrow_exception(run.failure);
+    size += run.text.size();
+    written = run.stop;
+    if (run.refused) {
+      error = run.error;
+      break;
     }
   }
-  return py::make_tuple(py::bytes(text), k, error);
+  PyObject* bytes = PyBytes_FromStringAndSize(nullptr, static_cast<py::ssize_t>(size));
+  if (!bytes) throw py::error_already_set();
+  char* out = PyBytes_AS_STRING(bytes);
+  for (int r = 0; r < used; ++r) {
+    std::memcpy(out, runs[r].text.data(), runs[r].text.size());
+    out += runs[r].text.size();
+  }
+  return py::make_tuple(py::reinterpret_steal<py::bytes>(bytes), written, error);
 }
 
 // The HEPEVT arrays of the chunk's events up to the first refused one, flat
@@ -353,7 +425,8 @@ void bind(py::module_& m) {
         py::arg("m1").noconvert(), py::arg("final").noconvert(), py::arg("px").noconvert(),
         py::arg("py").noconvert(), py::arg("pz").noconvert(), py::arg("e").noconvert(),
         py::arg("mass").noconvert(), py::arg("x").noconvert(), py::arg("y").noconvert(),
-        py::arg("z").noconvert(), py::arg("t").noconvert(), py::arg("precision"));
+        py::arg("z").noconvert(), py::arg("t").noconvert(), py::arg("precision"),
+        py::arg("threads") = 1);
   m.def("hepevt_events", &hepevt_events<Real>, py::arg("counts").noconvert(),
         py::arg("numbers").noconvert(), py::arg("pid").noconvert(), py::arg("status").noconvert(),
         py::arg("m1").noconvert(), py::arg("final").noconvert(), py::arg("px").noconvert(),

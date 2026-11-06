@@ -60,7 +60,8 @@
   long-lived particles the shower decayed, and their decay products as not
   final, as Parnassus expects. (#39)
 - `omphjc.tools.parnassus.hepmc_input.write_hepmc_input` writes the final state
-  of a particle record as the HepMC3 file Parnassus reads. (#41)
+  of a particle record as the HepMC3 file Parnassus reads, on as many threads as
+  `threads` asks. (#41)
 
 ### Changed
 

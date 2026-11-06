@@ -351,3 +351,45 @@ def test_writing_needs_no_pyhepmc(
     assert (
         write_hepmc_input([record(pi0_to_two_photons())], tmp_path / "input.hepmc") == 1
     )
+
+
+@pytest.mark.parametrize("threads", [2, 3, 7, 64])
+def test_the_file_does_not_depend_on_the_number_of_threads(
+    threads: int, tmp_path: Path
+) -> None:
+    events = record(*random_events(np.random.default_rng(13), 120))
+    one, many = tmp_path / "one.hepmc", tmp_path / "many.hepmc"
+    assert write_hepmc_input([events[:50], events[50:]], one) == 120
+    chunks = [events[:50], events[50:]]
+    assert write_hepmc_input(chunks, many, threads=threads) == 120
+    assert many.read_bytes() == one.read_bytes()
+
+
+@pytest.mark.parametrize("threads", [1, 4])
+def test_the_first_refusal_ends_the_file_whatever_the_threads(
+    threads: int, tmp_path: Path
+) -> None:
+    events = [pi0_to_two_photons()] * 40
+    events[11] = [*BEAMS, particle(22, 1, at=DECAY_VERTEX)]
+    events[33] = [BEAMS[0], particle(22, 1)]
+    path = tmp_path / "input.hepmc"
+    with pytest.raises(ValueError, match="particle 2 of event 11 lies away"):
+        write_hepmc_input([record(*events)], path, threads=threads)
+    lines = path.read_text().splitlines()
+    numbers = [int(line.split()[1]) for line in lines if line.startswith("E ")]
+    assert numbers == list(range(11))
+
+
+@pytest.mark.parametrize(
+    ("threads", "error"),
+    [(0, ValueError), (-2, ValueError), (2.0, TypeError), (True, TypeError)],
+)
+def test_a_thread_count_that_is_not_a_positive_integer_is_refused(
+    threads: object, error: type[Exception], tmp_path: Path
+) -> None:
+    with pytest.raises(error, match="threads"):
+        write_hepmc_input(
+            [record(pi0_to_two_photons())],
+            tmp_path / "input.hepmc",
+            threads=threads,  # type: ignore[arg-type]
+        )

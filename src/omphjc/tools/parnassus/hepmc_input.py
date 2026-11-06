@@ -125,7 +125,11 @@ class _Columns(NamedTuple):
 
 
 def write_hepmc_input(
-    chunks: Iterable[ak.Array], path: Path, *, precision: int = DEFAULT_PRECISION
+    chunks: Iterable[ak.Array],
+    path: Path,
+    *,
+    precision: int = DEFAULT_PRECISION,
+    threads: int = 1,
 ) -> int:
     """Write the final state of every event in `chunks` to `path`.
 
@@ -141,6 +145,9 @@ def write_hepmc_input(
         replaced.
     precision : int, optional
         Digits after the decimal point of each number, from 2 to 24.
+    threads : int, optional
+        Threads that build and write the events of each chunk; the file does
+        not depend on their number.
 
     Returns
     -------
@@ -150,10 +157,11 @@ def write_hepmc_input(
     Raises
     ------
     TypeError
-        If `precision` is not an integer.
+        If `precision` or `threads` is not an integer.
     ValueError
         If `path` does not end in ``.hepmc``, in any case, `precision` lies
-        outside 2 to 24, or as :func:`iterate_hepevt_arrays` does for an event;
+        outside 2 to 24, `threads` is below 1, or as :func:`iterate_hepevt_arrays`
+        does for an event;
         the events before that one are then in the file, which ends as a HepMC3
         file does.
     """
@@ -168,13 +176,14 @@ def write_hepmc_input(
         raise ValueError(
             f"HepMC3 writes {low} to {high} digits after the point, not {digits}"
         )
+    workers = require_number(threads, what="threads", kind=int, positive=True)
     written = 0
     with path.open("wb") as output:
         output.write(_HEADER.encode())
         try:
             for chunk in chunks:
                 text, n_events, error = _hepmc_ascii.format_events(
-                    *_columns(chunk), digits
+                    *_columns(chunk), digits, workers
                 )
                 output.write(text)
                 written += n_events

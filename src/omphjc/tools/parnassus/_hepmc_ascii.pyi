@@ -24,6 +24,7 @@ def format_events(
     z: _Reals,
     t: _Reals,
     precision: int,
+    threads: int = 1,
 ) -> tuple[bytes, int, str]: ...
 def hepevt_events(
     counts: npt.NDArray[np.int64],
