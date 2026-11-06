@@ -193,17 +193,20 @@ class StableParticleDefinition:
         candidate = np.zeros(pid.size, dtype=bool)
         candidate[decayed] = np.isin(np.abs(pid[decayed]), long_lived) & ~copied
         # A decay product has a single mother, so part_m1 and part_m2 give its
-        # whole ancestry along decay chains. Each pass follows the links from
-        # the particles the pass before dropped, one generation further, so an
-        # event settles within its particle count, and a cyclic record too,
-        # since a particle is dropped once.
+        # whole ancestry along decay chains. Each pass covers every particle of
+        # the chunk at once: it follows the links from the particles the pass
+        # before dropped, one generation further down, and the walk ends at the
+        # first pass that reaches nothing new, after a few passes in a shower.
+        # An event holds no more generations than particles, and a cyclic record
+        # drops each particle once, so max_passes only bounds the loop.
         with_mother = np.flatnonzero(m1 >= 0)
         mother = event_start[with_mother] + m1[with_mother]
         with_second = np.flatnonzero((m2 >= 0) & (m2 != m1))
         second = event_start[with_second] + m2[with_second]
         dropped = np.zeros_like(candidate)
         frontier = candidate
-        for _ in range(int(counts.max(initial=0)) + 1):
+        max_passes = int(counts.max(initial=0)) + 1
+        for _ in range(max_passes):
             reached = np.zeros_like(candidate)
             reached[with_mother] = frontier[mother]
             reached[with_second] |= frontier[second]
