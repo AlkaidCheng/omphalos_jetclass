@@ -175,23 +175,19 @@ class StableParticleDefinition:
             _flat(particles[name])
             for name in ("part_pid", "part_m1", "part_m2", "part_d1", "part_d2")
         )
+        _check_links(particles, counts, part_m1=m1, part_m2=m2, part_d1=d1, part_d2=d2)
         event_start = np.repeat(np.cumsum(counts) - counts, counts)
-        _check_links(
-            particles,
-            counts,
-            event_start,
-            part_m1=m1,
-            part_m2=m2,
-            part_d1=d1,
-            part_d2=d2,
-        )
-        # Only the particles that decayed are tested further, which are few.
+        # The tests narrow the particles step by step: few decayed, and fewer of
+        # those are of a long-lived species.
         decayed = np.flatnonzero((status == DECAYED_STATUS) & (d1 >= 0))
-        first_daughter = pid[event_start[decayed] + d1[decayed]]
-        copied = (d1[decayed] == d2[decayed]) & (first_daughter == pid[decayed])
         long_lived = np.fromiter(self.long_lived, dtype=np.int64)
+        decayed_long_lived = decayed[np.isin(np.abs(pid[decayed]), long_lived)]
+        first_daughter = pid[event_start[decayed_long_lived] + d1[decayed_long_lived]]
+        copied = (d1[decayed_long_lived] == d2[decayed_long_lived]) & (
+            first_daughter == pid[decayed_long_lived]
+        )
         candidate = np.zeros(pid.size, dtype=bool)
-        candidate[decayed] = np.isin(np.abs(pid[decayed]), long_lived) & ~copied
+        candidate[decayed_long_lived[~copied]] = True
         # A decay product has a single mother, so part_m1 and part_m2 give its
         # whole ancestry along decay chains. Each pass covers every particle of
         # the chunk at once: it follows the links from the particles the pass
@@ -199,30 +195,29 @@ class StableParticleDefinition:
         # first pass that reaches nothing new, after a few passes in a shower.
         # An event holds no more generations than particles, and a cyclic record
         # drops each particle once, so max_passes only bounds the loop.
-        with_mother = np.flatnonzero(m1 >= 0)
-        mother = event_start[with_mother] + m1[with_mother]
+        # A particle without a first mother looks up the padding entry after the
+        # last particle, which is never in the frontier; only the few with a
+        # second mother look that one up.
+        size = pid.size
+        mother = np.where(m1 >= 0, event_start + m1, size)
         with_second = np.flatnonzero((m2 >= 0) & (m2 != m1))
         second = event_start[with_second] + m2[with_second]
+        frontier = np.append(candidate, False)
         dropped = np.zeros_like(candidate)
-        frontier = candidate
         max_passes = int(counts.max(initial=0)) + 1
         for _ in range(max_passes):
-            reached = np.zeros_like(candidate)
-            reached[with_mother] = frontier[mother]
+            reached = frontier[mother]
             reached[with_second] |= frontier[second]
             reached &= ~dropped
             if not reached.any():
                 return candidate & ~dropped, dropped
             dropped |= reached
-            frontier = reached
+            frontier[:size] = reached
         raise ValueError("the mother links did not settle")
 
 
 def _check_links(
-    particles: "ak.Array",
-    counts: "np.ndarray",
-    event_start: "np.ndarray",
-    **links: "np.ndarray",
+    particles: "ak.Array", counts: "np.ndarray", **links: "np.ndarray"
 ) -> None:
     """Refuse a mother or daughter index that points outside its event.
 
@@ -242,29 +237,39 @@ def _check_links(
     """
     import numpy as np
 
-    sizes = np.repeat(counts, counts)
+    # Each event's smallest and largest index are compared with its size.
+    # reduceat reduces from each start to the next and gives an empty event the
+    # value at its start, which belongs to the next event, so it takes only the
+    # starts of the non-empty events.
+    filled = np.flatnonzero(counts)
+    starts = (np.cumsum(counts) - counts)[filled]
     for name, index in links.items():
-        outside = (index < -1) | (index >= sizes)
+        outside = (np.minimum.reduceat(index, starts) < -1) | (
+            np.maximum.reduceat(index, starts) >= counts[filled]
+        )
         if outside.any():
-            row = int(np.argmax(outside))
-            position = int(np.searchsorted(np.cumsum(counts), row, side="right"))
+            first = int(np.argmax(outside))
+            position = int(filled[first])
+            start, size = int(starts[first]), int(counts[position])
+            in_event = index[start : start + size]
+            particle = int(np.argmax((in_event < -1) | (in_event >= size)))
+            value = int(in_event[particle])
             event = (
                 int(particles["event_index"][position])
                 if "event_index" in particles.fields
                 else position
             )
-            size = int(counts[position])
-            advice = _PAST_END_ADVICE if index[row] >= 0 else _BELOW_NONE_ADVICE
+            advice = _PAST_END_ADVICE if value >= 0 else _BELOW_NONE_ADVICE
             raise ValueError(
-                f"{name} of particle {row - int(event_start[row])} in event {event} is"
-                f" {int(index[row])}, outside the event's {size}"
-                f" {'particle' if size == 1 else 'particles'}. {advice}"
+                f"{name} of particle {particle} in event {event} is {value}, outside"
+                f" the event's {size} {'particle' if size == 1 else 'particles'}."
+                f" {advice}"
             )
 
 
 def _flat(column: "ak.Array") -> "np.ndarray":
-    """Return the values of a particle field as one int64 NumPy array."""
+    """Return the values of a particle field as one NumPy array, in its dtype."""
     import awkward as ak
     import numpy as np
 
-    return np.asarray(ak.flatten(column, axis=1), dtype=np.int64)
+    return np.asarray(ak.flatten(column, axis=1))

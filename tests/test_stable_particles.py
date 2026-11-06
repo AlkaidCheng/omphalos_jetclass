@@ -275,6 +275,21 @@ def test_the_refusal_names_the_particle_and_its_event() -> None:
         CMS_DEFINITION.apply(record([particle(310, 2, d1=1, d2=2)]))
 
 
+def test_the_refusal_names_the_first_index_outside_among_empty_events() -> None:
+    events = record(
+        [],
+        [particle(310, 1), particle(211, 1, m1=5)],
+        [],
+        [particle(22, 1, m1=3)],
+        [],
+    )
+    with pytest.raises(
+        ValueError,
+        match="part_m1 of particle 1 in event 1 is 5, outside the event's 2 particles",
+    ):
+        CMS_DEFINITION.apply(events)
+
+
 @pytest.mark.parametrize(
     ("rows", "advice"),
     [
@@ -391,6 +406,24 @@ def test_the_walk_up_the_mothers_agrees_with_one_down_the_daughters() -> None:
     assert final == [marks_of_event[0] for marks_of_event in expected]
     assert promoted == [marks_of_event[1] for marks_of_event in expected]
     assert sum(map(sum, promoted)) > 50
+
+
+@pytest.mark.parametrize("dtype", [np.int16, np.int64])
+def test_the_marks_do_not_depend_on_the_integer_dtype(dtype: type) -> None:
+    rng = np.random.default_rng(7)
+    particles = record(*(_random_event(rng) for _ in range(50)))
+    cast = ak.zip(
+        {
+            name: (
+                particles[name]
+                if name in MOMENTUM_FIELDS
+                else ak.values_astype(particles[name], dtype)
+            )
+            for name in FIELDS
+        },
+        depth_limit=1,
+    )
+    assert marks(cast) == marks(particles)
 
 
 def test_the_last_copy_of_a_carbon_copy_chain_is_promoted() -> None:
