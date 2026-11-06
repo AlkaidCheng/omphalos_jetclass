@@ -268,11 +268,26 @@ def test_the_refusal_names_the_particle_and_its_event() -> None:
         match="part_d1 of particle 0 in event 2 is 2, outside the event's 2 particles",
     ):
         CMS_DEFINITION.apply(events)
-    with pytest.raises(ValueError, match="is 1, outside the event's 1 particle$"):
-        CMS_DEFINITION.apply(record([particle(310, 2, d1=1, d2=2)]))
     events = ak.with_field(events, np.array([7, 8, 9]), "event_index")
     with pytest.raises(ValueError, match="part_d1 of particle 0 in event 9 is 2"):
         CMS_DEFINITION.apply(events)
+    with pytest.raises(ValueError, match=r"is 1, outside the event's 1 particle\. "):
+        CMS_DEFINITION.apply(record([particle(310, 2, d1=1, d2=2)]))
+
+
+@pytest.mark.parametrize(
+    ("rows", "advice"),
+    [
+        ([particle(310, 2, d1=1, d2=2)], "apply the definition before any cut"),
+        ([particle(310, 2, d1=1, d2=2)], "count from 1, as HEPEVT and LHE records"),
+        ([particle(310, 2, d1=-2, d2=-1)], "numbers its particles another way"),
+    ],
+)
+def test_the_refusal_says_what_puts_an_index_outside_its_event(
+    rows: list[dict[str, float]], advice: str
+) -> None:
+    with pytest.raises(ValueError, match=advice):
+        CMS_DEFINITION.apply(record(rows))
 
 
 def test_a_cyclic_record_is_marked_in_finite_passes() -> None:

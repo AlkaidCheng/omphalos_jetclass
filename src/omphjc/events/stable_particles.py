@@ -37,6 +37,20 @@ if TYPE_CHECKING:
 FINAL_STATUS = 1
 DECAYED_STATUS = 2
 
+# What a refusal of a link outside its event advises: for an index past the
+# event's end, and for one below -1.
+_PAST_END_ADVICE = (
+    "This happens when particles were removed after the indices were written:"
+    " apply the definition before any cut, and write a Delphes Particle branch"
+    " from Delphes/allParticles rather than from a filtered array. It also"
+    " happens when the indices count from 1, as HEPEVT and LHE records do, and"
+    " were not converted when the file was read."
+)
+_BELOW_NONE_ADVICE = (
+    "The record numbers its particles another way; its reader must convert the"
+    " indices to positions from 0, with -1 for none."
+)
+
 
 @dataclass(frozen=True)
 class StableParticleDefinition:
@@ -117,6 +131,10 @@ class StableParticleDefinition:
         undecayed keeps its status-1 particles as the final state, and
         applying the definition to the output again gives the same marks.
 
+        Apply the definition to whole events, before any particle is removed:
+        a removed particle leaves the indices of the others unchanged, so they
+        point at the wrong particles or past the end of their event.
+
         Parameters
         ----------
         particles : ak.Array
@@ -132,7 +150,9 @@ class StableParticleDefinition:
         Raises
         ------
         ValueError
-            If a mother or daughter index points outside its event.
+            If a mother or daughter index points outside its event, as one can
+            in a record cut after its indices were written or in indices
+            counted from 1.
         """
         # Imported here so that building a definition loads no array library.
         import awkward as ak
@@ -205,6 +225,17 @@ def _check_links(
 
     The indices are positions in the particle's own event, -1 for none, as
     Delphes writes them (``GenParticle.M1``: Pythia's ``mother1()`` minus 1).
+    A lookup with an index past its event's end would read a particle of the
+    next event, or fail in the last event of a chunk, so such an index is
+    refused. It comes from a record whose particles were removed after the
+    indices were written: by a cut on the particle lists, or by a Delphes card
+    that writes a filtered array, such as a ``StatusPidFilter`` output, whose
+    links still count positions in ``Delphes/allParticles`` (``TreeWriter``
+    copies them unchanged). It also comes from indices counted from 1, as in
+    HEPEVT, LHE files and Pythia's own record, once one of them reaches the
+    event's size. An index below -1, which none of these sources writes, is
+    refused too, since the walk would take it for none. An index that stays
+    in range but points at the wrong particle cannot be seen here.
     """
     import numpy as np
 
@@ -220,10 +251,11 @@ def _check_links(
                 else position
             )
             size = int(counts[position])
+            advice = _PAST_END_ADVICE if index[row] >= 0 else _BELOW_NONE_ADVICE
             raise ValueError(
                 f"{name} of particle {row - int(event_start[row])} in event {event} is"
                 f" {int(index[row])}, outside the event's {size}"
-                f" {'particle' if size == 1 else 'particles'}"
+                f" {'particle' if size == 1 else 'particles'}. {advice}"
             )
 
 
