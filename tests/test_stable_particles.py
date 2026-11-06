@@ -268,6 +268,8 @@ def test_the_refusal_names_the_particle_and_its_event() -> None:
         match="part_d1 of particle 0 in event 2 is 2, outside the event's 2 particles",
     ):
         CMS_DEFINITION.apply(events)
+    with pytest.raises(ValueError, match="is 1, outside the event's 1 particle$"):
+        CMS_DEFINITION.apply(record([particle(310, 2, d1=1, d2=2)]))
     events = ak.with_field(events, np.array([7, 8, 9]), "event_index")
     with pytest.raises(ValueError, match="part_d1 of particle 0 in event 9 is 2"):
         CMS_DEFINITION.apply(events)

@@ -219,10 +219,11 @@ def _check_links(
                 if "event_index" in particles.fields
                 else position
             )
+            size = int(counts[position])
             raise ValueError(
                 f"{name} of particle {row - int(event_start[row])} in event {event} is"
-                f" {int(index[row])}, outside the event's {int(counts[position])}"
-                " particles"
+                f" {int(index[row])}, outside the event's {size}"
+                f" {'particle' if size == 1 else 'particles'}"
             )
 
 
