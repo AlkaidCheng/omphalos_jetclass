@@ -9,7 +9,8 @@ import pytest
 from omphjc.events.stable_particles import StableParticleDefinition
 from omphjc.tools.parnassus.hepmc_input import (
     EVENT_COLUMN,
-    hepevt_arrays,
+    HepevtArrays,
+    iterate_hepevt_arrays,
     write_hepmc_input,
 )
 
@@ -94,6 +95,12 @@ def record(*events: list[dict[str, float]], first_index: int = 0) -> ak.Array:
     return ak.zip(columns, depth_limit=1)
 
 
+def arrays_of(rows: list[dict[str, float]]) -> HepevtArrays:
+    """Return the HEPEVT arrays of the one event `rows`."""
+    (arrays,) = iterate_hepevt_arrays(record(rows))
+    return arrays
+
+
 def pi0_to_two_photons() -> list[dict[str, float]]:
     """A pi0 decayed at a tiny distance from the origin, as its tau0 makes Pythia do."""
     photon_at = (1.5e-5, -2.5e-5, 3.5e-5, 4.5e-5)
@@ -137,7 +144,7 @@ def two_pi0s_at_two_vertices() -> list[dict[str, float]]:
 
 
 def test_a_displaced_photon_hangs_from_its_mothers_decay_vertex() -> None:
-    arrays = hepevt_arrays(record(pi0_to_two_photons())[0])
+    arrays = arrays_of(pi0_to_two_photons())
     assert arrays.pid.tolist() == [2212, 2212, 22, 111, 22, 22]
     assert arrays.status.tolist() == [4, 4, 1, 2, 1, 1]
     assert arrays.parents.tolist() == [
@@ -156,7 +163,7 @@ def test_a_displaced_photon_hangs_from_its_mothers_decay_vertex() -> None:
 
 
 def test_string_hadrons_hang_from_the_first_gluon_and_the_onium_is_left_out() -> None:
-    arrays = hepevt_arrays(record(b_to_psi2s_to_gluons())[0])
+    arrays = arrays_of(b_to_psi2s_to_gluons())
     assert arrays.pid.tolist() == [2212, 2212, 521, 321, 21, 211, -211]
     assert arrays.status.tolist() == [4, 4, 2, 1, 71, 1, 1]
     assert arrays.parents.tolist() == [
@@ -174,7 +181,7 @@ def test_string_hadrons_hang_from_the_first_gluon_and_the_onium_is_left_out() ->
 
 
 def test_the_photons_of_two_decays_hang_from_their_own_mothers_vertex() -> None:
-    arrays = hepevt_arrays(record(two_pi0s_at_two_vertices())[0])
+    arrays = arrays_of(two_pi0s_at_two_vertices())
     assert arrays.parents.tolist() == [
         [-1, -1],
         [-1, -1],
@@ -192,16 +199,15 @@ def test_the_photons_of_two_decays_hang_from_their_own_mothers_vertex() -> None:
 
 
 def test_the_event_number_momenta_and_masses_are_the_records() -> None:
-    event = record(pi0_to_two_photons(), first_index=41)[0]
-    arrays = hepevt_arrays(event)
+    (arrays,) = iterate_hepevt_arrays(record(pi0_to_two_photons(), first_index=41))
     assert arrays.event_number == 41
     assert arrays.px.dtype == np.float64 and arrays.pid.dtype == np.int32
     assert arrays.m[3] == np.float32(0.135)
-    assert arrays.e.tolist() == [6500.0, 6500.0, 4.0, 4.0, 4.0, 4.0]
+    assert arrays.en.tolist() == [6500.0, 6500.0, 4.0, 4.0, 4.0, 4.0]
 
 
 def test_the_beams_come_first_wherever_the_record_holds_them() -> None:
-    arrays = hepevt_arrays(record([particle(22, 1), *BEAMS])[0])
+    arrays = arrays_of([particle(22, 1), *BEAMS])
     assert arrays.pid.tolist() == [2212, 2212, 22]
     assert arrays.status.tolist() == [4, 4, 1]
     assert arrays.parents.tolist() == [[-1, -1], [-1, -1], [0, 1]]
@@ -214,8 +220,7 @@ def test_a_promoted_hadron_is_written_as_final_and_its_decay_left_out() -> None:
         particle(211, 1, m1=2, at=DECAY_VERTEX),
         particle(-211, 1, m1=2, at=DECAY_VERTEX),
     ]
-    marked = K0S_DEFINITION.apply(record(k0s_decay))
-    arrays = hepevt_arrays(marked[0])
+    (arrays,) = iterate_hepevt_arrays(K0S_DEFINITION.apply(record(k0s_decay)))
     assert arrays.pid.tolist() == [2212, 2212, 310]
     assert arrays.status.tolist() == [4, 4, 1]
     assert arrays.parents.tolist() == [[-1, -1], [-1, -1], [0, 1]]
@@ -287,7 +292,7 @@ def test_an_event_parnassus_cannot_read_is_refused_without_pyhepmc(
 ) -> None:
     monkeypatch.setitem(sys.modules, "pyhepmc", None)
     with pytest.raises(ValueError, match=message):
-        hepevt_arrays(record(rows)[0])
+        arrays_of(rows)
 
 
 def test_a_record_not_yet_marked_is_refused() -> None:
@@ -295,7 +300,7 @@ def test_a_record_not_yet_marked_is_refused() -> None:
     with pytest.raises(
         ValueError, match="lacks .*part_final; mark it with StableParticleDefinition"
     ):
-        hepevt_arrays(unmarked[0])
+        list(iterate_hepevt_arrays(unmarked))
 
 
 @pytest.mark.usefixtures("hepmc")
@@ -378,8 +383,7 @@ def test_parnassus_finds_every_particles_recorded_position(tmp_path: Path) -> No
     path = tmp_path / "input.hepmc"
     assert write_hepmc_input([events], path) == 3
     positions = _positions_as_parnassus_reads_them(path.read_text())
-    for event, read in zip(events, positions, strict=True):
-        arrays = hepevt_arrays(event)
+    for arrays, read in zip(iterate_hepevt_arrays(events), positions, strict=True):
         expected = np.column_stack([arrays.vx, arrays.vy, arrays.vz, arrays.vt])
         np.testing.assert_array_equal(np.float32(read), np.float32(expected))
     assert np.float32(positions[1][3]).tolist() == list(DECAY_VERTEX)
@@ -404,15 +408,14 @@ def test_hepmc3_reads_back_the_record_in_gev_and_mm(
     with hepmc.open(path) as stream:
         read = list(stream)
     assert [event.event_number for event in read] == [7, 8]
-    for event, written in zip(read, events, strict=True):
-        arrays = hepevt_arrays(written)
+    for event, arrays in zip(read, iterate_hepevt_arrays(events), strict=True):
         assert event.momentum_unit == hepmc.Units.GEV
         assert event.length_unit == hepmc.Units.MM
         assert [p.pid for p in event.particles] == arrays.pid.tolist()
         assert [p.status for p in event.particles] == arrays.status.tolist()
         momenta = np.float32([list(p.momentum) for p in event.particles])
         expected = np.float32(
-            np.column_stack([arrays.px, arrays.py, arrays.pz, arrays.e])
+            np.column_stack([arrays.px, arrays.py, arrays.pz, arrays.en])
         )
         np.testing.assert_array_equal(momenta, expected)
         vertices = np.column_stack([arrays.vx, arrays.vy, arrays.vz, arrays.vt])

@@ -19,10 +19,11 @@ c9f8bd9e4c). A displaced final particle therefore takes its mother as its
 parent, which makes the mother's end a vertex at the daughters' common
 position, and every other particle takes the beams, whose vertex is the origin.
 
-pyhepmc builds each event from the HEPEVT arrays that :func:`hepevt_arrays`
-returns (``GenEvent.from_hepevt``), in its default units, GeV and mm, and
-HepMC3's own writer writes the event, so the file is in the format HepMC3's
-reader takes. pyhepmc is imported only by :func:`write_hepmc_input`.
+pyhepmc builds each event from the HEPEVT arrays that
+:func:`iterate_hepevt_arrays` yields (``GenEvent.from_hepevt``), in its default
+units, GeV and mm, and HepMC3's own writer writes the event, so the file is in
+the format HepMC3's reader takes. pyhepmc is imported only by
+:func:`write_hepmc_input`.
 """
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
@@ -72,9 +73,10 @@ _POSITION_COLUMNS = ("part_x", "part_y", "part_z", "part_t")
 class HepevtArrays(NamedTuple):
     """One event's record as the HEPEVT arrays ``GenEvent.from_hepevt`` takes.
 
-    The two beams come first. Indices count from 0, and ``parents`` holds the
-    first and last parent of each particle, ``(-1, -1)`` for none. Momenta and
-    masses are in GeV, positions in mm, the time as c t.
+    The fields are named as the parameters of ``from_hepevt``. The two beams
+    come first. Indices count from 0, and ``parents`` holds the first and last
+    parent of each particle, ``(-1, -1)`` for none. Momenta and masses are in
+    GeV, positions in mm, the time as c t.
     """
 
     event_number: int
@@ -83,7 +85,7 @@ class HepevtArrays(NamedTuple):
     px: npt.NDArray[np.float64]
     py: npt.NDArray[np.float64]
     pz: npt.NDArray[np.float64]
-    e: npt.NDArray[np.float64]
+    en: npt.NDArray[np.float64]
     m: npt.NDArray[np.float64]
     parents: npt.NDArray[np.int64]
     vx: npt.NDArray[np.float64]
@@ -119,8 +121,8 @@ def write_hepmc_input(
     ------
     ValueError
         If `path` does not end in ``.hepmc``, in any case, or as
-        :func:`hepevt_arrays` does for an event; the events before that one are
-        then in the file.
+        :func:`iterate_hepevt_arrays` does for an event; the events before that
+        one are then in the file.
     """
     if path.suffix.lower() != HEPMC_SUFFIX:
         raise ValueError(
@@ -132,31 +134,16 @@ def write_hepmc_input(
     written = 0
     with pyhepmc.open(path, "w", precision=precision) as output:
         for chunk in chunks:
-            for arrays in _events_of(chunk):
+            for arrays in iterate_hepevt_arrays(chunk):
                 event = pyhepmc.GenEvent()
-                event.from_hepevt(
-                    arrays.event_number,
-                    px=arrays.px,
-                    py=arrays.py,
-                    pz=arrays.pz,
-                    en=arrays.e,
-                    m=arrays.m,
-                    pid=arrays.pid,
-                    status=arrays.status,
-                    parents=arrays.parents,
-                    vx=arrays.vx,
-                    vy=arrays.vy,
-                    vz=arrays.vz,
-                    vt=arrays.vt,
-                    fortran=False,
-                )
+                event.from_hepevt(**arrays._asdict(), fortran=False)
                 output.write(event)
                 written += 1
     return written
 
 
-def hepevt_arrays(event: ak.Record) -> HepevtArrays:
-    """Return the record Parnassus reads of one event, as HEPEVT arrays.
+def iterate_hepevt_arrays(particles: ak.Array) -> Iterator[HepevtArrays]:
+    """Yield the record Parnassus reads of each event, as HEPEVT arrays.
 
     The event number is the event's ``event_index``. A final particle takes
     status 1. A final particle at the origin takes the beams as its parents; one
@@ -166,37 +153,31 @@ def hepevt_arrays(event: ak.Record) -> HepevtArrays:
 
     Parameters
     ----------
-    event : ak.Record
-        One event of a particle record marked with
+    particles : ak.Array
+        Particle records marked with
         :meth:`omphjc.events.stable_particles.StableParticleDefinition.apply`.
 
-    Returns
-    -------
+    Yields
+    ------
     HepevtArrays
-        The arrays, beams first.
+        The arrays of each event in turn, beams first.
 
     Raises
     ------
     ValueError
-        If the event lacks a field, has other than two beams (status 4), or
-        holds a final particle away from the origin whose mother is missing,
-        outside the event or a beam, or whose siblings in the file lie at
-        another position.
+        If the record lacks a field, or an event has other than two beams
+        (status 4) or holds a final particle away from the origin whose mother
+        is missing, outside the event or a beam, or whose displaced siblings lie
+        at another position.
     """
-    _check_fields(event.fields)
-    columns = {name: ak.to_numpy(event[name]) for name in PARTICLE_COLUMNS}
-    return _event_arrays(int(event[EVENT_COLUMN]), columns)
-
-
-def _events_of(chunk: ak.Array) -> Iterator[HepevtArrays]:
-    """Yield the HEPEVT arrays of each event in `chunk`."""
-    _check_fields(chunk.fields)
-    counts = ak.to_numpy(ak.num(chunk["part_pid"], axis=1))
+    _check_fields(particles.fields)
+    counts = ak.to_numpy(ak.num(particles["part_pid"], axis=1))
     stops = np.cumsum(counts)
     flat = {
-        name: ak.to_numpy(ak.flatten(chunk[name], axis=1)) for name in PARTICLE_COLUMNS
+        name: ak.to_numpy(ak.flatten(particles[name], axis=1))
+        for name in PARTICLE_COLUMNS
     }
-    numbers = ak.to_numpy(chunk[EVENT_COLUMN])
+    numbers = ak.to_numpy(particles[EVENT_COLUMN])
     for number, start, stop in zip(numbers, stops - counts, stops, strict=True):
         columns = {name: values[start:stop] for name, values in flat.items()}
         yield _event_arrays(int(number), columns)
@@ -253,7 +234,7 @@ def _event_arrays(number: int, columns: Mapping[str, npt.NDArray[Any]]) -> Hepev
         px=values("part_px"),
         py=values("part_py"),
         pz=values("part_pz"),
-        e=values("part_e"),
+        en=values("part_e"),
         m=values("part_mass"),
         parents=parents,
         vx=out_position[:, 0],
@@ -274,21 +255,22 @@ def _check_mothers(
     """Refuse displaced final particles that cannot hang from their mother's vertex."""
     unusable = (mothers < 0) | (mothers >= n_particles) | np.isin(mothers, beams)
     if np.any(unusable):
-        particle = int(displaced[np.argmax(unusable)])
+        first = int(np.argmax(unusable))
         raise ValueError(
-            f"final particle {particle} of event {number} lies away from the"
-            f" origin, and its mother part_m1 = {int(mothers[np.argmax(unusable)])}"
-            f" is none, outside the event or a beam, so no vertex can give its"
+            f"final particle {int(displaced[first])} of event {number} lies away"
+            f" from the origin, and its mother part_m1 = {int(mothers[first])} is"
+            f" none, outside the event or a beam, so no vertex can give its"
             f" position"
         )
-    order = np.argsort(mothers, kind="stable")
-    grouped = position[displaced[order]]
-    first = np.r_[True, mothers[order][1:] != mothers[order][:-1]]
-    group_start = np.maximum.accumulate(np.where(first, np.arange(order.size), 0))
-    moved = np.any(grouped != grouped[group_start], axis=1)
+    # Each daughter is compared with the first daughter of its mother.
+    _, first_daughter, sibling_of = np.unique(
+        mothers, return_index=True, return_inverse=True
+    )
+    vertex = position[displaced[first_daughter]][sibling_of]
+    moved = np.any(position[displaced] != vertex, axis=1)
     if np.any(moved):
-        mother = int(mothers[order][np.argmax(moved)])
         raise ValueError(
-            f"the daughters of particle {mother} in event {number} lie at"
-            f" different positions, but share their mother's one decay vertex"
+            f"the daughters of particle {int(mothers[np.argmax(moved)])} in event"
+            f" {number} lie at different positions, but share their mother's one"
+            f" decay vertex"
         )
