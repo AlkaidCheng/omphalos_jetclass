@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <system_error>
 #include <thread>
+#include <utility>
 
 namespace omphjc::parnassus {
 namespace {
@@ -43,7 +44,7 @@ struct KeptParticles {
 };
 
 template <typename Real>
-bool is_displaced_final(const Chunk<Real>& chunk, std::int64_t row) {
+[[nodiscard]] bool is_displaced_final(const Chunk<Real>& chunk, std::int64_t row) {
   return chunk.is_final[row] &&
          (chunk.x[row] != 0 || chunk.y[row] != 0 || chunk.z[row] != 0 || chunk.t[row] != 0);
 }
@@ -58,8 +59,8 @@ class ParticleSelector {
   // Fills `kept` with the kept particles of the chunk's event `event_index`,
   // whose first row is `first_row`; on a refusal, returns false with the
   // reason in `error`.
-  bool select(std::int64_t event_index, std::int64_t first_row, KeptParticles& kept,
-              std::string& error) {
+  [[nodiscard]] bool select(std::int64_t event_index, std::int64_t first_row, KeptParticles& kept,
+                            std::string& error) {
     const int particle_count = static_cast<int>(chunk_.particle_counts[event_index]);
     kept.event_number = chunk_.event_numbers[event_index];
     if (kept.event_number < kMinEventNumber || kept.event_number > kMaxEventNumber) {
@@ -72,14 +73,15 @@ class ParticleSelector {
     int beam_count = 0;
     for (int i = 0; i < particle_count; ++i) {
       if (chunk_.status[first_row + i] == kBeamStatus) {
-        if (beam_count < 2) beams[beam_count] = i;
+        if (beam_count < 2) {
+          beams[beam_count] = i;
+        }
         ++beam_count;
       }
     }
     if (beam_count != 2) {
-      error = "event " + std::to_string(kept.event_number) + " has " +
-              std::to_string(beam_count) + " beam particles (status " +
-              std::to_string(kBeamStatus) + "), not 2";
+      error = "event " + std::to_string(kept.event_number) + " has " + std::to_string(beam_count) +
+              " beam particles (status " + std::to_string(kBeamStatus) + "), not 2";
       return false;
     }
     displaced_finals_.clear();
@@ -120,7 +122,9 @@ class ParticleSelector {
     }
     // The beams, then the final particles and the mothers in record order.
     is_mother_.assign(particle_count, 0);
-    for (int mother : displaced_mothers_) is_mother_[mother] = 1;
+    for (int mother : displaced_mothers_) {
+      is_mother_[mother] = 1;
+    }
     kept_index_.assign(particle_count, -1);
     kept.rows.clear();
     kept.mothers.clear();
@@ -130,29 +134,31 @@ class ParticleSelector {
       kept.mothers.push_back(kNoMother);
     }
     for (int i = 0; i < particle_count; ++i) {
-      if (i == beams[0] || i == beams[1] || !(chunk_.is_final[first_row + i] || is_mother_[i]))
+      if (i == beams[0] || i == beams[1] || !(chunk_.is_final[first_row + i] || is_mother_[i])) {
         continue;
+      }
       kept_index_[i] = static_cast<int>(kept.rows.size());
       kept.rows.push_back(first_row + i);
       kept.mothers.push_back(kBeamMothers);
     }
     for (std::size_t j = 0; j < kept.rows.size(); ++j) {
       const std::int64_t row = kept.rows[j];
-      if (kept.mothers[j] == kBeamMothers && is_displaced_final(chunk_, row))
+      if (kept.mothers[j] == kBeamMothers && is_displaced_final(chunk_, row)) {
         kept.mothers[j] = kept_index_[chunk_.mother[row]];
+      }
     }
     return true;
   }
 
  private:
-  bool has_finite_position(std::int64_t row) const {
+  [[nodiscard]] bool has_finite_position(std::int64_t row) const {
     return std::isfinite(chunk_.x[row]) && std::isfinite(chunk_.y[row]) &&
            std::isfinite(chunk_.z[row]) && std::isfinite(chunk_.t[row]);
   }
 
-  bool at_same_position(std::int64_t a, std::int64_t b) const {
-    return chunk_.x[a] == chunk_.x[b] && chunk_.y[a] == chunk_.y[b] &&
-           chunk_.z[a] == chunk_.z[b] && chunk_.t[a] == chunk_.t[b];
+  [[nodiscard]] bool at_same_position(std::int64_t a, std::int64_t b) const {
+    return chunk_.x[a] == chunk_.x[b] && chunk_.y[a] == chunk_.y[b] && chunk_.z[a] == chunk_.z[b] &&
+           chunk_.t[a] == chunk_.t[b];
   }
 
   const Chunk<Real>& chunk_;
@@ -201,10 +207,14 @@ void format_event(const Chunk<Real>& chunk, const KeptParticles& kept, int preci
   int vertex_count = 0;
   for (std::size_t j = 0; j < kept_count; ++j) {
     const int mother = kept.mothers[j];
-    if (mother == kNoMother) continue;
+    if (mother == kNoMother) {
+      continue;
+    }
     int& vertex_id =
         vertex_ids[mother == kBeamMothers ? kept_count : static_cast<std::size_t>(mother)];
-    if (vertex_id == 0) vertex_id = -++vertex_count;
+    if (vertex_id == 0) {
+      vertex_id = -++vertex_count;
+    }
   }
   out += "E ";
   append_int(out, kept.event_number);
@@ -260,11 +270,14 @@ void format_event(const Chunk<Real>& chunk, const KeptParticles& kept, int preci
 
 template <typename Real>
 EventText format_events(const Chunk<Real>& chunk, int precision, int thread_count) {
-  if (thread_count < 1) throw std::invalid_argument("threads must be at least 1");
+  if (thread_count < 1) {
+    throw std::invalid_argument("threads must be at least 1");
+  }
   // first_rows[k] is the first row of event k; first_rows[n_events] is past the last.
   std::vector<std::int64_t> first_rows(static_cast<std::size_t>(chunk.n_events) + 1, 0);
-  for (std::int64_t k = 0; k < chunk.n_events; ++k)
+  for (std::int64_t k = 0; k < chunk.n_events; ++k) {
     first_rows[k + 1] = first_rows[k] + chunk.particle_counts[k];
+  }
   const int run_count = static_cast<int>(
       std::max<std::int64_t>(1, std::min<std::int64_t>(thread_count, chunk.n_events)));
   // Run r writes events run_bounds[r] to run_bounds[r + 1], excluded.
@@ -288,9 +301,9 @@ EventText format_events(const Chunk<Real>& chunk, int precision, int thread_coun
       ParticleSelector<Real> selector(chunk);
       KeptParticles kept;
       std::vector<int> vertex_ids;
-      run.text.reserve(static_cast<std::size_t>(first_rows[run_bounds[r + 1]] -
-                                                first_rows[run_bounds[r]]) *
-                       kBytesPerParticle);
+      run.text.reserve(
+          static_cast<std::size_t>(first_rows[run_bounds[r + 1]] - first_rows[run_bounds[r]]) *
+          kBytesPerParticle);
       std::int64_t k = run_bounds[r];
       for (; k < run_bounds[r + 1]; ++k) {
         if (!selector.select(k, first_rows[k], kept, run.error)) {
@@ -313,10 +326,14 @@ EventText format_events(const Chunk<Real>& chunk, int precision, int thread_coun
     }
   }
   write_run(0);
-  for (auto& worker : workers) worker.join();
+  for (auto& worker : workers) {
+    worker.join();
+  }
   EventText text;
   for (Run& run : runs) {
-    if (run.failure) std::rethrow_exception(run.failure);
+    if (run.failure) {
+      std::rethrow_exception(run.failure);
+    }
     text.pieces.push_back(std::move(run.text));
     text.n_events = run.stop_event;
     if (run.refused) {
@@ -334,7 +351,9 @@ HepevtArrays to_hepevt(const Chunk<Real>& chunk) {
   HepevtArrays arrays;
   std::int64_t k = 0;
   for (std::int64_t first_row = 0; k < chunk.n_events; first_row += chunk.particle_counts[k], ++k) {
-    if (!selector.select(k, first_row, kept, arrays.error)) break;
+    if (!selector.select(k, first_row, kept, arrays.error)) {
+      break;
+    }
     arrays.particle_counts.push_back(static_cast<std::int64_t>(kept.rows.size()));
     for (std::size_t j = 0; j < kept.rows.size(); ++j) {
       const std::int64_t row = kept.rows[j];
