@@ -7,10 +7,13 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <initializer_list>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -26,6 +29,11 @@ namespace {
 // (https://pythia8.web.cern.ch/manuals/pythia8318/ParticleProperties.html).
 constexpr int kFinalStatus = 1;
 constexpr int kBeamStatus = 4;
+
+// HepMC3 keeps an event's number as an int (GenEvent::event_number,
+// include/HepMC3/GenEvent.h at 3.3.1).
+constexpr int64_t kMinEventNumber = std::numeric_limits<int>::min();
+constexpr int64_t kMaxEventNumber = std::numeric_limits<int>::max();
 
 // How a kept particle is produced: a beam has no production vertex, any other
 // particle comes from the beams' vertex or from its mother's decay vertex.
@@ -75,6 +83,12 @@ class Builder {
   bool build(py::ssize_t k, int64_t base, Event& event, std::string& error) {
     const int n = static_cast<int>(c_.counts[k]);
     event.number = c_.numbers[k];
+    if (event.number < kMinEventNumber || event.number > kMaxEventNumber) {
+      error = "event_index " + std::to_string(event.number) +
+              " does not fit HepMC3's event number, an int from " +
+              std::to_string(kMinEventNumber) + " to " + std::to_string(kMaxEventNumber);
+      return false;
+    }
     int beams[2] = {-1, -1};
     int n_beams = 0;
     for (int i = 0; i < n; ++i) {
@@ -97,6 +111,11 @@ class Builder {
       }
     }
     for (std::size_t j = 0; j < displaced_.size(); ++j) {
+      if (!finite_position(base + displaced_[j])) {
+        error = "final particle " + std::to_string(displaced_[j]) + " of event " +
+                std::to_string(event.number) + " lies at a position that is not finite";
+        return false;
+      }
       const int mother = mothers_[j];
       if (mother < 0 || mother >= n || mother == beams[0] || mother == beams[1]) {
         error = "final particle " + std::to_string(displaced_[j]) + " of event " +
@@ -144,6 +163,11 @@ class Builder {
   }
 
  private:
+  bool finite_position(int64_t row) const {
+    return std::isfinite(c_.x[row]) && std::isfinite(c_.y[row]) && std::isfinite(c_.z[row]) &&
+           std::isfinite(c_.t[row]);
+  }
+
   bool same_position(int64_t a, int64_t b) const {
     return c_.x[a] == c_.x[b] && c_.y[a] == c_.y[b] && c_.z[a] == c_.z[b] && c_.t[a] == c_.t[b];
   }
@@ -158,9 +182,17 @@ void put_int(std::string& out, int64_t value) {
   out.append(buffer, std::to_chars(buffer, buffer + sizeof buffer, value).ptr);
 }
 
-// One number as WriterAscii's " %.<precision>e" prints it.
+// One number as WriterAscii's " %.<precision>e" prints it. std::to_chars gives
+// printf's digits for a finite number, but spells some NaNs otherwise (macOS's
+// libc++ writes a negative NaN as -nan(ind)), so a number that is not finite
+// is printed as WriterAscii prints it, with snprintf.
 void put_real(std::string& out, double value, int precision) {
   char buffer[64];
+  if (!std::isfinite(value)) {
+    const int n = std::snprintf(buffer, sizeof buffer, " %.*e", precision, value);
+    out.append(buffer, static_cast<std::size_t>(n));
+    return;
+  }
   buffer[0] = ' ';
   out.append(buffer, std::to_chars(buffer + 1, buffer + sizeof buffer, value,
                                    std::chars_format::scientific, precision)

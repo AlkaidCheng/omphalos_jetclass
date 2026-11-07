@@ -1,3 +1,4 @@
+import math
 import sys
 from pathlib import Path
 
@@ -15,7 +16,9 @@ from parnassus_records import (
     pi0_to_two_photons,
     random_events,
     record,
+    reference_record,
     two_pi0s_at_two_vertices,
+    with_a_fault,
 )
 
 from omphjc.events.stable_particles import StableParticleDefinition
@@ -393,3 +396,132 @@ def test_a_thread_count_that_is_not_a_positive_integer_is_refused(
             tmp_path / "input.hepmc",
             threads=threads,  # type: ignore[arg-type]
         )
+
+
+def _yielded_until_refused(
+    particles: ak.Array,
+) -> tuple[list[HepevtArrays], str | None]:
+    """Return the events iterate_hepevt_arrays yields, and its refusal if any."""
+    yielded: list[HepevtArrays] = []
+    try:
+        for arrays in iterate_hepevt_arrays(particles):
+            yielded.append(arrays)
+    except ValueError as error:
+        return yielded, str(error)
+    return yielded, None
+
+
+def _same_record(arrays: HepevtArrays, expected: dict[str, object]) -> None:
+    assert arrays.pid.tolist() == expected["pid"]
+    assert arrays.status.tolist() == expected["status"]
+    assert arrays.parents.tolist() == expected["parents"]
+    positions = np.column_stack([arrays.vx, arrays.vy, arrays.vz, arrays.vt])
+    assert np.float32(positions).tolist() == expected["positions"]
+
+
+@pytest.mark.parametrize("seed", [21, 22, 23])
+def test_the_records_follow_the_rules_written_out_particle_by_particle(
+    seed: int,
+) -> None:
+    events = random_events(np.random.default_rng(seed), 100)
+    yielded, refusal = _yielded_until_refused(record(*events, first_index=5))
+    assert refusal is None
+    for number, (arrays, rows) in enumerate(zip(yielded, events, strict=True), 5):
+        expected = reference_record(rows, number)
+        assert isinstance(expected, dict)
+        _same_record(arrays, expected)
+
+
+@pytest.mark.parametrize("seed", range(30))
+def test_an_event_that_breaks_a_rule_ends_the_records_as_written_out(
+    seed: int,
+) -> None:
+    rng = np.random.default_rng(seed)
+    events = with_a_fault(rng, random_events(rng, 12))
+    expected = [reference_record(rows, number) for number, rows in enumerate(events)]
+    first_refused = next(k for k, item in enumerate(expected) if isinstance(item, str))
+    yielded, refusal = _yielded_until_refused(record(*events))
+    assert refusal is not None and refusal.startswith(str(expected[first_refused]))
+    assert len(yielded) == first_refused
+    for arrays, item in zip(yielded, expected, strict=False):
+        assert isinstance(item, dict)
+        _same_record(arrays, item)
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+@pytest.mark.parametrize("daughters", [1, 2])
+def test_a_position_that_is_not_finite_is_refused(value: float, daughters: int) -> None:
+    at = (value, 1.0, 1.0, 1.0)
+    rows = [
+        *BEAMS,
+        particle(111, 2),
+        *(particle(22, 1, m1=2, at=at) for _ in range(daughters)),
+    ]
+    with pytest.raises(
+        ValueError, match="particle 3 of event 0 lies at a position that is not finite"
+    ):
+        arrays_of(rows)
+
+
+def test_an_event_index_beyond_an_int_ends_the_file_at_that_event(
+    tmp_path: Path,
+) -> None:
+    events = record(*[pi0_to_two_photons()] * 3, first_index=2**31 - 2)
+    path = tmp_path / "input.hepmc"
+    with pytest.raises(ValueError, match="event_index 2147483648 does not fit"):
+        write_hepmc_input([events], path)
+    lines = path.read_text().splitlines()
+    assert [line.split()[1] for line in lines if line.startswith("E ")] == [
+        "2147483646",
+        "2147483647",
+    ]
+
+
+def test_the_events_after_a_refused_one_are_neither_written_nor_yielded(
+    tmp_path: Path,
+) -> None:
+    refused = [*BEAMS, particle(22, 1, at=DECAY_VERTEX)]
+    events = record(
+        pi0_to_two_photons(), pi0_to_two_photons(), refused, pi0_to_two_photons()
+    )
+    yielded, refusal = _yielded_until_refused(events)
+    assert [arrays.event_number for arrays in yielded] == [0, 1]
+    assert refusal is not None and "event 2" in refusal
+    path = tmp_path / "input.hepmc"
+    with pytest.raises(ValueError, match="event 2"):
+        write_hepmc_input([events], path)
+    lines = path.read_text().splitlines()
+    assert [line.split()[1] for line in lines if line.startswith("E ")] == ["0", "1"]
+
+
+def test_a_float64_record_keeps_its_digits(tmp_path: Path) -> None:
+    photon = particle(22, 1, p=(0.1, 0.0, 0.0, 0.1))
+    double = record([*BEAMS, photon], real=np.float64)
+    single = record([*BEAMS, photon])
+    mixed = ak.with_field(single, double["part_px"], "part_px")
+    for particles in (double, mixed):
+        path = tmp_path / "input.hepmc"
+        write_hepmc_input([particles], path, precision=16)
+        assert " 1.0000000000000001e-01 " in path.read_text()
+
+
+def test_an_existing_file_is_replaced(tmp_path: Path) -> None:
+    path, once = tmp_path / "input.hepmc", tmp_path / "once.hepmc"
+    write_hepmc_input([record(*[pi0_to_two_photons()] * 5)], path)
+    write_hepmc_input([record(pi0_to_two_photons())], path)
+    write_hepmc_input([record(pi0_to_two_photons())], once)
+    assert path.read_bytes() == once.read_bytes()
+
+
+def test_fields_of_different_lengths_are_refused() -> None:
+    particles = record(pi0_to_two_photons())
+    shorter = ak.Array([[1.0, 2.0]])
+    broken = ak.zip(
+        {
+            name: shorter if name == "part_px" else particles[name]
+            for name in particles.fields
+        },
+        depth_limit=1,
+    )
+    with pytest.raises(ValueError, match="every particle column"):
+        list(iterate_hepevt_arrays(broken))

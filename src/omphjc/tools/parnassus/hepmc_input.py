@@ -55,10 +55,6 @@ _FOOTER = "HepMC::Asciiv3-END_EVENT_LISTING\n\n"
 DEFAULT_PRECISION = 8
 PRECISION_RANGE = (2, 24)
 
-# HepMC3 keeps an event's number as an int (GenEvent::event_number,
-# include/HepMC3/GenEvent.h at 3.3.1).
-_EVENT_NUMBER_RANGE = (np.iinfo(np.int32).min, np.iinfo(np.int32).max)
-
 # The fields of the particle record the input is made of, by the type the
 # extension takes them as.
 EVENT_COLUMN = "event_index"
@@ -219,8 +215,10 @@ def iterate_hepevt_arrays(particles: ak.Array) -> Iterator[HepevtArrays]:
     ValueError
         If the record lacks a field, an event's ``event_index`` does not fit an
         int, or an event has other than two beams (status 4) or holds a final
-        particle away from the origin whose mother is missing, outside the
-        event or a beam, or whose displaced siblings lie at another position.
+        particle away from the origin whose position is not finite, whose
+        mother is missing, outside the event or a beam, or whose displaced
+        siblings lie at another position. The events before that one are
+        yielded first.
     """
     columns = _columns(particles)
     arrays = _hepmc_ascii.hepevt_events(*columns)
@@ -257,13 +255,6 @@ def _columns(particles: ak.Array) -> _Columns:
     _check_fields(particles.fields)
     counts = ak.to_numpy(ak.num(particles["part_pid"], axis=1)).astype(np.int64)
     numbers = np.asarray(ak.to_numpy(particles[EVENT_COLUMN]), dtype=np.int64)
-    low, high = _EVENT_NUMBER_RANGE
-    outside = (numbers < low) | (numbers > high)
-    if outside.any():
-        raise ValueError(
-            f"event_index {int(numbers[np.argmax(outside)])} does not fit HepMC3's"
-            f" event number, an int from {low} to {high}"
-        )
     flat = {
         name: ak.to_numpy(ak.flatten(particles[name], axis=1))
         for name in PARTICLE_COLUMNS

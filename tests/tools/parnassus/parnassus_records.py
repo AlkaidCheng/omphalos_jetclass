@@ -1,5 +1,6 @@
 """Particle records for the tests of Parnassus's input."""
 
+import math
 from typing import Any
 
 import awkward as ak
@@ -234,3 +235,92 @@ def random_events(
             )
         events.append(rows)
     return events
+
+
+POSITION_FIELDS = ("part_x", "part_y", "part_z", "part_t")
+
+
+def reference_record(rows: list[dict[str, Any]], number: int) -> dict[str, Any] | str:
+    """Return what the writer keeps of one event, by its rules taken particle by
+    particle, or the start of the message that refuses the event.
+
+    Positions are compared as the record stores them, in float32.
+    """
+
+    def at(i: int) -> tuple[float, ...]:
+        return tuple(float(np.float32(rows[i][name])) for name in POSITION_FIELDS)
+
+    if not -(2**31) <= number < 2**31:
+        return f"event_index {number} does not fit"
+    beams = [i for i, row in enumerate(rows) if row["part_status"] == 4]
+    if len(beams) != 2:
+        return f"event {number} has {len(beams)} beam particles"
+    displaced = [i for i, row in enumerate(rows) if row["part_final"] and any(at(i))]
+    for i in displaced:
+        if not all(math.isfinite(value) for value in at(i)):
+            return f"final particle {i} of event {number} lies at a position that is not finite"
+        mother = rows[i]["part_m1"]
+        if mother < 0 or mother >= len(rows) or mother in beams:
+            return f"final particle {i} of event {number} lies away from the origin"
+    first: dict[int, int] = {}
+    for i in displaced:
+        mother = rows[i]["part_m1"]
+        if mother in first and at(i) != at(first[mother]):
+            return f"the daughters of particle {mother} in event {number} lie at different positions"
+        first.setdefault(mother, i)
+    mothers = {rows[i]["part_m1"] for i in displaced}
+    others = [
+        i
+        for i in range(len(rows))
+        if i not in beams and (rows[i]["part_final"] or i in mothers)
+    ]
+    kept = beams + others
+    index = {row: j for j, row in enumerate(kept)}
+    return {
+        "pid": [rows[i]["part_pid"] for i in kept],
+        "status": [
+            1 if j >= 2 and rows[i]["part_final"] else rows[i]["part_status"]
+            for j, i in enumerate(kept)
+        ],
+        "parents": [[-1, -1]] * 2
+        + [
+            [index[rows[i]["part_m1"]]] * 2 if i in displaced else [0, 1]
+            for i in others
+        ],
+        "positions": [list(at(i)) if i in displaced else [0.0] * 4 for i in kept],
+    }
+
+
+def with_a_fault(
+    rng: np.random.Generator, events: list[list[dict[str, Any]]]
+) -> list[list[dict[str, Any]]]:
+    """Return a copy of `events` in which one event breaks one rule of the writer."""
+    faulty = [[dict(row) for row in event] for event in events]
+    while True:
+        rows = faulty[int(rng.integers(len(faulty)))]
+        displaced = [
+            i
+            for i, row in enumerate(rows)
+            if row["part_final"] and any(row[name] for name in POSITION_FIELDS)
+        ]
+        kind = int(rng.integers(4))
+        if kind == 0:
+            beam = next(i for i, row in enumerate(rows) if row["part_status"] == 4)
+            rows[beam]["part_status"] = 1 if rng.random() < 0.5 else 2
+            return faulty
+        if kind == 1 and displaced:
+            beam = next(i for i, row in enumerate(rows) if row["part_status"] == 4)
+            mothers = (-1, beam, len(rows))
+            rows[int(rng.choice(displaced))]["part_m1"] = int(rng.choice(mothers))
+            return faulty
+        siblings = [
+            i
+            for i in displaced
+            if sum(rows[j]["part_m1"] == rows[i]["part_m1"] for j in displaced) > 1
+        ]
+        if kind == 2 and siblings:
+            rows[int(rng.choice(siblings))]["part_x"] += 1.0
+            return faulty
+        if kind == 3 and displaced:
+            rows[int(rng.choice(displaced))]["part_y"] = math.nan
+            return faulty

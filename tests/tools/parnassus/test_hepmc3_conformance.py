@@ -121,6 +121,18 @@ def test_the_file_is_the_one_hepmc3_writes(
     assert _after_version(text) == _after_version(theirs.read_text())
 
 
+def test_numbers_that_are_not_finite_are_written_as_hepmc3_writes_them(
+    tmp_path: Path, hepmc3: ModuleType
+) -> None:
+    negative_nan = float(-np.float32("nan"))
+    momenta = (negative_nan, float("nan"), float("inf"), float("-inf"))
+    particles = record([*BEAMS, particle(22, 1, p=momenta, mass=negative_nan)])
+    ours, theirs = tmp_path / "ours.hepmc", tmp_path / "hepmc3.hepmc"
+    write_hepmc_input([particles], ours)
+    write_with_hepmc3(hepmc3, list(iterate_hepevt_arrays(particles)), theirs, 8)
+    assert _after_version(ours.read_text()) == _after_version(theirs.read_text())
+
+
 def test_a_promoted_hadron_is_written_as_hepmc3_writes_it(
     tmp_path: Path, hepmc3: ModuleType
 ) -> None:
