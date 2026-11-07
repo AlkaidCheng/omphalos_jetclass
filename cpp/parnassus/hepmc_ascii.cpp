@@ -34,6 +34,11 @@ constexpr int kBeamMothers = -1;
 // write about 42.
 constexpr std::size_t kBytesPerParticle = 48;
 
+// WriterAscii::set_precision takes 2 to 24 digits after the point
+// (src/WriterAscii.cc at 3.3.1); append_real's buffer holds a number at 24.
+constexpr int kMinPrecision = 2;
+constexpr int kMaxPrecision = 24;
+
 // The particles of one event that the file keeps, in file order, the beams
 // first: each one's row in the chunk, and its mother as an index in `rows`,
 // kBeamMothers or kNoMother.
@@ -270,6 +275,11 @@ void format_event(const Chunk<Real>& chunk, const KeptParticles& kept, int preci
 
 template <typename Real>
 EventText format_events(const Chunk<Real>& chunk, int precision, int thread_count) {
+  if (precision < kMinPrecision || precision > kMaxPrecision) {
+    throw std::invalid_argument("precision must lie in " + std::to_string(kMinPrecision) + " to " +
+                                std::to_string(kMaxPrecision) + ", not " +
+                                std::to_string(precision));
+  }
   if (thread_count < 1) {
     throw std::invalid_argument("threads must be at least 1");
   }

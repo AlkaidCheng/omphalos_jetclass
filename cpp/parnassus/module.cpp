@@ -4,7 +4,9 @@
 #include <cstdint>
 #include <cstring>
 #include <initializer_list>
+#include <limits>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include <pybind11/numpy.h>
@@ -18,6 +20,9 @@ namespace {
 
 template <typename T>
 using Array = pybind11::array_t<T, pybind11::array::c_style>;
+
+// The core counts and indexes the particles of an event with an int.
+constexpr std::int64_t kMaxParticleCount = std::numeric_limits<int>::max();
 
 // The chunk the arrays hold, once they are one-dimensional and every particle
 // column holds sum(particle_counts) values.
@@ -34,10 +39,12 @@ template <typename Real>
   }
   std::int64_t n_particles = 0;
   for (pybind11::ssize_t k = 0; k < particle_counts.size(); ++k) {
-    if (particle_counts.data()[k] < 0) {
-      throw std::invalid_argument("particle_counts must not be negative");
+    const std::int64_t particle_count = particle_counts.data()[k];
+    if (particle_count < 0 || particle_count > kMaxParticleCount) {
+      throw std::invalid_argument("particle_counts must lie in 0 to " +
+                                  std::to_string(kMaxParticleCount));
     }
-    n_particles += particle_counts.data()[k];
+    n_particles += particle_count;
   }
   for (const pybind11::array* column : std::initializer_list<const pybind11::array*>{
            &pid, &status, &mother, &is_final, &px, &py, &pz, &e, &mass, &x, &y, &z, &t}) {

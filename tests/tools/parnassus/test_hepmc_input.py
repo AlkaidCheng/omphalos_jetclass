@@ -22,6 +22,7 @@ from parnassus_records import (
 )
 
 from omphjc.events.stable_particles import StableParticleDefinition
+from omphjc.tools.parnassus import _hepmc_ascii
 from omphjc.tools.parnassus.hepmc_input import (
     EVENT_COLUMN,
     HepevtArrays,
@@ -308,6 +309,38 @@ def test_a_precision_hepmc3_does_not_write_is_refused(
             tmp_path / "input.hepmc",
             precision=precision,
         )
+
+
+def _format_empty_events(
+    particle_counts: list[int], precision: int
+) -> tuple[bytes, int, str]:
+    """Call the extension on events of `particle_counts` particles, with every
+    particle column empty."""
+    integers = np.zeros(0, dtype=np.int32)
+    reals = np.zeros(0, dtype=np.float32)
+    return _hepmc_ascii.format_events(
+        np.array(particle_counts, dtype=np.int64),
+        np.arange(len(particle_counts), dtype=np.int64),
+        integers,
+        integers,
+        integers,
+        np.zeros(0, dtype=np.bool_),
+        *(reals,) * 9,
+        precision,
+    )
+
+
+@pytest.mark.parametrize("precision", [1, 25, 100])
+def test_the_extension_refuses_a_precision_hepmc3_does_not_write(
+    precision: int,
+) -> None:
+    with pytest.raises(ValueError, match=f"in 2 to 24, not {precision}"):
+        _format_empty_events([], precision)
+
+
+def test_the_extension_refuses_an_event_of_more_particles_than_an_int_counts() -> None:
+    with pytest.raises(ValueError, match="particle_counts must lie in 0 to 2147483647"):
+        _format_empty_events([2**31], 8)
 
 
 @pytest.mark.parametrize("precision", [8.0, True])

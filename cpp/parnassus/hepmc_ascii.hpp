@@ -76,10 +76,11 @@ struct HepevtArrays {
  * so the text does not depend on the number of threads.
  *
  * @param chunk        The events.
- * @param precision    Digits after the decimal point of each number.
+ * @param precision    Digits after the decimal point of each number, from 2 to 24.
  * @param thread_count The number of threads.
  * @return The text of the events up to the first refused one.
- * @throws std::invalid_argument If @p thread_count is below 1.
+ * @throws std::invalid_argument If @p precision lies outside 2 to 24 or
+ *         @p thread_count is below 1.
  */
 template <typename Real>
 [[nodiscard]] EventText format_events(const Chunk<Real>& chunk, int precision, int thread_count);
