@@ -28,11 +28,15 @@ def _set_macos_target() -> None:
 if sys.platform == "darwin":
     _set_macos_target()
 
+# The C++ sources live in cpp/, one directory per tool, apart from the Python
+# package in src/; each extension is built into its tool's package.
 setup(
     ext_modules=[
         Pybind11Extension(
             "omphjc.tools.parnassus._hepmc_ascii",
-            ["src/omphjc/tools/parnassus/_hepmc_ascii.cpp"],
+            ["cpp/parnassus/module.cpp", "cpp/parnassus/hepmc_ascii.cpp"],
+            include_dirs=["cpp"],
+            depends=["cpp/parnassus/hepmc_ascii.hpp"],
             cxx_std=17,
         )
     ],
