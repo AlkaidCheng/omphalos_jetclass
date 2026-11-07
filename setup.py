@@ -9,23 +9,24 @@ from setuptools import setup
 
 # The extension formats numbers with floating-point std::to_chars, which macOS's
 # libc++ provides from macOS 13.3 on (below it, clang reports "is unavailable:
-# introduced in macOS 13.3"). pybind11 sets no target of its own once
-# MACOSX_DEPLOYMENT_TARGET is set. A wheel's tag keeps only the major version
+# introduced in macOS 13.3"). pybind11 adds a target of 10.14 unless
+# MACOSX_DEPLOYMENT_TARGET is set, so it is always set, to the higher of 13.3 and
+# the target given or Python's. A wheel's tag keeps only the major version
 # (macosx_13_0), so a wheel built for others needs a target of 14.0.
 MACOS_MINIMUM = (13, 3)
 
 
-def _raise_macos_target() -> None:
+def _set_macos_target() -> None:
     target = os.environ.get("MACOSX_DEPLOYMENT_TARGET") or sysconfig.get_config_var(
         "MACOSX_DEPLOYMENT_TARGET"
     )
     version = tuple(int(part) for part in str(target or "0").split("."))
-    if version < MACOS_MINIMUM:
-        os.environ["MACOSX_DEPLOYMENT_TARGET"] = ".".join(map(str, MACOS_MINIMUM))
+    chosen = max(version, MACOS_MINIMUM)
+    os.environ["MACOSX_DEPLOYMENT_TARGET"] = ".".join(map(str, chosen))
 
 
 if sys.platform == "darwin":
-    _raise_macos_target()
+    _set_macos_target()
 
 setup(
     ext_modules=[
