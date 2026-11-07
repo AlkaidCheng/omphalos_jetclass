@@ -24,146 +24,161 @@ constexpr int kBeamStatus = 4;
 constexpr std::int64_t kMinEventNumber = std::numeric_limits<int>::min();
 constexpr std::int64_t kMaxEventNumber = std::numeric_limits<int>::max();
 
-// How a kept particle is produced: a beam has no production vertex, any other
-// particle comes from the beams' vertex or from its mother's decay vertex.
-constexpr int kBeam = -2;
-constexpr int kFromBeams = -1;
+// The mother of a kept particle when it is not another kept particle: a beam
+// has none, and a particle produced at the origin has the two beams.
+constexpr int kNoMother = -2;
+constexpr int kBeamMothers = -1;
 
 // Bytes of text to reserve per particle of the record: Pythia dijet events
 // write about 42.
-constexpr std::size_t kTextPerParticle = 48;
+constexpr std::size_t kBytesPerParticle = 48;
 
-// One event of the input: its kept particles in file order, the beams first.
-struct Event {
-  std::int64_t number = 0;
-  std::vector<std::int64_t> rows;  // each kept particle's row in the chunk
-  std::vector<int> source;         // kBeam, kFromBeams, or the mother's index in rows
+// The particles of one event that the file keeps, in file order, the beams
+// first: each one's row in the chunk, and its mother as an index in `rows`,
+// kBeamMothers or kNoMother.
+struct KeptParticles {
+  std::int64_t event_number = 0;
+  std::vector<std::int64_t> rows;
+  std::vector<int> mothers;
 };
 
 template <typename Real>
-bool displaced(const Chunk<Real>& c, std::int64_t row) {
-  return c.final[row] && (c.x[row] != 0 || c.y[row] != 0 || c.z[row] != 0 || c.t[row] != 0);
+bool is_displaced_final(const Chunk<Real>& chunk, std::int64_t row) {
+  return chunk.is_final[row] &&
+         (chunk.x[row] != 0 || chunk.y[row] != 0 || chunk.z[row] != 0 || chunk.t[row] != 0);
 }
 
-// Builds events, reusing its buffers from one event to the next.
+// Selects the kept particles of events, reusing its buffers from one event to
+// the next.
 template <typename Real>
-class Builder {
+class ParticleSelector {
  public:
-  explicit Builder(const Chunk<Real>& chunk) : c_(chunk) {}
+  explicit ParticleSelector(const Chunk<Real>& chunk) : chunk_(chunk) {}
 
-  // Fills `event` with event k, whose first row is `base`; on a refusal,
-  // returns false with the reason in `error`.
-  bool build(std::int64_t k, std::int64_t base, Event& event, std::string& error) {
-    const int n = static_cast<int>(c_.counts[k]);
-    event.number = c_.numbers[k];
-    if (event.number < kMinEventNumber || event.number > kMaxEventNumber) {
-      error = "event_index " + std::to_string(event.number) +
+  // Fills `kept` with the kept particles of the chunk's event `event_index`,
+  // whose first row is `first_row`; on a refusal, returns false with the
+  // reason in `error`.
+  bool select(std::int64_t event_index, std::int64_t first_row, KeptParticles& kept,
+              std::string& error) {
+    const int particle_count = static_cast<int>(chunk_.particle_counts[event_index]);
+    kept.event_number = chunk_.event_numbers[event_index];
+    if (kept.event_number < kMinEventNumber || kept.event_number > kMaxEventNumber) {
+      error = "event_index " + std::to_string(kept.event_number) +
               " does not fit HepMC3's event number, an int from " +
               std::to_string(kMinEventNumber) + " to " + std::to_string(kMaxEventNumber);
       return false;
     }
     int beams[2] = {-1, -1};
-    int n_beams = 0;
-    for (int i = 0; i < n; ++i) {
-      if (c_.status[base + i] == kBeamStatus) {
-        if (n_beams < 2) beams[n_beams] = i;
-        ++n_beams;
+    int beam_count = 0;
+    for (int i = 0; i < particle_count; ++i) {
+      if (chunk_.status[first_row + i] == kBeamStatus) {
+        if (beam_count < 2) beams[beam_count] = i;
+        ++beam_count;
       }
     }
-    if (n_beams != 2) {
-      error = "event " + std::to_string(event.number) + " has " + std::to_string(n_beams) +
-              " beam particles (status " + std::to_string(kBeamStatus) + "), not 2";
+    if (beam_count != 2) {
+      error = "event " + std::to_string(kept.event_number) + " has " +
+              std::to_string(beam_count) + " beam particles (status " +
+              std::to_string(kBeamStatus) + "), not 2";
       return false;
     }
-    displaced_.clear();
-    mothers_.clear();
-    for (int i = 0; i < n; ++i) {
-      if (displaced(c_, base + i)) {
-        displaced_.push_back(i);
-        mothers_.push_back(c_.m1[base + i]);
+    displaced_finals_.clear();
+    displaced_mothers_.clear();
+    for (int i = 0; i < particle_count; ++i) {
+      if (is_displaced_final(chunk_, first_row + i)) {
+        displaced_finals_.push_back(i);
+        displaced_mothers_.push_back(chunk_.mother[first_row + i]);
       }
     }
-    for (std::size_t j = 0; j < displaced_.size(); ++j) {
-      if (!finite_position(base + displaced_[j])) {
-        error = "final particle " + std::to_string(displaced_[j]) + " of event " +
-                std::to_string(event.number) + " lies at a position that is not finite";
+    for (std::size_t j = 0; j < displaced_finals_.size(); ++j) {
+      if (!has_finite_position(first_row + displaced_finals_[j])) {
+        error = "final particle " + std::to_string(displaced_finals_[j]) + " of event " +
+                std::to_string(kept.event_number) + " lies at a position that is not finite";
         return false;
       }
-      const int mother = mothers_[j];
-      if (mother < 0 || mother >= n || mother == beams[0] || mother == beams[1]) {
-        error = "final particle " + std::to_string(displaced_[j]) + " of event " +
-                std::to_string(event.number) +
+      const int mother = displaced_mothers_[j];
+      if (mother < 0 || mother >= particle_count || mother == beams[0] || mother == beams[1]) {
+        error = "final particle " + std::to_string(displaced_finals_[j]) + " of event " +
+                std::to_string(kept.event_number) +
                 " lies away from the origin, and its mother part_m1 = " + std::to_string(mother) +
                 " is none, outside the event or a beam, so no vertex can give its position";
         return false;
       }
     }
     // Each displaced daughter must lie where its mother's first one does.
-    first_daughter_.assign(n, -1);
-    for (std::size_t j = 0; j < displaced_.size(); ++j) {
-      int& first = first_daughter_[mothers_[j]];
+    first_displaced_daughter_.assign(particle_count, -1);
+    for (std::size_t j = 0; j < displaced_finals_.size(); ++j) {
+      int& first = first_displaced_daughter_[displaced_mothers_[j]];
       if (first < 0) {
-        first = displaced_[j];
-      } else if (!same_position(base + displaced_[j], base + first)) {
-        error = "the daughters of particle " + std::to_string(mothers_[j]) + " in event " +
-                std::to_string(event.number) +
+        first = displaced_finals_[j];
+      } else if (!at_same_position(first_row + displaced_finals_[j], first_row + first)) {
+        error = "the daughters of particle " + std::to_string(displaced_mothers_[j]) +
+                " in event " + std::to_string(kept.event_number) +
                 " lie at different positions, but share their mother's one decay vertex";
         return false;
       }
     }
     // The beams, then the final particles and the mothers in record order.
-    is_mother_.assign(n, 0);
-    for (int mother : mothers_) is_mother_[mother] = 1;
-    index_.assign(n, -1);
-    event.rows.clear();
-    event.source.clear();
+    is_mother_.assign(particle_count, 0);
+    for (int mother : displaced_mothers_) is_mother_[mother] = 1;
+    kept_index_.assign(particle_count, -1);
+    kept.rows.clear();
+    kept.mothers.clear();
     for (int beam : beams) {
-      index_[beam] = static_cast<int>(event.rows.size());
-      event.rows.push_back(base + beam);
-      event.source.push_back(kBeam);
+      kept_index_[beam] = static_cast<int>(kept.rows.size());
+      kept.rows.push_back(first_row + beam);
+      kept.mothers.push_back(kNoMother);
     }
-    for (int i = 0; i < n; ++i) {
-      if (i == beams[0] || i == beams[1] || !(c_.final[base + i] || is_mother_[i])) continue;
-      index_[i] = static_cast<int>(event.rows.size());
-      event.rows.push_back(base + i);
-      event.source.push_back(kFromBeams);
+    for (int i = 0; i < particle_count; ++i) {
+      if (i == beams[0] || i == beams[1] || !(chunk_.is_final[first_row + i] || is_mother_[i]))
+        continue;
+      kept_index_[i] = static_cast<int>(kept.rows.size());
+      kept.rows.push_back(first_row + i);
+      kept.mothers.push_back(kBeamMothers);
     }
-    for (std::size_t j = 0; j < event.rows.size(); ++j) {
-      const std::int64_t row = event.rows[j];
-      if (event.source[j] == kFromBeams && displaced(c_, row)) event.source[j] = index_[c_.m1[row]];
+    for (std::size_t j = 0; j < kept.rows.size(); ++j) {
+      const std::int64_t row = kept.rows[j];
+      if (kept.mothers[j] == kBeamMothers && is_displaced_final(chunk_, row))
+        kept.mothers[j] = kept_index_[chunk_.mother[row]];
     }
     return true;
   }
 
  private:
-  bool finite_position(std::int64_t row) const {
-    return std::isfinite(c_.x[row]) && std::isfinite(c_.y[row]) && std::isfinite(c_.z[row]) &&
-           std::isfinite(c_.t[row]);
+  bool has_finite_position(std::int64_t row) const {
+    return std::isfinite(chunk_.x[row]) && std::isfinite(chunk_.y[row]) &&
+           std::isfinite(chunk_.z[row]) && std::isfinite(chunk_.t[row]);
   }
 
-  bool same_position(std::int64_t a, std::int64_t b) const {
-    return c_.x[a] == c_.x[b] && c_.y[a] == c_.y[b] && c_.z[a] == c_.z[b] && c_.t[a] == c_.t[b];
+  bool at_same_position(std::int64_t a, std::int64_t b) const {
+    return chunk_.x[a] == chunk_.x[b] && chunk_.y[a] == chunk_.y[b] &&
+           chunk_.z[a] == chunk_.z[b] && chunk_.t[a] == chunk_.t[b];
   }
 
-  const Chunk<Real>& c_;
-  std::vector<int> displaced_, mothers_, first_daughter_, index_;
+  const Chunk<Real>& chunk_;
+  // Per displaced final particle of the event: its index and its mother's.
+  std::vector<int> displaced_finals_, displaced_mothers_;
+  // Per particle of the event: its first displaced daughter, whether it is the
+  // mother of one, and its index in the kept rows (-1 for none).
+  std::vector<int> first_displaced_daughter_;
   std::vector<char> is_mother_;
+  std::vector<int> kept_index_;
 };
 
-void put_int(std::string& out, std::int64_t value) {
+void append_int(std::string& out, std::int64_t value) {
   char buffer[24];
   out.append(buffer, std::to_chars(buffer, buffer + sizeof buffer, value).ptr);
 }
 
-// One number as WriterAscii's " %.<precision>e" prints it. std::to_chars gives
-// printf's digits for a finite number, but spells some NaNs otherwise (macOS's
-// libc++ writes a negative NaN as -nan(ind)), so a number that is not finite
-// is printed as WriterAscii prints it, with snprintf.
-void put_real(std::string& out, double value, int precision) {
+// Appends one number as WriterAscii's " %.<precision>e" prints it.
+// std::to_chars gives printf's digits for a finite number, but spells some NaNs
+// otherwise (macOS's libc++ writes a negative NaN as -nan(ind)), so a number
+// that is not finite is printed as WriterAscii prints it, with snprintf.
+void append_real(std::string& out, double value, int precision) {
   char buffer[64];
   if (!std::isfinite(value)) {
-    const int n = std::snprintf(buffer, sizeof buffer, " %.*e", precision, value);
-    out.append(buffer, static_cast<std::size_t>(n));
+    const int length = std::snprintf(buffer, sizeof buffer, " %.*e", precision, value);
+    out.append(buffer, static_cast<std::size_t>(length));
     return;
   }
   buffer[0] = ' ';
@@ -172,67 +187,71 @@ void put_real(std::string& out, double value, int precision) {
                          .ptr);
 }
 
-// Appends the text of `event` as WriterAscii::write_event writes it: the event
+// Appends the text of `kept` as WriterAscii::write_event writes it: the event
 // and unit lines, then each particle in turn, with its production vertex's
 // line before the first particle that vertex produces. A particle names its
 // vertex, numbered -1, -2, ... in the order the vertices appear, as its parent.
 template <typename Real>
-void format_event(const Chunk<Real>& c, const Event& event, int precision,
-                  std::vector<int>& vertex_of, std::string& out) {
-  const std::size_t n = event.rows.size();
-  vertex_of.assign(n + 1, 0);  // by mother index; the last entry is the beams' vertex
-  int n_vertices = 0;
-  for (std::size_t j = 0; j < n; ++j) {
-    const int source = event.source[j];
-    if (source == kBeam) continue;
-    int& vertex = vertex_of[source == kFromBeams ? n : static_cast<std::size_t>(source)];
-    if (vertex == 0) vertex = -++n_vertices;
+void format_event(const Chunk<Real>& chunk, const KeptParticles& kept, int precision,
+                  std::vector<int>& vertex_ids, std::string& out) {
+  const std::size_t kept_count = kept.rows.size();
+  // The id of each mother's vertex, by its index in kept.rows; the last entry
+  // is the beams' vertex.
+  vertex_ids.assign(kept_count + 1, 0);
+  int vertex_count = 0;
+  for (std::size_t j = 0; j < kept_count; ++j) {
+    const int mother = kept.mothers[j];
+    if (mother == kNoMother) continue;
+    int& vertex_id =
+        vertex_ids[mother == kBeamMothers ? kept_count : static_cast<std::size_t>(mother)];
+    if (vertex_id == 0) vertex_id = -++vertex_count;
   }
   out += "E ";
-  put_int(out, event.number);
+  append_int(out, kept.event_number);
   out += ' ';
-  put_int(out, n_vertices);
+  append_int(out, vertex_count);
   out += ' ';
-  put_int(out, static_cast<std::int64_t>(n));
+  append_int(out, static_cast<std::int64_t>(kept_count));
   out += "\nU GEV MM\n";
-  int written = 0;  // vertices written so far, which are numbered in order
-  for (std::size_t j = 0; j < n; ++j) {
-    const std::int64_t row = event.rows[j];
-    const int source = event.source[j];
-    int parent = 0;
-    if (source != kBeam) {
-      parent = vertex_of[source == kFromBeams ? n : static_cast<std::size_t>(source)];
-      if (-parent > written) {
-        ++written;
+  int vertices_written = 0;  // the vertices are written in the order they are numbered
+  for (std::size_t j = 0; j < kept_count; ++j) {
+    const std::int64_t row = kept.rows[j];
+    const int mother = kept.mothers[j];
+    int parent_vertex = 0;
+    if (mother != kNoMother) {
+      parent_vertex =
+          vertex_ids[mother == kBeamMothers ? kept_count : static_cast<std::size_t>(mother)];
+      if (-parent_vertex > vertices_written) {
+        ++vertices_written;
         out += "V ";
-        put_int(out, parent);
-        if (source == kFromBeams) {
+        append_int(out, parent_vertex);
+        if (mother == kBeamMothers) {
           out += " 0 [1,2]\n";
         } else {
           out += " 0 [";
-          put_int(out, source + 1);
+          append_int(out, mother + 1);
           out += "] @";
-          put_real(out, c.x[row], precision);
-          put_real(out, c.y[row], precision);
-          put_real(out, c.z[row], precision);
-          put_real(out, c.t[row], precision);
+          append_real(out, chunk.x[row], precision);
+          append_real(out, chunk.y[row], precision);
+          append_real(out, chunk.z[row], precision);
+          append_real(out, chunk.t[row], precision);
           out += '\n';
         }
       }
     }
     out += "P ";
-    put_int(out, static_cast<std::int64_t>(j + 1));
+    append_int(out, static_cast<std::int64_t>(j + 1));
     out += ' ';
-    put_int(out, parent);
+    append_int(out, parent_vertex);
     out += ' ';
-    put_int(out, c.pid[row]);
-    put_real(out, c.px[row], precision);
-    put_real(out, c.py[row], precision);
-    put_real(out, c.pz[row], precision);
-    put_real(out, c.e[row], precision);
-    put_real(out, c.mass[row], precision);
+    append_int(out, chunk.pid[row]);
+    append_real(out, chunk.px[row], precision);
+    append_real(out, chunk.py[row], precision);
+    append_real(out, chunk.pz[row], precision);
+    append_real(out, chunk.e[row], precision);
+    append_real(out, chunk.mass[row], precision);
     out += ' ';
-    put_int(out, source != kBeam && c.final[row] ? kFinalStatus : c.status[row]);
+    append_int(out, mother != kNoMother && chunk.is_final[row] ? kFinalStatus : chunk.status[row]);
     out += '\n';
   }
 }
@@ -240,105 +259,110 @@ void format_event(const Chunk<Real>& c, const Event& event, int precision,
 }  // namespace
 
 template <typename Real>
-Text format_events(const Chunk<Real>& c, int precision, int threads) {
-  if (threads < 1) throw std::invalid_argument("threads must be at least 1");
-  // first[k] is the first row of event k; first[n_events] is past the last.
-  std::vector<std::int64_t> first(static_cast<std::size_t>(c.n_events) + 1, 0);
-  for (std::int64_t k = 0; k < c.n_events; ++k) first[k + 1] = first[k] + c.counts[k];
-  const int n_runs =
-      static_cast<int>(std::max<std::int64_t>(1, std::min<std::int64_t>(threads, c.n_events)));
-  std::vector<std::int64_t> bounds(static_cast<std::size_t>(n_runs) + 1, c.n_events);
-  bounds[0] = 0;
-  for (int r = 1; r < n_runs; ++r) {
-    const std::int64_t target = first.back() * r / n_runs;
-    bounds[r] = std::lower_bound(first.begin(), first.end() - 1, target) - first.begin();
+EventText format_events(const Chunk<Real>& chunk, int precision, int thread_count) {
+  if (thread_count < 1) throw std::invalid_argument("threads must be at least 1");
+  // first_rows[k] is the first row of event k; first_rows[n_events] is past the last.
+  std::vector<std::int64_t> first_rows(static_cast<std::size_t>(chunk.n_events) + 1, 0);
+  for (std::int64_t k = 0; k < chunk.n_events; ++k)
+    first_rows[k + 1] = first_rows[k] + chunk.particle_counts[k];
+  const int run_count = static_cast<int>(
+      std::max<std::int64_t>(1, std::min<std::int64_t>(thread_count, chunk.n_events)));
+  // Run r writes events run_bounds[r] to run_bounds[r + 1], excluded.
+  std::vector<std::int64_t> run_bounds(static_cast<std::size_t>(run_count) + 1, chunk.n_events);
+  run_bounds[0] = 0;
+  for (int r = 1; r < run_count; ++r) {
+    const std::int64_t target_row = first_rows.back() * r / run_count;
+    run_bounds[r] =
+        std::lower_bound(first_rows.begin(), first_rows.end() - 1, target_row) - first_rows.begin();
   }
   struct Run {
     std::string text, error;
-    std::int64_t stop = 0;  // the event the run stopped at
+    std::int64_t stop_event = 0;  // the event the run stopped at
     bool refused = false;
     std::exception_ptr failure;
   };
-  std::vector<Run> runs(static_cast<std::size_t>(n_runs));
+  std::vector<Run> runs(static_cast<std::size_t>(run_count));
   const auto write_run = [&](int r) {
     Run& run = runs[r];
     try {
-      Builder<Real> builder(c);
-      Event event;
-      std::vector<int> vertex_of;
-      run.text.reserve(
-          static_cast<std::size_t>(first[bounds[r + 1]] - first[bounds[r]]) * kTextPerParticle);
-      std::int64_t k = bounds[r];
-      for (; k < bounds[r + 1]; ++k) {
-        if (!builder.build(k, first[k], event, run.error)) {
+      ParticleSelector<Real> selector(chunk);
+      KeptParticles kept;
+      std::vector<int> vertex_ids;
+      run.text.reserve(static_cast<std::size_t>(first_rows[run_bounds[r + 1]] -
+                                                first_rows[run_bounds[r]]) *
+                       kBytesPerParticle);
+      std::int64_t k = run_bounds[r];
+      for (; k < run_bounds[r + 1]; ++k) {
+        if (!selector.select(k, first_rows[k], kept, run.error)) {
           run.refused = true;
           break;
         }
-        format_event(c, event, precision, vertex_of, run.text);
+        format_event(chunk, kept, precision, vertex_ids, run.text);
       }
-      run.stop = k;
+      run.stop_event = k;
     } catch (...) {
       run.failure = std::current_exception();
     }
   };
-  std::vector<std::thread> pool;
-  for (int r = 1; r < n_runs; ++r) {
+  std::vector<std::thread> workers;
+  for (int r = 1; r < run_count; ++r) {
     try {
-      pool.emplace_back(write_run, r);
+      workers.emplace_back(write_run, r);
     } catch (const std::system_error&) {
       write_run(r);  // no thread to spare: this one writes the run
     }
   }
   write_run(0);
-  for (auto& thread : pool) thread.join();
-  Text result;
+  for (auto& worker : workers) worker.join();
+  EventText text;
   for (Run& run : runs) {
     if (run.failure) std::rethrow_exception(run.failure);
-    result.pieces.push_back(std::move(run.text));
-    result.n_events = run.stop;
+    text.pieces.push_back(std::move(run.text));
+    text.n_events = run.stop_event;
     if (run.refused) {
-      result.error = run.error;
+      text.error = run.error;
       break;
     }
   }
-  return result;
+  return text;
 }
 
 template <typename Real>
-Hepevt hepevt_events(const Chunk<Real>& c) {
-  Builder<Real> builder(c);
-  Event event;
-  Hepevt out;
+HepevtArrays to_hepevt(const Chunk<Real>& chunk) {
+  ParticleSelector<Real> selector(chunk);
+  KeptParticles kept;
+  HepevtArrays arrays;
   std::int64_t k = 0;
-  for (std::int64_t base = 0; k < c.n_events; base += c.counts[k], ++k) {
-    if (!builder.build(k, base, event, out.error)) break;
-    out.counts.push_back(static_cast<std::int64_t>(event.rows.size()));
-    for (std::size_t j = 0; j < event.rows.size(); ++j) {
-      const std::int64_t row = event.rows[j];
-      const int source = event.source[j];
-      const bool from_mother = source >= 0;
-      out.pid.push_back(c.pid[row]);
-      out.status.push_back(source != kBeam && c.final[row] ? kFinalStatus : c.status[row]);
-      out.px.push_back(c.px[row]);
-      out.py.push_back(c.py[row]);
-      out.pz.push_back(c.pz[row]);
-      out.e.push_back(c.e[row]);
-      out.m.push_back(c.mass[row]);
-      out.parents.push_back(source == kBeam ? -1 : source == kFromBeams ? 0 : source);
-      out.parents.push_back(source == kBeam ? -1 : source == kFromBeams ? 1 : source);
-      out.vx.push_back(from_mother ? static_cast<double>(c.x[row]) : 0.0);
-      out.vy.push_back(from_mother ? static_cast<double>(c.y[row]) : 0.0);
-      out.vz.push_back(from_mother ? static_cast<double>(c.z[row]) : 0.0);
-      out.vt.push_back(from_mother ? static_cast<double>(c.t[row]) : 0.0);
+  for (std::int64_t first_row = 0; k < chunk.n_events; first_row += chunk.particle_counts[k], ++k) {
+    if (!selector.select(k, first_row, kept, arrays.error)) break;
+    arrays.particle_counts.push_back(static_cast<std::int64_t>(kept.rows.size()));
+    for (std::size_t j = 0; j < kept.rows.size(); ++j) {
+      const std::int64_t row = kept.rows[j];
+      const int mother = kept.mothers[j];
+      const bool from_kept_mother = mother >= 0;
+      arrays.pid.push_back(chunk.pid[row]);
+      arrays.status.push_back(mother != kNoMother && chunk.is_final[row] ? kFinalStatus
+                                                                         : chunk.status[row]);
+      arrays.px.push_back(chunk.px[row]);
+      arrays.py.push_back(chunk.py[row]);
+      arrays.pz.push_back(chunk.pz[row]);
+      arrays.e.push_back(chunk.e[row]);
+      arrays.m.push_back(chunk.mass[row]);
+      arrays.parents.push_back(mother == kNoMother ? -1 : mother == kBeamMothers ? 0 : mother);
+      arrays.parents.push_back(mother == kNoMother ? -1 : mother == kBeamMothers ? 1 : mother);
+      arrays.vx.push_back(from_kept_mother ? static_cast<double>(chunk.x[row]) : 0.0);
+      arrays.vy.push_back(from_kept_mother ? static_cast<double>(chunk.y[row]) : 0.0);
+      arrays.vz.push_back(from_kept_mother ? static_cast<double>(chunk.z[row]) : 0.0);
+      arrays.vt.push_back(from_kept_mother ? static_cast<double>(chunk.t[row]) : 0.0);
     }
   }
-  out.n_events = k;
-  return out;
+  arrays.n_events = k;
+  return arrays;
 }
 
-template Text format_events<float>(const Chunk<float>&, int, int);
-template Text format_events<double>(const Chunk<double>&, int, int);
-template Hepevt hepevt_events<float>(const Chunk<float>&);
-template Hepevt hepevt_events<double>(const Chunk<double>&);
+template EventText format_events<float>(const Chunk<float>&, int, int);
+template EventText format_events<double>(const Chunk<double>&, int, int);
+template HepevtArrays to_hepevt<float>(const Chunk<float>&);
+template HepevtArrays to_hepevt<double>(const Chunk<double>&);
 
 }  // namespace omphjc::parnassus

@@ -100,15 +100,15 @@ _Reals = npt.NDArray[np.float32] | npt.NDArray[np.float64]
 
 
 class _Columns(NamedTuple):
-    """A chunk's event counts and numbers and its particle columns, flat, as the
-    extension takes them."""
+    """A chunk's particle count and event number of each event, and its particle
+    columns, flat, as the extension takes them."""
 
-    counts: npt.NDArray[np.int64]
-    numbers: npt.NDArray[np.int64]
+    particle_counts: npt.NDArray[np.int64]
+    event_numbers: npt.NDArray[np.int64]
     pid: npt.NDArray[np.int32]
     status: npt.NDArray[np.int32]
-    m1: npt.NDArray[np.int32]
-    final: npt.NDArray[np.bool_]
+    mother: npt.NDArray[np.int32]
+    is_final: npt.NDArray[np.bool_]
     px: _Reals
     py: _Reals
     pz: _Reals
@@ -221,14 +221,16 @@ def iterate_hepevt_arrays(particles: ak.Array) -> Iterator[HepevtArrays]:
         yielded first.
     """
     columns = _columns(particles)
-    arrays = _hepmc_ascii.hepevt_events(*columns)
-    counts = arrays["counts"]
-    stops = np.cumsum(counts)
-    numbers = columns.numbers[: counts.size]
-    for number, start, stop in zip(numbers, stops - counts, stops, strict=True):
+    arrays = _hepmc_ascii.to_hepevt(*columns)
+    particle_counts = arrays["particle_counts"]
+    stops = np.cumsum(particle_counts)
+    event_numbers = columns.event_numbers[: particle_counts.size]
+    for event_number, start, stop in zip(
+        event_numbers, stops - particle_counts, stops, strict=True
+    ):
         part = slice(start, stop)
         yield HepevtArrays(
-            event_number=int(number),
+            event_number=int(event_number),
             pid=arrays["pid"][part],
             status=arrays["status"][part],
             px=arrays["px"][part],
@@ -247,19 +249,22 @@ def iterate_hepevt_arrays(particles: ak.Array) -> Iterator[HepevtArrays]:
 
 
 def _columns(particles: ak.Array) -> _Columns:
-    """Return the event counts and numbers and the particle columns, flat.
+    """Return each event's particle count and event number, and the particle
+    columns, flat.
 
     The integers are passed as int32 and the flags as bool; the real numbers
     stay float32 when every one of them is, and are float64 otherwise.
     """
     _check_fields(particles.fields)
-    counts = ak.to_numpy(ak.num(particles["part_pid"], axis=1)).astype(np.int64)
-    numbers = np.asarray(ak.to_numpy(particles[EVENT_COLUMN]), dtype=np.int64)
+    particle_counts = ak.to_numpy(ak.num(particles["part_pid"], axis=1)).astype(
+        np.int64
+    )
+    event_numbers = np.asarray(ak.to_numpy(particles[EVENT_COLUMN]), dtype=np.int64)
     flat = {
         name: ak.to_numpy(ak.flatten(particles[name], axis=1))
         for name in PARTICLE_COLUMNS
     }
-    pid, status, m1 = (
+    pid, status, mother = (
         np.ascontiguousarray(flat[name], dtype=np.int32) for name in _INTEGER_COLUMNS
     )
     reals: list[_Reals]
@@ -268,9 +273,23 @@ def _columns(particles: ak.Array) -> _Columns:
     else:
         reals = [np.ascontiguousarray(flat[name], np.float64) for name in _REAL_COLUMNS]
     px, py, pz, e, mass, x, y, z, t = reals
-    final = np.ascontiguousarray(flat["part_final"], dtype=np.bool_)
+    is_final = np.ascontiguousarray(flat["part_final"], dtype=np.bool_)
     return _Columns(
-        counts, numbers, pid, status, m1, final, px, py, pz, e, mass, x, y, z, t
+        particle_counts,
+        event_numbers,
+        pid,
+        status,
+        mother,
+        is_final,
+        px,
+        py,
+        pz,
+        e,
+        mass,
+        x,
+        y,
+        z,
+        t,
     )
 
 

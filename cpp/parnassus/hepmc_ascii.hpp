@@ -11,17 +11,18 @@
 
 namespace omphjc::parnassus {
 
-// A chunk of the particle record: each event's particle count and number, and
-// every particle column flat over the chunk's events.
+// A chunk of the particle record: each event's particle count and HepMC3 event
+// number, and every particle column flat over the chunk's events. `mother` is
+// the index of the particle's first mother in its event, -1 for none.
 template <typename Real>
 struct Chunk {
   std::int64_t n_events;
-  const std::int64_t* counts;
-  const std::int64_t* numbers;
+  const std::int64_t* particle_counts;
+  const std::int64_t* event_numbers;
   const std::int32_t* pid;
   const std::int32_t* status;
-  const std::int32_t* m1;
-  const bool* final;
+  const std::int32_t* mother;
+  const bool* is_final;
   const Real* px;
   const Real* py;
   const Real* pz;
@@ -35,7 +36,7 @@ struct Chunk {
 
 // The text of a chunk's events up to the first refused one, in pieces to be
 // joined in order, the number of events in it, and the refusal ("" if none).
-struct Text {
+struct EventText {
   std::vector<std::string> pieces;
   std::int64_t n_events = 0;
   std::string error;
@@ -45,8 +46,8 @@ struct Text {
 // those events: each event's particle count, and per particle its PDG id,
 // status, momentum, mass, first and last parent (-1 for none) and production
 // position. Also the number of events and the refusal ("" if none).
-struct Hepevt {
-  std::vector<std::int64_t> counts;
+struct HepevtArrays {
+  std::vector<std::int64_t> particle_counts;
   std::vector<std::int32_t> pid, status;
   std::vector<double> px, py, pz, e, m;
   std::vector<std::int64_t> parents;
@@ -56,13 +57,13 @@ struct Hepevt {
 };
 
 // Writes the chunk's events with `precision` digits after the point. Each of
-// `threads` threads builds and writes a run of consecutive events of about
-// equal particle count, and the runs are joined in order up to the first
+// `thread_count` threads builds and writes a run of consecutive events of
+// about equal particle count, and the runs are joined in order up to the first
 // refusal, so the text does not depend on the number of threads.
 template <typename Real>
-Text format_events(const Chunk<Real>& chunk, int precision, int threads);
+EventText format_events(const Chunk<Real>& chunk, int precision, int thread_count);
 
 template <typename Real>
-Hepevt hepevt_events(const Chunk<Real>& chunk);
+HepevtArrays to_hepevt(const Chunk<Real>& chunk);
 
 }  // namespace omphjc::parnassus

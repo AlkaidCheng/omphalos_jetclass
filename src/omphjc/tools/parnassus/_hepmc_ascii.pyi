@@ -8,12 +8,12 @@ import numpy.typing as npt
 _Reals = npt.NDArray[np.float32] | npt.NDArray[np.float64]
 
 def format_events(
-    counts: npt.NDArray[np.int64],
-    numbers: npt.NDArray[np.int64],
+    particle_counts: npt.NDArray[np.int64],
+    event_numbers: npt.NDArray[np.int64],
     pid: npt.NDArray[np.int32],
     status: npt.NDArray[np.int32],
-    m1: npt.NDArray[np.int32],
-    final: npt.NDArray[np.bool_],
+    mother: npt.NDArray[np.int32],
+    is_final: npt.NDArray[np.bool_],
     px: _Reals,
     py: _Reals,
     pz: _Reals,
@@ -26,13 +26,13 @@ def format_events(
     precision: int,
     threads: int = 1,
 ) -> tuple[bytes, int, str]: ...
-def hepevt_events(
-    counts: npt.NDArray[np.int64],
-    numbers: npt.NDArray[np.int64],
+def to_hepevt(
+    particle_counts: npt.NDArray[np.int64],
+    event_numbers: npt.NDArray[np.int64],
     pid: npt.NDArray[np.int32],
     status: npt.NDArray[np.int32],
-    m1: npt.NDArray[np.int32],
-    final: npt.NDArray[np.bool_],
+    mother: npt.NDArray[np.int32],
+    is_final: npt.NDArray[np.bool_],
     px: _Reals,
     py: _Reals,
     pz: _Reals,
