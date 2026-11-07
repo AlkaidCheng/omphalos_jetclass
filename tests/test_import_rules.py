@@ -231,7 +231,7 @@ def test_a_tool_module_loads_no_driver_and_no_other_tool() -> None:
     }
 
 
-def test_the_parnassus_input_is_written_without_pyhepmc() -> None:
+def test_the_parnassus_input_is_written_without_a_hepmc3_binding() -> None:
     loaded = _loaded_after("import omphjc.tools.parnassus.hepmc_input")
     assert "omphjc.tools.parnassus._hepmc_ascii" in loaded
     roots = {name.split(".")[0] for name in loaded}

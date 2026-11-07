@@ -347,10 +347,11 @@ def test_a_float64_record_gives_the_file_a_float32_one_gives(tmp_path: Path) -> 
     assert paths[1].read_bytes() == paths[0].read_bytes()
 
 
-def test_writing_needs_no_pyhepmc(
+def test_writing_needs_no_hepmc3_binding(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setitem(sys.modules, "pyhepmc", None)
+    for binding in ("pyHepMC3", "pyhepmc"):
+        monkeypatch.setitem(sys.modules, binding, None)
     assert (
         write_hepmc_input([record(pi0_to_two_photons())], tmp_path / "input.hepmc") == 1
     )
