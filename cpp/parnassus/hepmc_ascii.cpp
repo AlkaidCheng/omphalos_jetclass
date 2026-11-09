@@ -330,6 +330,9 @@ EventText format_events(const Chunk<Real>& chunk, int precision, int thread_coun
     }
   };
   std::vector<std::thread> workers;
+  // Allocated before any thread starts: destroying the handle of a running
+  // thread ends the program.
+  workers.reserve(static_cast<std::size_t>(run_count) - 1);
   for (int r = 1; r < run_count; ++r) {
     try {
       workers.emplace_back(write_run, r);
