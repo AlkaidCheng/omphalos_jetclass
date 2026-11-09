@@ -1,5 +1,9 @@
 """Parnassus's input against HepMC3's own classes, WriterAscii and ReaderAscii."""
 
+import ctypes
+import importlib
+import importlib.metadata
+import re
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -46,8 +50,35 @@ EVENTS = {
 @pytest.fixture
 def hepmc3() -> ModuleType:
     """HepMC3's own Python bindings, from the HepMC3 package on PyPI."""
-    module: ModuleType = pytest.importorskip("pyHepMC3").HepMC3
+    try:
+        bindings = importlib.import_module("pyHepMC3")
+    except ModuleNotFoundError:
+        pytest.skip("HepMC3's Python bindings, pyHepMC3, are not installed")
+    except ImportError:
+        if not load_hepmc3_library():
+            raise
+        bindings = importlib.import_module("pyHepMC3")
+    module: ModuleType = bindings.HepMC3
     return module
+
+
+def load_hepmc3_library() -> bool:
+    """Load the libHepMC3 that the HepMC3 package installed, and say if it did.
+
+    HepMC3 3.3.1's Linux wheels install the library into the environment's
+    lib64 directory, while pyHepMC3.so looks for it only in the directory it
+    was built in (its RPATH), so the bindings import once the library is loaded.
+    """
+    try:
+        installed = importlib.metadata.files("hepmc3") or []
+    except importlib.metadata.PackageNotFoundError:
+        return False
+    libraries = [
+        path for path in installed if re.fullmatch(r"libHepMC3\.so\.\d+", path.name)
+    ]
+    for library in libraries:
+        ctypes.CDLL(str(library.locate()), mode=ctypes.RTLD_GLOBAL)
+    return bool(libraries)
 
 
 def write_with_hepmc3(
