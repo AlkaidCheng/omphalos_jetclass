@@ -1,4 +1,5 @@
 import re
+import sys
 
 import pytest
 
@@ -106,6 +107,15 @@ def test_the_seed_replaces_one_the_card_sets(ending: str) -> None:
 def test_invalid_tcl_is_rejected() -> None:
     with pytest.raises(ValueError, match="does not evaluate"):
         parse_card("module FastJetFinder Broken {\n  set ParameterR\n")
+
+
+def test_a_python_without_tkinter_is_pointed_to_the_readme(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "tkinter", None)
+    with pytest.raises(ModuleNotFoundError, match="tkinter.*Installation") as error:
+        parse_card("set RandomSeed 1\n")
+    assert error.value.name == "tkinter"
 
 
 def test_the_card_a_run_reads_starts_as_the_official_one() -> None:

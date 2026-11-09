@@ -41,8 +41,8 @@ key ends up.
 pip install -e .
 ```
 
-omphjc needs Python 3.10 or later. Its Python dependencies are installed with
-it:
+omphjc needs Python 3.10 or later with Tcl support, through which `tkinter`
+reads Delphes cards. Its Python dependencies are installed with it:
 
 | Package | Used for |
 |---|---|
