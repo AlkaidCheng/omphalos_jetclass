@@ -235,16 +235,26 @@ void format_event(const Chunk<Real>& chunk, const KeptParticles& kept, int preci
     const std::int64_t row = kept.rows[j];
     const int mother = kept.mothers[j];
     int parent_vertex = 0;
+    // Every particle but a beam comes from a vertex, whose id the first pass
+    // gave; a beam names vertex 0.
     if (mother != kNoMother) {
       parent_vertex =
           vertex_ids[mother == kBeamMothers ? kept_count : static_cast<std::size_t>(mother)];
+      // Vertices -1 to -vertices_written are written. The first pass numbered
+      // the vertices in this loop's order, so a vertex beyond them is the next
+      // one, and its line goes just before this, its first particle.
       if (-parent_vertex > vertices_written) {
         ++vertices_written;
         out += "V ";
         append_int(out, parent_vertex);
         if (mother == kBeamMothers) {
+          // The beams' vertex: status 0, particles 1 and 2 (the beams) in, and
+          // no position, as it lies at the origin.
           out += " 0 [1,2]\n";
         } else {
+          // The mother's decay vertex: status 0, the mother in by its particle
+          // id (its index in kept.rows, plus 1), and this daughter's production
+          // point, which select() checked its siblings share.
           out += " 0 [";
           append_int(out, mother + 1);
           out += "] @";
