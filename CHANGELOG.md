@@ -59,6 +59,9 @@
 - `omphjc.events.stable_particles.StableParticleDefinition` marks as final the
   long-lived particles the shower decayed, and their decay products as not
   final, as Parnassus expects. (#39)
+- `omphjc.tools.parnassus.hepmc_input.write_hepmc_input` writes the final state
+  of a particle record as the HepMC3 file Parnassus reads, on as many threads as
+  `threads` asks. (#41)
 
 ### Changed
 
@@ -91,6 +94,8 @@
 - `omphjc.jobs.Job.require_done` returns the record of a finished stage or
   says which command to run first. (#24)
 - Installing omphjc also installs numpy, awkward and uproot. (#39)
+- Installing omphjc from source compiles its C++ extension, which needs a C++17
+  standard library that formats floating-point numbers. (#41)
 
 ### Fixed
 

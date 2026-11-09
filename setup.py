@@ -1,0 +1,44 @@
+"""Build omphjc's C++ extension; the package's metadata is in pyproject.toml."""
+
+import os
+import sys
+import sysconfig
+
+from pybind11.setup_helpers import Pybind11Extension, build_ext
+from setuptools import setup
+
+# The extension formats numbers with floating-point std::to_chars, which macOS's
+# libc++ provides from macOS 13.3 on (below it, clang reports "is unavailable:
+# introduced in macOS 13.3"). pybind11 adds a target of 10.14 unless
+# MACOSX_DEPLOYMENT_TARGET is set, so it is always set, to the higher of 13.3 and
+# the target given or Python's. A wheel's tag keeps only the major version
+# (macosx_13_0), so a wheel built for others needs a target of 14.0.
+MACOS_MINIMUM = (13, 3)
+
+
+def _set_macos_target() -> None:
+    target = os.environ.get("MACOSX_DEPLOYMENT_TARGET") or sysconfig.get_config_var(
+        "MACOSX_DEPLOYMENT_TARGET"
+    )
+    version = tuple(int(part) for part in str(target or "0").split("."))
+    chosen = max(version, MACOS_MINIMUM)
+    os.environ["MACOSX_DEPLOYMENT_TARGET"] = ".".join(map(str, chosen))
+
+
+if sys.platform == "darwin":
+    _set_macos_target()
+
+# The C++ sources live in cpp/, one directory per tool, apart from the Python
+# package in src/; each extension is built into its tool's package.
+setup(
+    ext_modules=[
+        Pybind11Extension(
+            "omphjc.tools.parnassus._hepmc_ascii",
+            ["cpp/parnassus/module.cpp", "cpp/parnassus/hepmc_ascii.cpp"],
+            include_dirs=["cpp"],
+            depends=["cpp/parnassus/hepmc_ascii.hpp"],
+            cxx_std=17,
+        )
+    ],
+    cmdclass={"build_ext": build_ext},
+)

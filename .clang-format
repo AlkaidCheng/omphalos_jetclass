@@ -1,0 +1,19 @@
+# Layout of the C++ in cpp/: Google's style at 100 columns
+# (https://google.github.io/styleguide/cppguide.html#Formatting), every body
+# braced, and the includes grouped as the related header, C system headers,
+# the C++ standard library, third-party and the project's own
+# (https://clang.llvm.org/docs/ClangFormatStyleOptions.html). Names follow the
+# standard library's scheme, which clang-format does not check.
+BasedOnStyle: Google
+ColumnLimit: 100
+InsertBraces: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^<(pybind11|Python)'
+    Priority: 3
+  - Regex: '^<.*\.h>'
+    Priority: 1
+  - Regex: '^<.*'
+    Priority: 2
+  - Regex: '.*'
+    Priority: 4

@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=77", "setuptools_scm>=8"]
+# pybind11 binds the C++ writer of Parnassus's input (setup.py).
+requires = ["setuptools>=77", "setuptools_scm>=8", "pybind11>=3"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -40,6 +41,9 @@ dev = [
     "black>=24",
     "mypy>=1.10",
     "types-PyYAML",
+    # HepMC3's own Python bindings, whose WriterAscii the tests compare the
+    # Parnassus input with (https://pypi.org/project/HepMC3/).
+    "HepMC3>=3.3.1",
 ]
 
 [project.urls]
@@ -60,7 +64,7 @@ include = ["omphjc*"]
 exclude = ["omphjc.config*"]
 
 [tool.setuptools.package-data]
-omphjc = ["py.typed", "config/**/*"]
+omphjc = ["py.typed", "config/**/*", "tools/parnassus/*.pyi"]
 
 [tool.setuptools_scm]
 # Version derived from git tags; falls back to 0.0.0 in a shallow checkout.
