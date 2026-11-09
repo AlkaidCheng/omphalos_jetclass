@@ -48,6 +48,7 @@ struct KeptParticles {
   std::vector<int> mothers;
 };
 
+// Whether the particle at `row` is final and produced away from the origin.
 template <typename Real>
 [[nodiscard]] bool is_displaced_final(const Chunk<Real>& chunk, std::int64_t row) {
   return chunk.is_final[row] &&
@@ -167,7 +168,8 @@ class ParticleSelector {
   }
 
   const Chunk<Real>& chunk_;
-  // Per displaced final particle of the event: its index and its mother's.
+  // Per displaced final particle of the event, in record order: its index in
+  // the event and its mother's.
   std::vector<int> displaced_finals_, displaced_mothers_;
   // Per particle of the event: its first displaced daughter, whether it is the
   // mother of one, and its index in the kept rows (-1 for none).
