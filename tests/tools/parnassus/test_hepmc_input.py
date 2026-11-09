@@ -190,12 +190,12 @@ def test_an_event_parnassus_cannot_read_is_refused(
         arrays_of(rows)
 
 
-def test_a_record_not_yet_marked_is_refused() -> None:
-    unmarked = ak.without_field(record(pi0_to_two_photons()), "part_final")
+def test_a_record_without_a_final_state_is_refused() -> None:
+    without_final_state = ak.without_field(record(pi0_to_two_photons()), "part_final")
     with pytest.raises(
-        ValueError, match="lacks .*part_final; mark it with StableParticleDefinition"
+        ValueError, match="lacks .*part_final; apply a StableParticleDefinition"
     ):
-        list(iterate_hepevt_arrays(unmarked))
+        list(iterate_hepevt_arrays(without_final_state))
 
 
 @pytest.mark.parametrize(
@@ -203,7 +203,7 @@ def test_a_record_not_yet_marked_is_refused() -> None:
     [
         (
             "part_final",
-            r"lacks part_final; mark it with StableParticleDefinition\.apply first$",
+            "lacks part_final; apply a StableParticleDefinition to it first$",
         ),
         (EVENT_COLUMN, "lacks event_index$"),
         ("part_mass", "lacks part_mass$"),

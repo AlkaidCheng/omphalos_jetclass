@@ -202,8 +202,9 @@ def iterate_hepevt_arrays(particles: ak.Array) -> Iterator[HepevtArrays]:
     Parameters
     ----------
     particles : ak.Array
-        Particle records marked with
-        :meth:`omphjc.events.stable_particles.StableParticleDefinition.apply`.
+        Particle records with the field ``part_final`` that
+        :meth:`omphjc.events.stable_particles.StableParticleDefinition.apply`
+        adds.
 
     Yields
     ------
@@ -298,7 +299,7 @@ def _check_fields(fields: Sequence[str]) -> None:
     missing = [name for name in (EVENT_COLUMN, *PARTICLE_COLUMNS) if name not in fields]
     if missing:
         hint = (
-            "; mark it with StableParticleDefinition.apply first"
+            "; apply a StableParticleDefinition to it first"
             if "part_final" in missing
             else ""
         )
