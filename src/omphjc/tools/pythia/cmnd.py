@@ -9,7 +9,7 @@ later layer overrides an earlier one:
    ``JetMatching:qCut = 1.5 × xqcut``, ``JetMatching:nQmatch = maxjetflavor``
    and ``JetMatching:nJetMax``, the most light jets in any process line
    (``setup_Pythia8RunAndCard`` in ``madgraph/interface/madevent_interface.py``,
-   https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544-L4602),
+   https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/madevent_interface.py#L4544-L4602),
    then the catalogue's ``pythia_matching`` block;
 2. the catalogue's ``pythia`` settings, written for every process (what
    MadGraph's interface injects into every run), with the entry's own;
@@ -36,7 +36,7 @@ MATCHING_SCALE_FACTOR = 1.5
 MadGraph's rule when the Pythia card leaves ``qCut`` at -1:
 ``PY8_Card.MadGraphSet('JetMatching:qCut', 1.5*self.run_card['xqcut'])`` in
 ``setup_Pythia8RunAndCard``,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L4544
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/madevent_interface.py#L4544
 (the same line in MadGraph 3.1.1 gave the official ``qCut = 45`` for
 ``xqcut = 30``). A ``JetMatching:qCut`` written in the catalogue replaces it.
 """
@@ -158,8 +158,8 @@ def max_matched_jets(spec: ProcessSpec) -> int:
     counts, the part before any decay chain, so ``p p > ve ve~ j j @1`` asks
     for 2. MadGraph's own ``max_n_matched_jets`` is the smaller of the highest
     QCD order of the diagrams and the most massless coloured final-state
-    partons of a process (``madgraph/iolibs/export_v4.py``, MadGraph 3.8.0,
-    https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/iolibs/export_v4.py#L5907-L5921).
+    partons of a process (``madgraph/iolibs/export_v4.py``, MadGraph 3.8.1,
+    https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/iolibs/export_v4.py#L5907-L5921).
     The two differ when a process line names a parton directly, such as ``g``
     instead of ``j``.
     """

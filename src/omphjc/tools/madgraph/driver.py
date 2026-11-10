@@ -16,40 +16,40 @@ Each run has a working directory of its own::
 
 MadGraph caches an imported model as ``py3_model.pkl`` inside the model's
 folder (``import_full_model`` in ``models/import_ufo.py``,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/models/import_ufo.py#L454-L456),
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/models/import_ufo.py#L454-L456),
 so a run imports a copy and leaves the catalogue's folder untouched.
 
 A command that fails inside a script stops MadGraph without a failing exit
 status (``nice_error_handling`` in ``madgraph/interface/extended_cmd.py``,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/extended_cmd.py#L1375-L1385),
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/extended_cmd.py#L1375-L1385),
 so a run is judged by the files MadGraph writes.
 
 MadGraph runs the jobs of a launch in parallel, by default on every CPU of the
 machine (``configure_run_mode`` in ``madgraph/interface/common_run_interface.py``,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/common_run_interface.py#L3993-L4002).
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/common_run_interface.py#L3993-L4002).
 A run writes its core count into the process's ``Cards/me5_configuration.txt``,
 the configuration file MadGraph reads last (``set_configuration``, same file,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/common_run_interface.py#L4345-L4382),
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/common_run_interface.py#L4345-L4382),
 so a value in the user's or the installation's configuration does not
 override it.
 
 A run sets MadGraph's ``iseed`` and the seed of its Python generator,
 ``python_seed``, to its seed. In its default spin mode, MadSpin draws its own
 seed from that generator (``run_onshell``,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/MadSpin/interface_madspin.py#L3278-L3292).
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/MadSpin/interface_madspin.py#L3283-L3297).
 MadGraph resets ``iseed`` to 0 in the kept ``Cards/run_card.dat``; the banner's
 run card holds the seed it used (``reset_iseed_in_run_card``,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/common_run_interface.py#L5367-L5380).
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/common_run_interface.py#L5367-L5380).
 
 MadSpin decays the events in one separately seeded shard per core, so a sample
 with MadSpin is reproduced only on the same number of cores
 (``_split_production``,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/MadSpin/interface_madspin.py#L6211-L6226).
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/MadSpin/interface_madspin.py#L6216-L6231).
 MadGraph unweights the events of a run with at least
 ``max(80, ulimit -n - 40)`` channel directories, or 2500 when ``ulimit -n`` is
 unlimited, in new Python processes whose random numbers come from the operating
 system (``do_combine_events``,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L3908-L3990).
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/madevent_interface.py#L3908-L3990).
 A run with a seed raises ``ulimit -n`` to the hard limit while MadGraph runs
 (:class:`omphjc.programs.RaisedOpenFileLimit`), so only a run with at least
 the raised limit minus 40 channel directories is not reproducible.
@@ -90,7 +90,7 @@ _LOG_FILE = "madgraph.log"
 
 # MadGraph's names for the event file of the first run and, after MadSpin, of
 # its decayed copy ("%s_decayed_%i" in do_decay_events,
-# madgraph/interface/common_run_interface.py, 3.8.0), and for the MadSpin card
+# madgraph/interface/common_run_interface.py, 3.8.1), and for the MadSpin card
 # it reads from the process's Cards directory.
 _EVENT_FILE = "unweighted_events.lhe.gz"
 _FIRST_RUN = "run_01"
@@ -110,7 +110,7 @@ _RUN_PURPOSE = "madgraph-event-generation"
 
 # MadGraph's run_mode for parallel jobs on the current machine (0 runs them one
 # after another, 1 submits them to a batch system; set2_run_mode in
-# madgraph/interface/madgraph_interface.py, 3.8.0).
+# madgraph/interface/madgraph_interface.py, 3.8.1).
 _MULTICORE_RUN_MODE = 2
 
 

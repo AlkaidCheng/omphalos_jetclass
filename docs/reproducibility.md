@@ -4,7 +4,7 @@ Every program a job runs is seeded from the job's seed, `seed_offset + job`
 (see [Seeds](../README.md#seeds)): MadGraph's `iseed` and `python_seed`,
 Pythia's `Random:seed` and Delphes's `RandomSeed`. Running a stage again with
 the same seed gives the same events as long as the conditions in the table
-also hold. The conditions were read from the source code of MadGraph 3.8.0,
+also hold. The conditions were read from the source code of MadGraph 3.8.1,
 Pythia 8.312 and Delphes 3.5.1.
 
 | Stage | Program | The events also depend on |

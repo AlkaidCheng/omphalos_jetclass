@@ -114,7 +114,7 @@ The part of a model name after the last `-` chooses the card:
 The prefix `restrict_` and the extension `.dat` are fixed by MadGraph, which
 builds the file name from the suffix; the suffix itself cannot contain a `-`,
 and `full` is reserved. (`get_path_restrict` in MadGraph's
-[`models/import_ufo.py`](https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/models/import_ufo.py#L201).)
+[`models/import_ufo.py`](https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/models/import_ufo.py#L201).)
 
 The JetClass samples show why the choice matters. `restrict_default.dat` and
 `restrict_ckm.dat` of `heft` differ only in the four CKM parameters: the
