@@ -18,6 +18,13 @@ ARG MG5_SHA256=a399550c183ee8b90b86f436aec067bb0937988cd404f5d75cc7905de7527310
 # context leaves out.
 ARG OMPHJC_VERSION=0.0.0
 
+# MadGraph builds its libraries with `ar` and `ranlib` called by name
+# (Template/LO/Source/.make_opts), while conda-forge's compilers provide them
+# only under target-prefixed names, and the base image has no binutils.
+RUN apt-get update \
+    && apt-get install --no-install-recommends --yes binutils \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY environment/environment.yml /opt/omphjc/environment.yml
 RUN conda env create --name omphjc --file /opt/omphjc/environment.yml \
     && conda clean --all --yes
