@@ -29,7 +29,7 @@ _MAXRSS_BYTES = 1 if sys.platform == "darwin" else 1024
 
 # The soft limit on open files under an unlimited hard limit: MadGraph reads an
 # unlimited soft limit as 2500 channel directories (do_combine_events,
-# https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/interface/madevent_interface.py#L3913-L3914),
+# https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/madevent_interface.py#L3913-L3914),
 # so a finite one is set, macOS's OPEN_MAX from
 # https://github.com/apple-oss-distributions/xnu/blob/xnu-12377.121.6/bsd/sys/syslimits.h#L108.
 _OPEN_MAX = 10240

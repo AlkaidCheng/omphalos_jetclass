@@ -15,7 +15,7 @@ created the job, and one record per stage::
           "finished": "2026-10-23T01:20:00+00:00",
           "parameters": {"events": 1000, "seed": 10000001},
           "metadata": {
-            "madgraph_version": "3.8.0",
+            "madgraph_version": "3.8.1",
             "events": 1000,
             "cross_section_pb": 1.23,
             "cross_section_error_pb": 0.01,

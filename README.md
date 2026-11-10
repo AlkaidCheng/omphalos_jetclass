@@ -55,7 +55,7 @@ Generating events also needs three programs, installed separately:
 
 | Program | Version | Stage |
 |---|---|---|
-| MadGraph5_aMC@NLO | 3.8.0 or later | `generate` |
+| MadGraph5_aMC@NLO | 3.8.1 or later | `generate` |
 | Pythia 8 | 8.312 or later | `shower`, run by Delphes's `DelphesPythia8` |
 | Delphes, built with Pythia 8 | 3.5.1 or later | `shower` and `simulate` |
 
@@ -86,7 +86,7 @@ update.
 ### In a container
 
 Each release of omphjc comes with an image that holds the environment above,
-MadGraph 3.8.0 and omphjc, `ghcr.io/alkaidcheng/omphjc:<version>`.
+MadGraph 3.8.1 and omphjc, `ghcr.io/alkaidcheng/omphjc:<version>`.
 `/opt/omphjc/packages.txt` in the image, also attached to the release, lists
 the version of every package in it. Commands run in `/work`, so mount the
 directory to work in there:
