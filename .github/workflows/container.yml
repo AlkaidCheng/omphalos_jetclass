@@ -66,12 +66,15 @@ jobs:
           docker run --rm omphjc:check omphjc --help
           docker run --rm omphjc:check omphjc check-cards
           docker run --rm omphjc:check python -c "import tkinter; tkinter.Tcl()"
-      - name: Run a few events through MadGraph, Pythia and Delphes
+      - name: Run a few events through MadGraph, MadSpin, Pythia and Delphes
         run: >
           docker run --rm omphjc:check bash -c "
           omphjc generate HToBB --job-id 1 --outdir runs --events 20 --cores 2 &&
           omphjc shower HToBB --job-id 1 --outdir runs &&
-          omphjc simulate HToBB --job-id 1 --outdir runs"
+          omphjc simulate HToBB --job-id 1 --outdir runs &&
+          omphjc generate TTBar --job-id 1 --outdir runs --events 20 --cores 2 &&
+          omphjc shower TTBar --job-id 1 --outdir runs &&
+          omphjc simulate TTBar --job-id 1 --outdir runs"
       - name: Save the image and its package list for the release
         if: github.event_name == 'release'
         run: |
