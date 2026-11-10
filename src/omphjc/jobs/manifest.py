@@ -85,7 +85,7 @@ class TaskOutcome:
     usage : dict[str, float]
         Resources the task's program used, such as ``cpu_seconds`` and
         ``peak_memory_mib``; the job adds ``wall_seconds``.
-    set_aside : Path or None
+    set_aside_dir : Path or None
         The folder, inside the job directory, holding what an earlier run left
         and this run could not confirm as that run's (:mod:`omphjc.stamps`);
         ``None`` when nothing was moved.
@@ -95,7 +95,7 @@ class TaskOutcome:
     outputs: list[Path]
     log_path: Path | None = None
     usage: dict[str, float] = field(default_factory=dict)
-    set_aside: Path | None = None
+    set_aside_dir: Path | None = None
 
 
 @dataclass
@@ -160,7 +160,9 @@ class TaskRecord:
             log=None if outcome.log_path is None else relative(outcome.log_path),
             usage={"wall_seconds": round(wall_seconds, 3), **outcome.usage},
             set_aside=(
-                None if outcome.set_aside is None else relative(outcome.set_aside)
+                None
+                if outcome.set_aside_dir is None
+                else relative(outcome.set_aside_dir)
             ),
         )
 

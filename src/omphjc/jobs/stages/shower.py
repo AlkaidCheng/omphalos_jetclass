@@ -92,7 +92,7 @@ def shower(
             outputs=[run.output_path],
             log_path=run.log_path,
             usage=run.usage.as_record(),
-            set_aside=run.set_aside,
+            set_aside_dir=run.set_aside,
         )
 
     parameters = {

@@ -396,7 +396,7 @@ def test_a_stage_records_the_folder_its_run_set_aside(
     def body(overwrite: bool) -> TaskOutcome:
         aside = job.task_dir("x") / "omphjc-set-aside" / "20260101T000000Z-abc"
         aside.mkdir(parents=True)
-        return replace(_make_output(job), set_aside=aside)
+        return replace(_make_output(job), set_aside_dir=aside)
 
     record = job.run_task("x", {"events": 10}, body)
     assert record.set_aside == "x/omphjc-set-aside/20260101T000000Z-abc"
