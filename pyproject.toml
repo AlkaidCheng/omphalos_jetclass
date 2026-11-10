@@ -93,7 +93,7 @@ known-first-party = ["omphjc"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
-packages = ["omphjc"]
+files = ["src/omphjc", "environment/check_requirements.py"]
 exclude = ["^config/", "src/omphjc/config/"]
 
 # awkward 2.9.1 and uproot 5.7.4 include no type information (no py.typed).

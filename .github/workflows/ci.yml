@@ -28,9 +28,9 @@ jobs:
           python -m pip install uv
           uv pip install --system -e ".[dev]"
       - name: ruff
-        run: ruff check src tests
+        run: ruff check src tests environment
       - name: black
-        run: black --check src tests
+        run: black --check src tests environment
       - name: mypy
         run: mypy
 
