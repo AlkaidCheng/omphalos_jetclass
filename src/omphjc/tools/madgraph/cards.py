@@ -15,7 +15,7 @@ PYTHON_SEED_FROM_SYSTEM = -1
 """``python_seed`` that leaves Python's generator seeded from the system.
 
 "-1 means use default from random module" in the run card's comment,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.0/madgraph/various/banner.py#L4425.
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/various/banner.py#L4425.
 """
 
 

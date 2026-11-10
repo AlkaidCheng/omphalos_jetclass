@@ -9,11 +9,12 @@ FROM condaforge/miniforge3:latest
 # MadGraph is a tarball with no resolver behind it, so it is the one program
 # whose version is named, with the SHA-256 of its archive; both change by hand.
 # Launchpad (https://launchpad.net/mg5amcnlo) offers only the newest release of
-# a series, so 3.8.0 comes from the tag archive of the upstream repository.
-ARG MG5_VERSION=3.8.0
+# a series, so the release comes from the tag archive of the upstream
+# repository, which stays at its URL.
+ARG MG5_VERSION=3.8.1
 ARG MG5_URL=https://github.com/mg5amcnlo/mg5amcnlo/archive/refs/tags/v${MG5_VERSION}.tar.gz
-# The SHA-256 of that archive, read on 2026-11-09.
-ARG MG5_SHA256=a399550c183ee8b90b86f436aec067bb0937988cd404f5d75cc7905de7527310
+# The SHA-256 of that archive, read on 2026-11-10.
+ARG MG5_SHA256=b8cc4ce99ac9d614c32298bcb587d50e15b1bad424e569ab49c48a54ba5a1612
 # The version setuptools-scm would read from the git history, which the build
 # context leaves out.
 ARG OMPHJC_VERSION=0.0.0
