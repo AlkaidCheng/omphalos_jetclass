@@ -20,6 +20,10 @@ dependencies:
   # MadGraph compiles each process's Fortran code with make.
   - gfortran
   - make
+  # numpy's f2py builds MadSpin's matrix elements with meson and ninja on
+  # Python 3.12 (https://numpy.org/doc/stable/f2py/buildtools/meson.html).
+  - meson
+  - ninja
   # Installing omphjc compiles its C++ extension: GCC on Linux, clang on macOS.
   - cxx-compiler
   - click>=8.1
