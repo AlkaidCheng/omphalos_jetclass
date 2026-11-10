@@ -62,6 +62,12 @@
 - `omphjc.tools.parnassus.hepmc_input.write_hepmc_input` writes the final state
   of a particle record as the HepMC3 file Parnassus reads, on as many threads as
   `threads` asks. (#41)
+- `environment/check_requirements.py` checks that an installed environment
+  meets every requirement that omphjc, Parnassus and the packages they reach
+  declare. (#43)
+- `environment/environment.yml` describes a conda environment for omphjc, and
+  `environment/Dockerfile` builds an image of it with MadGraph 3.8.1, which
+  each release publishes as `ghcr.io/alkaidcheng/omphjc:<version>`. (#44, #46)
 
 ### Changed
 
@@ -96,6 +102,8 @@
 - Installing omphjc also installs numpy, awkward and uproot. (#39)
 - Installing omphjc from source compiles its C++ extension, which needs a C++17
   standard library that formats floating-point numbers. (#41)
+- Reading a Delphes card in a Python without `tkinter` says that Tcl support is
+  needed and points to the README. (#42)
 
 ### Fixed
 
