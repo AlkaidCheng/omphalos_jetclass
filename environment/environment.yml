@@ -1,0 +1,32 @@
+# The environment omphjc runs in, from conda-forge: Python with Tcl/Tk, Pythia
+# and Delphes, the compilers MadGraph and omphjc build with, and the Python
+# packages omphjc uses. MadGraph itself is not on conda-forge at the version omphjc needs
+# (https://anaconda.org/conda-forge/mg5amcnlo stops at 3.5.7), so
+# environment/Dockerfile installs it from its own release. No version is pinned,
+# so building the environment takes the newest releases; the lower bounds are
+# the versions omphjc was checked against and the floors in pyproject.toml.
+name: omphjc
+channels:
+  - conda-forge
+dependencies:
+  # The newest Python that Parnassus accepts (Requires-Python >=3.12,<3.13).
+  - python=3.12
+  # Tcl/Tk, through which tkinter reads Delphes cards.
+  - tk
+  # Built with Pythia, so it provides DelphesPythia8 as well as DelphesROOT,
+  # and brings ROOT.
+  - delphes>=3.5.1
+  - pythia8>=8.312
+  # MadGraph compiles each process's Fortran code with make.
+  - gfortran
+  - make
+  # Installing omphjc compiles its C++ extension: GCC on Linux, clang on macOS.
+  - cxx-compiler
+  - click>=8.1
+  - pyyaml>=6.0
+  - numpy
+  - awkward>=2.8.2
+  - uproot>=5.7
+  # environment/check_requirements.py reads requirements with packaging.
+  - packaging
+  - pip

@@ -37,10 +37,6 @@ key ends up.
 
 ## Installation
 
-```
-pip install -e .
-```
-
 omphjc needs Python 3.10 or later with Tcl support, through which `tkinter`
 reads Delphes cards. Its Python dependencies are installed with it:
 
@@ -57,11 +53,60 @@ for macOS 13.3 or later), or the library of MSVC 2019 16.4, or a later one.
 
 Generating events also needs three programs, installed separately:
 
-| Program | Stage |
-|---|---|
-| MadGraph5_aMC@NLO | `generate` |
-| Pythia 8 | `shower`, run by Delphes's `DelphesPythia8` |
-| Delphes, built with Pythia support | `shower` and `simulate` |
+| Program | Version | Stage |
+|---|---|---|
+| MadGraph5_aMC@NLO | 3.8.0 or later | `generate` |
+| Pythia 8 | 8.312 or later | `shower`, run by Delphes's `DelphesPythia8` |
+| Delphes, built with Pythia 8 | 3.5.1 or later | `shower` and `simulate` |
+
+From a checkout:
+
+```
+pip install -e .
+```
+
+### With conda
+
+`environment/environment.yml` describes an environment with all of them but
+MadGraph, from conda-forge: Python 3.12 with Tcl/Tk, Pythia, Delphes, the
+Fortran compiler MadGraph builds its processes with, the C++ compiler that
+builds omphjc's extension, and the Python packages omphjc uses.
+
+```
+conda env create -f environment/environment.yml
+conda activate omphjc
+pip install -e .
+```
+
+MadGraph comes from its own release (https://launchpad.net/mg5amcnlo): unpack
+it and put its `bin/` on `PATH`. Setting `auto_update = 0` in its
+`input/mg5_configuration.txt` keeps it from stopping a run to ask about an
+update.
+
+### In a container
+
+Each release of omphjc comes with an image that holds the environment above,
+MadGraph 3.8.0 and omphjc, `ghcr.io/alkaidcheng/omphjc:<version>`.
+`/opt/omphjc/packages.txt` in the image, also attached to the release, lists
+the version of every package in it. Commands run in `/work`, so mount the
+directory to work in there:
+
+```
+docker run --rm -v "$PWD":/work ghcr.io/alkaidcheng/omphjc:<version> omphjc processes
+```
+
+With podman-hpc, as on HPC systems that run containers without Docker:
+
+```
+podman-hpc pull ghcr.io/alkaidcheng/omphjc:<version>
+podman-hpc run --rm -v "$PWD":/work ghcr.io/alkaidcheng/omphjc:<version> omphjc processes
+```
+
+`environment/Dockerfile` builds the same image from a checkout:
+
+```
+docker build -f environment/Dockerfile -t omphjc .
+```
 
 ## Configuration
 

@@ -1,0 +1,13 @@
+# Only what environment/Dockerfile installs. The build passes omphjc's version
+# as an argument, so the git history stays out of the image.
+.git
+.github
+.claude
+**/__pycache__
+**/*.egg-info
+build
+dist
+runs
+# An extension built in place for the host; the image builds its own.
+src/**/*.so
+src/**/*.pyd

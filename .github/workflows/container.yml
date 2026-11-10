@@ -1,0 +1,123 @@
+name: Container
+
+on:
+  schedule:
+    # The 1st and 15th of each month: every build takes the newest releases, so
+    # one that breaks omphjc or a program it runs is found within two weeks.
+    - cron: "0 6 1,15 * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "environment/**"
+      - ".dockerignore"
+      - ".github/workflows/container.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "environment/**"
+      - ".dockerignore"
+      - ".github/workflows/container.yml"
+  release:
+    types: [published]
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Build and check the image
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # setuptools-scm derives omphjc's version from the tag history.
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Read omphjc's version
+        id: version
+        run: |
+          python -m pip install --quiet setuptools-scm
+          echo "version=$(python -m setuptools_scm)" >> "$GITHUB_OUTPUT"
+      - name: Build the image without a layer cache
+        run: >
+          docker build --pull --no-cache
+          --file environment/Dockerfile
+          --build-arg OMPHJC_VERSION=${{ steps.version.outputs.version }}
+          --tag omphjc:check .
+      - name: Check the requirements
+        run: >
+          docker run --rm omphjc:check
+          python /opt/omphjc/source/environment/check_requirements.py
+      - name: Run the test suite
+        run: >
+          docker run --rm --workdir /opt/omphjc/source omphjc:check
+          bash -c "pip install --quiet pytest && pytest -p no:cacheprovider"
+      - name: Check the commands and Tcl
+        run: |
+          docker run --rm omphjc:check omphjc --help
+          docker run --rm omphjc:check omphjc check-cards
+          docker run --rm omphjc:check python -c "import tkinter; tkinter.Tcl()"
+      - name: Run a few events through MadGraph, Pythia and Delphes
+        run: >
+          docker run --rm omphjc:check bash -c "
+          omphjc generate HToBB --job-id 1 --outdir runs --events 20 --cores 2 &&
+          omphjc shower HToBB --job-id 1 --outdir runs &&
+          omphjc simulate HToBB --job-id 1 --outdir runs"
+      - name: Save the image and its package list for the release
+        if: github.event_name == 'release'
+        run: |
+          docker run --rm omphjc:check cat /opt/omphjc/packages.txt > packages.txt
+          docker save omphjc:check | gzip > image.tar.gz
+      - uses: actions/upload-artifact@v7
+        if: github.event_name == 'release'
+        with:
+          name: image
+          path: |
+            image.tar.gz
+            packages.txt
+          retention-days: 1
+
+  publish:
+    name: Publish the release image
+    needs: check
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      # To attach files to the release and push the image to ghcr.io.
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: image
+      - name: Push the image under its version, never over an existing one
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/omphjc:${VERSION}"
+          echo "${GH_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+          if docker manifest inspect "${image}" > /dev/null 2>&1; then
+            echo "${image} exists already, and a release image is never replaced" >&2
+            exit 1
+          fi
+          gunzip --stdout image.tar.gz | docker load
+          docker tag omphjc:check "${image}"
+          docker push "${image}"
+          docker inspect --format '{{index .RepoDigests 0}}' "${image}" > image-digest.txt
+      - name: Attach the package list and the image digest to the release
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release upload "${TAG}" packages.txt image-digest.txt
+          --repo "${GITHUB_REPOSITORY}"
