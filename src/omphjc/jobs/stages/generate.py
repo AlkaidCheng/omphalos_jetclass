@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 from omphjc.jobs.job import Job, sha256
-from omphjc.jobs.manifest import StageOutcome, StageRecord
+from omphjc.jobs.manifest import TaskOutcome, TaskRecord
 from omphjc.tools.madgraph.driver import generate_events
 
 GENERATE = "generate"
@@ -28,7 +28,7 @@ def generate(
     timeout: float | None = None,
     force: bool = False,
     mg5_path: Path | None = None,
-) -> StageRecord:
+) -> TaskRecord:
     """Generate the parton-level events of `job` with MadGraph.
 
     Runs :func:`omphjc.tools.madgraph.driver.generate_events` in the job's ``generate/``
@@ -57,15 +57,15 @@ def generate(
 
     Returns
     -------
-    StageRecord
+    TaskRecord
         The stage's record, kept or new.
     """
-    stage_dir = job.stage_dir(GENERATE)
+    task_dir = job.task_dir(GENERATE)
 
-    def body(overwrite: bool) -> StageOutcome:
+    def body(overwrite: bool) -> TaskOutcome:
         run = generate_events(
             job.spec,
-            workdir=stage_dir,
+            workdir=task_dir,
             n_events=n_events,
             seed=job.seed,
             n_cores=n_cores,
@@ -73,8 +73,8 @@ def generate(
             overwrite=overwrite,
             mg5_path=mg5_path,
         )
-        cards = _copy_cards(run.process_dir / "Cards", stage_dir / _CARDS_DIR, job)
-        return StageOutcome(
+        cards = _copy_cards(run.process_dir / "Cards", task_dir / _CARDS_DIR, job)
+        return TaskOutcome(
             metadata={
                 "madgraph_version": run.banner.version,
                 "events": run.banner.n_events,
@@ -90,7 +90,7 @@ def generate(
         )
 
     parameters = {"events": n_events, "seed": job.seed}
-    return job.run_stage(GENERATE, parameters, body, force=force)
+    return job.run_task(GENERATE, parameters, body, force=force)
 
 
 def _copy_cards(source_dir: Path, target_dir: Path, job: Job) -> dict[str, str]:

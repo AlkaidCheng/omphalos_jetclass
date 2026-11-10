@@ -1,7 +1,8 @@
 """The manifest of a job, ``manifest.json``: what ran, with what, and what came out.
 
 The manifest names the process and job number, the omphjc version that
-created the job, and one record per stage::
+created the job, and one record per task, the work of one stage in the
+job, under the stage's name::
 
     {
       "schema": 1,
@@ -32,21 +33,21 @@ created the job, and one record per stage::
 
 ``schema`` numbers this layout; a manifest of another schema is refused.
 ``status`` is ``"running"``, ``"done"`` or ``"failed"``. ``parameters`` is
-what the stage was asked for, the seed included where the stage uses one, and
+what the task was asked for, the seed included where its stage uses one, and
 decides whether a later run may keep its result. ``metadata`` is what is known
-about the stage and the sample it made; its keys are the stage's own.
+about the task and the sample it made; its keys are the stage's own.
 ``outputs``, ``log`` and ``set_aside`` are paths relative to the job
 directory; ``set_aside`` names the folder into which the run moved what an
 earlier run left and it could not confirm as that run's
 (:mod:`omphjc.stamps`), ``null`` when it moved nothing. ``usage`` is what the
-stage took: its wall time, and the CPU time and peak memory (MiB) of the
+task took: its wall time, and the CPU time and peak memory (MiB) of the
 external program's processes where the platform reports them. The file is
 replaced in one step whenever it changes, so a crash never leaves a
 half-written manifest.
 
-:class:`StageRecord` has one constructor per status. :meth:`StageRecord.running`
-records a stage that has started, :meth:`StageRecord.failed` one that raised,
-and :meth:`StageRecord.done` one that returned a :class:`StageOutcome`, whose
+:class:`TaskRecord` has one constructor per status. :meth:`TaskRecord.running`
+records a task that has started, :meth:`TaskRecord.failed` one that raised,
+and :meth:`TaskRecord.done` one that returned a :class:`TaskOutcome`, whose
 paths it makes relative to the job directory.
 """
 
@@ -69,20 +70,20 @@ FAILED = "failed"
 
 
 @dataclass(frozen=True)
-class StageOutcome:
+class TaskOutcome:
     """The result of a stage function, before the job records it.
 
     Parameters
     ----------
     metadata : dict
-        What is known about the stage and the sample it made, as JSON values;
+        What is known about the task and the sample it made, as JSON values;
         the keys are the stage's own.
     outputs : list[Path]
-        The files the stage made, inside the job directory.
+        The files the task made, inside the job directory.
     log_path : Path or None
-        The log of the stage's program, inside the job directory.
+        The log of the task's program, inside the job directory.
     usage : dict[str, float]
-        Resources the stage's program used, such as ``cpu_seconds`` and
+        Resources the task's program used, such as ``cpu_seconds`` and
         ``peak_memory_mib``; the job adds ``wall_seconds``.
     set_aside : Path or None
         The folder, inside the job directory, holding what an earlier run left
@@ -98,8 +99,8 @@ class StageOutcome:
 
 
 @dataclass
-class StageRecord:
-    """What one stage did; the module docstring describes the fields."""
+class TaskRecord:
+    """What one task did; the module docstring describes the fields."""
 
     status: str
     started: str
@@ -113,15 +114,15 @@ class StageRecord:
     error: str | None = None
 
     @classmethod
-    def running(cls, *, started: str, parameters: dict[str, Any]) -> "StageRecord":
-        """Return the record of a stage that has started."""
+    def running(cls, *, started: str, parameters: dict[str, Any]) -> "TaskRecord":
+        """Return the record of a task that has started."""
         return cls(status=RUNNING, started=started, parameters=parameters)
 
     @classmethod
     def failed(
         cls, *, started: str, parameters: dict[str, Any], error: str
-    ) -> "StageRecord":
-        """Return the record of a stage that has just raised `error`."""
+    ) -> "TaskRecord":
+        """Return the record of a task that has just raised `error`."""
         return cls(
             status=FAILED,
             started=started,
@@ -133,14 +134,14 @@ class StageRecord:
     @classmethod
     def done(
         cls,
-        outcome: StageOutcome,
+        outcome: TaskOutcome,
         *,
         started: str,
         parameters: dict[str, Any],
         wall_seconds: float,
         root_dir: Path,
-    ) -> "StageRecord":
-        """Return the record of a stage that has just returned `outcome`.
+    ) -> "TaskRecord":
+        """Return the record of a task that has just returned `outcome`.
 
         The paths in `outcome` are made relative to `root_dir`, the job
         directory, and `wall_seconds` is added to its usage.
@@ -171,7 +172,7 @@ class Manifest:
     process: str
     job_id: int
     omphjc_version: str = __version__
-    stages: dict[str, StageRecord] = field(default_factory=dict)
+    stages: dict[str, TaskRecord] = field(default_factory=dict)
 
     def write(self, path: Path) -> None:
         """Write the manifest to `path`, replacing it in one step."""
@@ -208,7 +209,7 @@ class Manifest:
                 job_id=record["job_id"],
                 omphjc_version=record["omphjc_version"],
                 stages={
-                    name: StageRecord(**stage)
+                    name: TaskRecord(**stage)
                     for name, stage in record["stages"].items()
                 },
             )

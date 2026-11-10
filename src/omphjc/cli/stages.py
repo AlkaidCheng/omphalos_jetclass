@@ -26,7 +26,7 @@ from omphjc.jobs import (
     SHOWER,
     SIMULATE,
     Job,
-    StageRecord,
+    TaskRecord,
     TerminationError,
     exception_on_termination,
     generate,
@@ -86,7 +86,7 @@ def generate_job(
     """Generate the parton-level events of one job of a process with MadGraph."""
     spec = lookup_process(specs, name)
 
-    def run(job: Job) -> StageRecord:
+    def run(job: Job) -> TaskRecord:
         return generate(
             job,
             n_events=n_events,
@@ -107,7 +107,7 @@ def generate_job(
     )
 
 
-def _generation_lines(job: Job, record: StageRecord) -> Iterator[str]:
+def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the generate stage of `job` ran with and what it made."""
     metadata = record.metadata
     yield f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
@@ -120,7 +120,7 @@ def _generation_lines(job: Job, record: StageRecord) -> Iterator[str]:
     yield format_row("cross section", cross_section)
     yield format_row("event file", record.outputs[0])
     yield format_row("log", record.log)
-    yield format_row("cards", f"{job.relative_path(job.stage_dir(GENERATE))}/cards/")
+    yield format_row("cards", f"{job.relative_path(job.task_dir(GENERATE))}/cards/")
 
 
 @click.command("shower")
@@ -154,7 +154,7 @@ def shower_job(
     spec = lookup_process(specs, name)
     overrides = dict(parse_assignment(item) for item in assignments)
 
-    def run(job: Job) -> StageRecord:
+    def run(job: Job) -> TaskRecord:
         return shower(
             job,
             overrides=overrides,
@@ -174,7 +174,7 @@ def shower_job(
     )
 
 
-def _shower_lines(job: Job, record: StageRecord) -> Iterator[str]:
+def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the shower stage of `job` ran with and what it made."""
     metadata = record.metadata
     yield f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
@@ -223,7 +223,7 @@ def simulate_job(
     """Simulate the detector on one job's showered events with Delphes."""
     spec = lookup_process(specs, name)
 
-    def run(job: Job) -> StageRecord:
+    def run(job: Job) -> TaskRecord:
         return simulate(
             job,
             card_path=card_path,
@@ -243,7 +243,7 @@ def simulate_job(
     )
 
 
-def _simulation_lines(job: Job, record: StageRecord) -> Iterator[str]:
+def _simulation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the simulation stage of `job` ran with and what it made."""
     metadata = record.metadata
     yield format_row("card", ", ".join(metadata["card"]))
@@ -259,9 +259,9 @@ def _run_stage_command(
     outdir: Path,
     *,
     stage: str,
-    run: Callable[[Job], StageRecord],
+    run: Callable[[Job], TaskRecord],
     title: str,
-    lines: Callable[[Job, StageRecord], Iterable[str]],
+    lines: Callable[[Job, TaskRecord], Iterable[str]],
 ) -> None:
     """Run `stage` of one job of `spec` through `run` and print its report.
 

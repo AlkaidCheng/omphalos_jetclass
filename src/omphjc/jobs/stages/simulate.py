@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 
 from omphjc.jobs.job import Job, sha256
-from omphjc.jobs.manifest import StageOutcome, StageRecord
+from omphjc.jobs.manifest import TaskOutcome, TaskRecord
 from omphjc.jobs.stages.shower import SHOWER
 from omphjc.tools.delphes.driver import detector_card_text, simulate_events
 
@@ -19,7 +19,7 @@ def simulate(
     timeout: float | None = None,
     force: bool = False,
     delphes_root_path: Path | None = None,
-) -> StageRecord:
+) -> TaskRecord:
     """Simulate the detector on the showered events of `job` with Delphes.
 
     Runs :func:`omphjc.tools.delphes.driver.simulate_events` in the job's ``simulate/``
@@ -45,7 +45,7 @@ def simulate(
 
     Returns
     -------
-    StageRecord
+    TaskRecord
         The stage's record, kept or new.
 
     Raises
@@ -57,22 +57,22 @@ def simulate(
     """
     shower_record = job.require_done(SHOWER)
     events_path = job.root_dir / shower_record.outputs[0]
-    stage_dir = job.stage_dir(SIMULATE)
+    task_dir = job.task_dir(SIMULATE)
     card_text = detector_card_text(job.spec, card_path)
     card_hash = hashlib.sha256(card_text.encode("utf-8")).hexdigest()
 
-    def body(overwrite: bool) -> StageOutcome:
+    def body(overwrite: bool) -> TaskOutcome:
         run = simulate_events(
             job.spec,
             events_path=events_path,
-            workdir=stage_dir,
+            workdir=task_dir,
             seed=job.seed,
             card_path=card_path,
             timeout=timeout,
             overwrite=overwrite,
             delphes_root_path=delphes_root_path,
         )
-        return StageOutcome(
+        return TaskOutcome(
             metadata={
                 "events": shower_record.metadata.get("events_accepted"),
                 "card": {job.relative_path(run.card_path): sha256(run.card_path)},
@@ -88,4 +88,4 @@ def simulate(
         "card": card_hash,
         "showered_with": shower_record.metadata.get("settings", {}),
     }
-    return job.run_stage(SIMULATE, parameters, body, force=force)
+    return job.run_task(SIMULATE, parameters, body, force=force)

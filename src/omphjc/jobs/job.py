@@ -4,7 +4,7 @@
 
     <outdir>/<process>/job_<n>/
       manifest.json      what ran, with what, and what came out (omphjc.jobs.manifest)
-      <stage>/           one directory per stage, laid out by the stage
+      <stage>/           one directory per task, named and laid out by its stage
 
 The job number fixes the seed of every program the job runs
 (:func:`job_seed`); ``docs/reproducibility.md`` lists what else a rerun's
@@ -25,8 +25,8 @@ from omphjc.jobs.manifest import (
     DONE,
     MANIFEST_FILE,
     Manifest,
-    StageOutcome,
-    StageRecord,
+    TaskOutcome,
+    TaskRecord,
     timestamp,
 )
 from omphjc.processes.catalogue import ProcessSpec
@@ -41,8 +41,8 @@ class TerminationError(RuntimeError):
     """The process received a termination signal."""
 
 
-StageBody = Callable[[bool], StageOutcome]
-"""Runs a stage; the argument says whether to replace what an earlier run left."""
+TaskBody = Callable[[bool], TaskOutcome]
+"""Runs a task; the argument says whether to replace what an earlier run left."""
 
 
 def sha256(path: Path) -> str:
@@ -115,8 +115,8 @@ class Job:
     def manifest_path(self) -> Path:
         return self.root_dir / MANIFEST_FILE
 
-    def stage_dir(self, stage: str) -> Path:
-        """Return the directory of `stage`, ``<root>/<stage>``."""
+    def task_dir(self, stage: str) -> Path:
+        """Return the directory of the `stage` task, ``<root>/<stage>``."""
         return inside(self.root_dir, stage)
 
     def relative_path(self, path: Path) -> str:
@@ -130,7 +130,7 @@ class Job:
             return False
         return all((self.root_dir / output).exists() for output in record.outputs)
 
-    def require_done(self, stage: str) -> StageRecord:
+    def require_done(self, stage: str) -> TaskRecord:
         """Return the record of `stage`, which must be done with its outputs present.
 
         Raises
@@ -146,17 +146,17 @@ class Job:
             )
         return self.manifest.stages[stage]
 
-    def run_stage(
+    def run_task(
         self,
         stage: str,
         parameters: dict[str, Any],
-        body: StageBody,
+        body: TaskBody,
         *,
         force: bool = False,
-    ) -> StageRecord:
+    ) -> TaskRecord:
         """Run `stage` through `body` unless its result can be kept; record it.
 
-        A stage recorded as done, with its outputs present and the same
+        A task recorded as done, with its outputs present and the same
         `parameters`, is kept. One recorded as done with other parameters is
         refused unless `force` is set. One recorded as failed or interrupted,
         or run under `force`, runs again, and `body` is told to replace what
@@ -167,23 +167,23 @@ class Job:
         Parameters
         ----------
         stage : str
-            Name of the stage; its directory is ``<root>/<stage>``.
+            Name of the stage; its task's directory is ``<root>/<stage>``.
         parameters : dict
-            What the stage is asked for, as JSON values.
-        body : StageBody
-            Runs the stage; receives whether to replace an earlier run's files.
+            What the task is asked for, as JSON values.
+        body : TaskBody
+            Runs the task; receives whether to replace an earlier run's files.
         force : bool, optional
-            Run the stage even when its result could be kept.
+            Run the task even when its result could be kept.
 
         Returns
         -------
-        StageRecord
-            The record of the stage, kept or new.
+        TaskRecord
+            The record of the task, kept or new.
 
         Raises
         ------
         ValueError
-            If the stage is recorded as done with other parameters and `force`
+            If the task is recorded as done with other parameters and `force`
             is not set.
         Exception
             Whatever `body` raised, after the failure is recorded.
@@ -200,19 +200,19 @@ class Job:
         overwrite = force or earlier is not None
         started = timestamp()
         clock = time.monotonic()
-        self.manifest.stages[stage] = StageRecord.running(
+        self.manifest.stages[stage] = TaskRecord.running(
             started=started, parameters=parameters
         )
         self._write_manifest()
         try:
             outcome = body(overwrite)
         except BaseException as error:
-            self.manifest.stages[stage] = StageRecord.failed(
+            self.manifest.stages[stage] = TaskRecord.failed(
                 started=started, parameters=parameters, error=str(error)
             )
             self._write_manifest()
             raise
-        record = StageRecord.done(
+        record = TaskRecord.done(
             outcome,
             started=started,
             parameters=parameters,
@@ -224,7 +224,7 @@ class Job:
         return record
 
     def set_aside_folders(self) -> list[SetAsideFolder]:
-        """Return what earlier runs of the job's stages set aside, oldest first.
+        """Return what earlier runs of the job's tasks set aside, oldest first.
 
         A run that cannot confirm an artifact an earlier run left, as after a
         kill before sealing, moves it into ``<stage>/omphjc-set-aside/``
@@ -234,23 +234,23 @@ class Job:
         found = [
             folder
             for stage in self.manifest.stages
-            for folder in set_aside_folders(self.stage_dir(stage))
+            for folder in set_aside_folders(self.task_dir(stage))
         ]
         return sorted(found, key=lambda folder: (folder.created, folder.path))
 
     def clear_set_aside_folders(self) -> list[SetAsideFolder]:
-        """Delete what earlier runs of the job's stages set aside; return it.
+        """Delete what earlier runs of the job's tasks set aside; return it.
 
         Raises
         ------
         StampError
-            If a stage directory holds set-aside folders but no stamp; nothing
+            If a task directory holds set-aside folders but no stamp; nothing
             in that directory is changed.
         """
         removed = [
             folder
             for stage in self.manifest.stages
-            for folder in clear_set_aside_folders(self.stage_dir(stage))
+            for folder in clear_set_aside_folders(self.task_dir(stage))
         ]
         return sorted(removed, key=lambda folder: (folder.created, folder.path))
 

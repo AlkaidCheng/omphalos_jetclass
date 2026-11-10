@@ -11,8 +11,8 @@ import pytest
 from omphjc.jobs import (
     Job,
     Manifest,
-    StageOutcome,
-    StageRecord,
+    TaskOutcome,
+    TaskRecord,
     TerminationError,
     exception_on_termination,
     generate,
@@ -42,7 +42,7 @@ def test_a_job_has_a_directory_per_process_and_number(
     job = Job(specs["HToBB"], tmp_path / "runs", 7)
     assert job.root_dir == (tmp_path / "runs").resolve() / "HToBB" / "job_7"
     assert job.manifest_path == job.root_dir / "manifest.json"
-    assert job.stage_dir("generate") == job.root_dir / "generate"
+    assert job.task_dir("generate") == job.root_dir / "generate"
     assert job.relative_path(job.root_dir / "generate" / "x.log") == "generate/x.log"
     assert job.seed == 10000007
     assert job.manifest == Manifest(process="HToBB", job_id=7)
@@ -54,7 +54,7 @@ def test_a_job_has_a_directory_per_process_and_number(
 
 
 def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
-    record = StageRecord(
+    record = TaskRecord(
         status="done",
         started="t",
         parameters={"events": 10},
@@ -77,12 +77,12 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
         Manifest.read(path)
 
 
-def _make_output(job: Job) -> StageOutcome:
-    directory = job.stage_dir("x")
+def _make_output(job: Job) -> TaskOutcome:
+    directory = job.task_dir("x")
     directory.mkdir(parents=True, exist_ok=True)
     output = directory / "out.txt"
     output.write_text("made")
-    return StageOutcome(metadata={"n": 1}, outputs=[output])
+    return TaskOutcome(metadata={"n": 1}, outputs=[output])
 
 
 def test_a_stage_runs_once_and_its_result_is_kept(
@@ -90,12 +90,12 @@ def test_a_stage_runs_once_and_its_result_is_kept(
 ) -> None:
     calls: list[bool] = []
 
-    def body(overwrite: bool) -> StageOutcome:
+    def body(overwrite: bool) -> TaskOutcome:
         calls.append(overwrite)
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    record = job.run_stage("x", {"events": 10}, body)
+    record = job.run_task("x", {"events": 10}, body)
     assert calls == [False]
     assert record.status == "done" and record.finished is not None
     assert record.parameters == {"events": 10}
@@ -105,7 +105,7 @@ def test_a_stage_runs_once_and_its_result_is_kept(
 
     job = Job(specs["HToBB"], tmp_path, 1)
     assert job.is_done("x")
-    assert job.run_stage("x", {"events": 10}, body) == record
+    assert job.run_task("x", {"events": 10}, body) == record
     assert calls == [False]
 
 
@@ -114,16 +114,16 @@ def test_other_parameters_need_force_and_force_replaces(
 ) -> None:
     calls: list[bool] = []
 
-    def body(overwrite: bool) -> StageOutcome:
+    def body(overwrite: bool) -> TaskOutcome:
         calls.append(overwrite)
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.run_stage("x", {"events": 10}, body)
+    job.run_task("x", {"events": 10}, body)
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(ValueError, match="ran with {'events': 10}"):
-        job.run_stage("x", {"events": 20}, body)
-    forced = job.run_stage("x", {"events": 20}, body, force=True)
+        job.run_task("x", {"events": 20}, body)
+    forced = job.run_task("x", {"events": 20}, body, force=True)
     assert forced.parameters == {"events": 20}
     assert calls == [False, True]
 
@@ -133,22 +133,22 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
 ) -> None:
     calls: list[bool] = []
 
-    def body(overwrite: bool) -> StageOutcome:
+    def body(overwrite: bool) -> TaskOutcome:
         calls.append(overwrite)
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.run_stage("x", {}, body)
+    job.run_task("x", {}, body)
     (job.root_dir / "x" / "out.txt").unlink()
     job = Job(specs["HToBB"], tmp_path, 1)
     assert not job.is_done("x")
-    job.run_stage("x", {}, body)
+    job.run_task("x", {}, body)
     assert calls == [False, True]
 
-    job.manifest.stages["x"] = StageRecord(status="running", started="t")
+    job.manifest.stages["x"] = TaskRecord(status="running", started="t")
     job.manifest.write(job.manifest_path)
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.run_stage("x", {}, body).status == "done"
+    assert job.run_task("x", {}, body).status == "done"
     assert calls == [False, True, True]
 
 
@@ -159,7 +159,7 @@ def test_require_done_returns_the_record_or_says_which_stage_to_run(
     not_done = "The x stage of .* has not run to completion; run omphjc x first"
     with pytest.raises(ValueError, match=not_done):
         job.require_done("x")
-    record = job.run_stage("x", {}, lambda overwrite: _make_output(job))
+    record = job.run_task("x", {}, lambda overwrite: _make_output(job))
     assert job.require_done("x") == record
     (job.root_dir / "x" / "out.txt").unlink()
     with pytest.raises(ValueError, match=not_done):
@@ -169,24 +169,24 @@ def test_require_done_returns_the_record_or_says_which_stage_to_run(
 def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
-    def failing(overwrite: bool) -> StageOutcome:
+    def failing(overwrite: bool) -> TaskOutcome:
         raise RuntimeError("boom")
 
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(RuntimeError, match="boom"):
-        job.run_stage("x", {"events": 10}, failing)
+        job.run_task("x", {"events": 10}, failing)
     record = Manifest.read(job.manifest_path).stages["x"]
     assert record.status == "failed" and record.finished is not None
     assert record.parameters == {"events": 10} and record.error == "boom"
 
     calls: list[bool] = []
 
-    def body(overwrite: bool) -> StageOutcome:
+    def body(overwrite: bool) -> TaskOutcome:
         calls.append(overwrite)
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.run_stage("x", {"events": 10}, body).status == "done"
+    assert job.run_task("x", {"events": 10}, body).status == "done"
     assert calls == [True]
 
 
@@ -393,12 +393,12 @@ def test_a_stage_records_the_folder_its_run_set_aside(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
 
-    def body(overwrite: bool) -> StageOutcome:
-        aside = job.stage_dir("x") / "omphjc-set-aside" / "20260101T000000Z-abc"
+    def body(overwrite: bool) -> TaskOutcome:
+        aside = job.task_dir("x") / "omphjc-set-aside" / "20260101T000000Z-abc"
         aside.mkdir(parents=True)
         return replace(_make_output(job), set_aside=aside)
 
-    record = job.run_stage("x", {"events": 10}, body)
+    record = job.run_task("x", {"events": 10}, body)
     assert record.set_aside == "x/omphjc-set-aside/20260101T000000Z-abc"
     assert Manifest.read(job.manifest_path).stages["x"].set_aside == record.set_aside
 
@@ -424,7 +424,7 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
     assert folders[0].size() > 0
     assert job.clear_set_aside_folders() == folders
     assert job.set_aside_folders() == []
-    assert not (job.stage_dir("generate") / "omphjc-set-aside").exists()
+    assert not (job.task_dir("generate") / "omphjc-set-aside").exists()
     assert job.is_done("generate")
 
 
