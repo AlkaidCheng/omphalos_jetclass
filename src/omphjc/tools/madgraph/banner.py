@@ -26,6 +26,16 @@ _VERSION_BLOCK_PATTERN = re.compile(r"<MGVersion>(.*?)</MGVersion>", re.S)
 _RUN_CARD_BLOCK_PATTERN = re.compile(r"<MGRunCard>(.*?)</MGRunCard>", re.S)
 _INIT_BLOCK_PATTERN = re.compile(r"<init>(.*?)</init>", re.S)
 
+# The cards in the header. MadGraph puts a card that contains "<" or "@" inside
+# a CDATA section (Banner.write,
+# https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/various/banner.py#L417-L420).
+# The pattern matches a card with or without that section and captures only the
+# card's own text.
+_CARD = r"\s*(?:<!\[CDATA\[\s*)?(.*?)\s*(?:\]\]>\s*)?"
+_PROC_CARD_BLOCK_PATTERN = re.compile(rf"<MG5ProcCard>{_CARD}</MG5ProcCard>", re.S)
+_PARAM_CARD_BLOCK_PATTERN = re.compile(rf"<slha>{_CARD}</slha>", re.S)
+_MADSPIN_BLOCK_PATTERN = re.compile(rf"<madspin>{_CARD}</madspin>", re.S)
+
 # Values of the generation summary.
 _N_EVENTS_PATTERN = re.compile(r"#\s*Number of Events\s*:\s*(\d+)")
 _CROSS_SECTION_PATTERN = re.compile(
@@ -59,8 +69,9 @@ class Banner:
         of the ``<init>`` block; ``None`` when the text has no such block.
     run_card : dict[str, RunCardValue]
         The run card as MadGraph used it.
-    uses_madspin : bool
-        Whether MadSpin decayed the events.
+    proc_card, param_card, madspin_card : str or None
+        The text of the process card, the parameter card and the MadSpin card.
+        A card that is missing from the banner is ``None``.
     """
 
     version: str
@@ -68,7 +79,14 @@ class Banner:
     cross_section_pb: float
     cross_section_error_pb: float | None
     run_card: dict[str, RunCardValue]
-    uses_madspin: bool
+    proc_card: str | None
+    param_card: str | None
+    madspin_card: str | None
+
+    @property
+    def uses_madspin(self) -> bool:
+        """Whether MadSpin decayed the events."""
+        return self.madspin_card is not None
 
     @property
     def seed(self) -> int:
@@ -125,7 +143,9 @@ class Banner:
             run_card=parse_run_card(
                 _capture(_RUN_CARD_BLOCK_PATTERN, text, missing="MGRunCard block")
             ),
-            uses_madspin="<madspin>" in text,
+            proc_card=_capture(_PROC_CARD_BLOCK_PATTERN, text),
+            param_card=_capture(_PARAM_CARD_BLOCK_PATTERN, text),
+            madspin_card=_capture(_MADSPIN_BLOCK_PATTERN, text),
         )
 
 

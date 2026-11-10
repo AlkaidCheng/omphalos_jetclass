@@ -31,6 +31,22 @@ def test_banner_file_without_init_block_has_no_error() -> None:
     assert banner.uses_madspin is False
 
 
+def test_cards_are_kept_without_their_tags_and_cdata_sections() -> None:
+    banner = Banner.read(BANNER)
+    assert (banner.proc_card, banner.param_card) == (None, None)
+    assert banner.madspin_card is not None
+    assert banner.madspin_card.startswith("set max_weight_ps_point 400")
+    assert banner.madspin_card.endswith("decay w- > j j\nlaunch")
+    text = BANNER.read_text().replace(
+        "<MGRunCard>",
+        "<MG5ProcCard>\n<![CDATA[\ngenerate p p > t t~ @0\n]]>\n</MG5ProcCard>\n"
+        "<slha>\nBLOCK MASS\n    6 1.725e+02\n</slha>\n<MGRunCard>",
+    )
+    banner = Banner.from_text(text)
+    assert banner.proc_card == "generate p p > t t~ @0"
+    assert banner.param_card == "BLOCK MASS\n    6 1.725e+02"
+
+
 def test_gzipped_event_file_is_read_up_to_the_first_event(tmp_path: Path) -> None:
     events = "<event>\n" + "0 0 0 0 0 0\n" * 1000 + "</event>\n"
     path = tmp_path / "unweighted_events.lhe.gz"
