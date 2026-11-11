@@ -3,8 +3,15 @@
 from collections.abc import Mapping
 from pathlib import Path
 
+from omphjc.events.formats import EventFormat
 from omphjc.jobs.job import Job, sha256
-from omphjc.jobs.manifest import TaskOutcome, TaskRecord
+from omphjc.jobs.manifest import (
+    EVENTS_OUTPUT,
+    EventOutput,
+    TaskOutcome,
+    TaskRecord,
+    TaskResult,
+)
 from omphjc.jobs.stages.generate import GENERATE
 from omphjc.processes.catalogue import SettingValue
 from omphjc.tools.pythia.driver import shower_events
@@ -28,9 +35,10 @@ def shower(
     and as many events as that stage recorded. The stage's parameters are the
     event count, the seed, the Pythia overrides and the cards the events were
     generated with, so a sample regenerated with the same seed keeps its
-    shower. Its metadata are the Pythia version, the events read and
-    accepted, the fraction kept by matching for a matched process, and the
-    SHA-256 of the command file and the record-only card as run.
+    shower. Its events are the ROOT file with the count Pythia accepted, and
+    its metadata the Pythia version, the events read, the fraction kept by
+    matching for a matched process, and the SHA-256 of the command file and
+    the record-only card as run.
 
     Parameters
     ----------
@@ -56,17 +64,16 @@ def shower(
         If the generate stage of `job` has not run to completion.
     """
     generated = job.require_done(GENERATE)
-    lhe_path = job.root_dir / generated.outputs[0]
-    n_events = int(generated.metadata["events"])
+    events = job.require_events(GENERATE)
     task_dir = job.task_dir(SHOWER)
     pythia_overrides = dict(overrides or {})
 
     def body(overwrite: bool) -> TaskOutcome:
         run = shower_events(
             job.spec,
-            lhe_path=lhe_path,
+            lhe_path=events.path,
             workdir=task_dir,
-            n_events=n_events,
+            n_events=events.n_events,
             seed=job.seed,
             overrides=pythia_overrides,
             timeout=timeout,
@@ -77,7 +84,6 @@ def shower(
         metadata = {
             "pythia_version": statistics.pythia_version,
             "events_read": statistics.events_read,
-            "events_accepted": statistics.events_accepted,
             "settings": {
                 job.relative_path(run.cmnd_path): sha256(run.cmnd_path),
                 job.relative_path(run.card_path): sha256(run.card_path),
@@ -88,17 +94,25 @@ def shower(
                 statistics.events_accepted / statistics.events_read
             )
         return TaskOutcome(
-            metadata=metadata,
-            outputs=[run.output_path],
+            TaskResult(
+                outputs={
+                    EVENTS_OUTPUT: EventOutput(
+                        run.output_path,
+                        EventFormat.DELPHES_ROOT,
+                        n_events=statistics.events_accepted,
+                    )
+                },
+                metadata=metadata,
+            ),
             log_path=run.log_path,
             usage=run.usage.as_record(),
             set_aside_dir=run.set_aside,
         )
 
     parameters = {
-        "events": n_events,
+        "events": events.n_events,
         "seed": job.seed,
         "pythia": pythia_overrides,
-        "generated_with": generated.metadata.get("cards", {}),
+        "generated_with": generated.result.metadata.get("cards", {}),
     }
     return job.run_task(SHOWER, parameters, body, force=force)

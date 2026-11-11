@@ -8,11 +8,16 @@ from pathlib import Path
 
 import pytest
 
+from omphjc.events import EventFormat
 from omphjc.jobs import (
+    EVENTS_OUTPUT,
+    EventOutput,
     Job,
     Manifest,
     TaskOutcome,
+    TaskOutput,
     TaskRecord,
+    TaskResult,
     TerminationError,
     exception_on_termination,
     generate,
@@ -54,18 +59,37 @@ def test_a_job_has_a_directory_per_process_and_number(
 
 
 def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
+    output_path = tmp_path / "x" / "out"
     record = TaskRecord(
         status="done",
         started="t",
         parameters={"events": 10},
-        metadata={"events": 10, "cards": {"x/c.dat": "abc"}},
-        outputs=["x/out"],
+        result=TaskResult(
+            outputs={
+                EVENTS_OUTPUT: EventOutput(output_path, EventFormat.LHE, n_events=10),
+                "summary": TaskOutput(tmp_path / "x" / "summary.txt"),
+            },
+            metadata={"cards": {"x/c.dat": "abc"}},
+        ),
     )
-    manifest = Manifest(process="HToBB", job_id=1, stages={"x": record})
+    running = TaskRecord(status="running", started="t")
+    manifest = Manifest(process="HToBB", job_id=1, stages={"x": record, "y": running})
     path = tmp_path / "manifest.json"
     manifest.write(path)
-    assert json.loads(path.read_text())["schema"] == 1
+    written = json.loads(path.read_text())
+    assert written["schema"] == 1
+    assert written["stages"]["x"]["result"] == {
+        "outputs": {
+            "events": {"path": "x/out", "format": "lhe", "n_events": 10},
+            "summary": {"path": "x/summary.txt"},
+        },
+        "metadata": {"cards": {"x/c.dat": "abc"}},
+    }
     assert Manifest.read(path) == manifest
+    written["stages"]["x"]["result"]["outputs"]["events"]["format"] = "hepmc"
+    path.write_text(json.dumps(written))
+    with pytest.raises(ValueError, match="not a manifest: 'hepmc'"):
+        Manifest.read(path)
     path.write_text('{"schema": 99}')
     with pytest.raises(ValueError, match="schema 99; .* reads schema 1"):
         Manifest.read(path)
@@ -77,12 +101,27 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
         Manifest.read(path)
 
 
+def test_a_manifest_refuses_a_path_outside_its_directory(tmp_path: Path) -> None:
+    path = tmp_path / "job" / "manifest.json"
+    path.parent.mkdir()
+    record = TaskRecord(
+        status="done",
+        started="t",
+        result=TaskResult(outputs={"out": TaskOutput(tmp_path / "elsewhere" / "out")}),
+    )
+    with pytest.raises(ValueError, match="elsewhere"):
+        Manifest(process="HToBB", job_id=1, stages={"x": record}).write(path)
+    assert list(path.parent.iterdir()) == []
+
+
 def _make_output(job: Job) -> TaskOutcome:
     directory = job.task_dir("x")
     directory.mkdir(parents=True, exist_ok=True)
     output = directory / "out.txt"
     output.write_text("made")
-    return TaskOutcome(metadata={"n": 1}, outputs=[output])
+    return TaskOutcome(
+        TaskResult(outputs={"out": TaskOutput(output)}, metadata={"n": 1})
+    )
 
 
 def test_a_stage_runs_once_and_its_result_is_kept(
@@ -99,8 +138,10 @@ def test_a_stage_runs_once_and_its_result_is_kept(
     assert calls == [False]
     assert record.status == "done" and record.finished is not None
     assert record.parameters == {"events": 10}
-    assert record.metadata == {"n": 1}
-    assert record.outputs == ["x/out.txt"] and record.log is None
+    assert record.result == TaskResult(
+        outputs={"out": TaskOutput(job.root_dir / "x" / "out.txt")}, metadata={"n": 1}
+    )
+    assert record.log is None
     assert Manifest.read(job.manifest_path).stages["x"] == record
 
     job = Job(specs["HToBB"], tmp_path, 1)
@@ -166,6 +207,26 @@ def test_require_done_returns_the_record_or_says_which_stage_to_run(
         job.require_done("x")
 
 
+def test_require_events_returns_the_events_a_done_stage_made(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    with pytest.raises(ValueError, match="has not run to completion"):
+        job.require_events("x")
+    job.run_task("x", {}, lambda overwrite: _make_output(job))
+    with pytest.raises(ValueError, match="The x stage of .* made no event file"):
+        job.require_events("x")
+
+    events = EventOutput(job.task_dir("x") / "out.txt", EventFormat.LHE, n_events=3)
+    job.run_task(
+        "x",
+        {},
+        lambda overwrite: TaskOutcome(TaskResult(outputs={EVENTS_OUTPUT: events})),
+        force=True,
+    )
+    assert Job(specs["HToBB"], tmp_path, 1).require_events("x") == events
+
+
 def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
@@ -208,20 +269,23 @@ def test_generate_records_what_madgraph_made(
     assert Manifest.read(job.manifest_path).stages["generate"] == record
     assert record.status == "done"
     assert record.parameters == {"events": 10, "seed": 3}
-    assert record.metadata["madgraph_version"] == "3.5.7"
-    assert record.metadata["events"] == 10000
-    assert record.metadata["cross_section_pb"] == pytest.approx(1.052824254921272)
-    assert record.metadata["cross_section_error_pb"] == pytest.approx(2.3983749989e-3)
+    metadata = record.result.metadata
+    assert metadata["madgraph_version"] == "3.5.7"
+    assert metadata["cross_section_pb"] == pytest.approx(1.052824254921272)
+    assert metadata["cross_section_error_pb"] == pytest.approx(2.3983749989e-3)
     assert record.usage["wall_seconds"] > 0
     assert record.usage["cpu_seconds"] >= 0 and record.usage["peak_memory_mib"] > 0
-    assert record.outputs == [
+    lhe_path = job.root_dir / (
         "generate/TTBar/Events/run_01_decayed_1/unweighted_events.lhe.gz"
-    ]
-    assert (job.root_dir / record.outputs[0]).is_file()
+    )
+    assert lhe_path.is_file()
+    assert record.result.outputs == {
+        EVENTS_OUTPUT: EventOutput(lhe_path, EventFormat.LHE, n_events=10000)
+    }
     assert record.log == "generate/madgraph.log"
     card = job.root_dir / "generate" / "cards" / "proc_card_mg5.dat"
     assert card.is_file()
-    assert record.metadata["cards"]["generate/cards/proc_card_mg5.dat"] == (
+    assert metadata["cards"]["generate/cards/proc_card_mg5.dat"] == (
         hashlib.sha256(card.read_bytes()).hexdigest()
     )
     assert (card.parent / "madspin_card.dat").is_file()
@@ -239,7 +303,7 @@ def test_generate_records_the_cores_as_metadata(
     job = Job(specs["HToBB"], tmp_path, 1)
     record = generate(job, n_events=10, n_cores=n_cores, mg5_path=mg5_path)
     expected = available_cores() if n_cores is None else n_cores
-    assert record.metadata["n_cores"] == expected
+    assert record.result.metadata["n_cores"] == expected
     rerun = generate(job, n_events=10, n_cores=expected + 1, mg5_path=mg5_path)
     assert rerun == record
 
@@ -313,18 +377,21 @@ def test_shower_records_what_it_made_and_keeps_it(
         "events": 10000,
         "seed": 10000001,
         "pythia": {},
-        "generated_with": generated.metadata["cards"],
+        "generated_with": generated.result.metadata["cards"],
     }
-    assert record.metadata["pythia_version"] == "8.318"
-    assert record.metadata["events_read"] == 1
-    assert record.metadata["events_accepted"] == 1
-    assert "matching_efficiency" not in record.metadata
-    assert set(record.metadata["settings"]) == {
+    metadata = record.result.metadata
+    assert metadata["pythia_version"] == "8.318"
+    assert metadata["events_read"] == 1
+    assert "matching_efficiency" not in metadata
+    assert set(metadata["settings"]) == {
         "shower/pythia.cmnd",
         "shower/particles_card.tcl",
     }
-    assert record.outputs == ["shower/particles.root"]
-    assert (job.root_dir / "shower" / "particles.root").is_file()
+    root_path = job.root_dir / "shower" / "particles.root"
+    assert root_path.is_file()
+    assert record.result.outputs == {
+        EVENTS_OUTPUT: EventOutput(root_path, EventFormat.DELPHES_ROOT, n_events=1)
+    }
     assert record.log == "shower/shower.log"
     cmnd = (job.root_dir / "shower" / "pythia.cmnd").read_text()
     assert "Random:seed = 10000001" in cmnd and "Main:numberOfEvents = 10000" in cmnd
@@ -376,7 +443,7 @@ def test_shower_records_the_matching_efficiency_of_a_matched_process(
         Job(specs["ZJetsToNuNu"], tmp_path, 2),
         delphes_pythia8_path=delphes_pythia8_path,
     )
-    assert record.metadata["matching_efficiency"] == 1.0
+    assert record.result.metadata["matching_efficiency"] == 1.0
     cmnd = (tmp_path / "ZJetsToNuNu" / "job_2" / "shower" / "pythia.cmnd").read_text()
     assert "JetMatching:merge = on" in cmnd
 
@@ -449,12 +516,18 @@ def test_simulate_records_what_it_made_and_keeps_it(
     record = simulate(job, delphes_root_path=delphes_root_path)
     assert record.status == "done"
     assert record.parameters["seed"] == job.seed
-    assert record.parameters["showered_with"] == showered.metadata["settings"]
+    assert record.parameters["showered_with"] == showered.result.metadata["settings"]
     assert len(record.parameters["card"]) == 64
-    assert record.metadata["events"] == showered.metadata["events_accepted"]
-    assert list(record.metadata["card"]) == ["simulate/delphes_card.tcl"]
-    assert record.outputs == ["simulate/delphes.root"]
-    assert (job.root_dir / "simulate" / "delphes.root").is_file()
+    assert list(record.result.metadata["card"]) == ["simulate/delphes_card.tcl"]
+    root_path = job.root_dir / "simulate" / "delphes.root"
+    assert root_path.is_file()
+    assert record.result.outputs == {
+        EVENTS_OUTPUT: EventOutput(
+            root_path,
+            EventFormat.DELPHES_ROOT,
+            n_events=job.require_events("shower").n_events,
+        )
+    }
     assert record.log == "simulate/simulate.log"
     card = (job.root_dir / "simulate" / "delphes_card.tcl").read_text()
     assert card.endswith("\nset RandomSeed 10000001\n")

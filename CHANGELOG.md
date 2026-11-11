@@ -107,6 +107,9 @@
 - `omphjc.jobs` names its types after tasks: `TaskRecord`, `TaskOutcome`,
   `Job.run_task` and `Job.task_dir` replace `StageRecord`, `StageOutcome`,
   `Job.run_stage` and `Job.stage_dir`. (#48)
+- A stage's record in `manifest.json` holds what the stage made under
+  `result`: its outputs by name, an event file with its format and event
+  count, and its metadata (`omphjc.jobs.TaskResult`). (#49)
 
 ### Fixed
 

@@ -23,7 +23,9 @@ from typing import Any
 
 from omphjc.jobs.manifest import (
     DONE,
+    EVENTS_OUTPUT,
     MANIFEST_FILE,
+    EventOutput,
     Manifest,
     TaskOutcome,
     TaskRecord,
@@ -128,7 +130,7 @@ class Job:
         record = self.manifest.stages.get(stage)
         if record is None or record.status != DONE:
             return False
-        return all((self.root_dir / output).exists() for output in record.outputs)
+        return all(output.path.exists() for output in record.result.outputs.values())
 
     def require_done(self, stage: str) -> TaskRecord:
         """Return the record of `stage`, which must be done with its outputs present.
@@ -145,6 +147,19 @@ class Job:
                 f"run omphjc {stage} first"
             )
         return self.manifest.stages[stage]
+
+    def require_events(self, stage: str) -> EventOutput:
+        """Return the events `stage` made, which must be done with its outputs present.
+
+        Raises
+        ------
+        ValueError
+            As :meth:`require_done` does, or if the stage made no event file.
+        """
+        events = self.require_done(stage).result.outputs.get(EVENTS_OUTPUT)
+        if not isinstance(events, EventOutput):
+            raise ValueError(f"The {stage} stage of {self.root_dir} made no event file")
+        return events
 
     def run_task(
         self,

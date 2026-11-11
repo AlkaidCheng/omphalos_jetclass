@@ -3,8 +3,15 @@
 import shutil
 from pathlib import Path
 
+from omphjc.events.formats import EventFormat
 from omphjc.jobs.job import Job, sha256
-from omphjc.jobs.manifest import TaskOutcome, TaskRecord
+from omphjc.jobs.manifest import (
+    EVENTS_OUTPUT,
+    EventOutput,
+    TaskOutcome,
+    TaskRecord,
+    TaskResult,
+)
 from omphjc.tools.madgraph.driver import generate_events
 
 GENERATE = "generate"
@@ -35,9 +42,9 @@ def generate(
     directory and copies the cards MadGraph ran with into ``generate/cards/``.
     The stage's parameters are the event count and the job's seed, so a
     changed seed is refused like any other change unless `force` is set. Its
-    metadata are the MadGraph version, the events made, the cross section with
-    its error in pb, the cores MadGraph ran on, and the SHA-256 of each card by
-    path.
+    events are the LHE file with the count in its banner, and its metadata the
+    MadGraph version, the cross section with its error in pb, the cores
+    MadGraph ran on, and the SHA-256 of each card by path.
 
     Parameters
     ----------
@@ -75,15 +82,22 @@ def generate(
         )
         cards = _copy_cards(run.process_dir / "Cards", task_dir / _CARDS_DIR, job)
         return TaskOutcome(
-            metadata={
-                "madgraph_version": run.banner.version,
-                "events": run.banner.n_events,
-                "cross_section_pb": run.banner.cross_section_pb,
-                "cross_section_error_pb": run.banner.cross_section_error_pb,
-                "n_cores": run.n_cores,
-                "cards": cards,
-            },
-            outputs=[run.output_path],
+            TaskResult(
+                outputs={
+                    EVENTS_OUTPUT: EventOutput(
+                        run.output_path,
+                        EventFormat.LHE,
+                        n_events=run.banner.n_events,
+                    )
+                },
+                metadata={
+                    "madgraph_version": run.banner.version,
+                    "cross_section_pb": run.banner.cross_section_pb,
+                    "cross_section_error_pb": run.banner.cross_section_error_pb,
+                    "n_cores": run.n_cores,
+                    "cards": cards,
+                },
+            ),
             log_path=run.log_path,
             usage=run.usage.as_record(),
             set_aside_dir=run.set_aside,
