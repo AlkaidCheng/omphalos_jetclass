@@ -24,6 +24,14 @@ def test_a_process_card_holds_its_commands_without_comments_or_extra_spaces() ->
     )
 
 
+def test_a_command_on_several_lines_is_one_command() -> None:
+    wrapped = CARD.replace("heft_c_mass", "heft_\\\nc_mass").replace(
+        "HToBB -f", "HToBB \\  \n-f"
+    )
+    assert "\\\n" in wrapped
+    assert ProcCard.from_text(wrapped) == ProcCard.from_text(CARD)
+
+
 def test_the_content_record_keeps_the_last_part_of_each_path() -> None:
     assert ProcCard.from_text(CARD).content_record() == [
         "import model heft_c_mass --modelname",

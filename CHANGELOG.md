@@ -132,3 +132,6 @@
   sets `RandomSeed` itself. (#37)
 - On Windows, rerunning a stage sets aside what the earlier run left instead of
   deleting it, since a folder's `ctime` there does not show changes. (#40)
+- `ProcCard` joins the lines of a command that MadGraph writes on several
+  lines, so the fingerprint of an event file does not depend on the directory
+  of its job. (#52)
