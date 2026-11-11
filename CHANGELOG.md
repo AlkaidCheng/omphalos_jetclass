@@ -104,6 +104,9 @@
   standard library that formats floating-point numbers. (#41)
 - Reading a Delphes card in a Python without `tkinter` says that Tcl support is
   needed and points to the README. (#42)
+- `omphjc.jobs` names its types after tasks: `TaskRecord`, `TaskOutcome`,
+  `Job.run_task` and `Job.task_dir` replace `StageRecord`, `StageOutcome`,
+  `Job.run_stage` and `Job.stage_dir`. (#48)
 
 ### Fixed
 

@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from omphjc.jobs.job import Job, sha256
-from omphjc.jobs.manifest import StageOutcome, StageRecord
+from omphjc.jobs.manifest import TaskOutcome, TaskRecord
 from omphjc.jobs.stages.generate import GENERATE
 from omphjc.processes.catalogue import SettingValue
 from omphjc.tools.pythia.driver import shower_events
@@ -20,7 +20,7 @@ def shower(
     timeout: float | None = None,
     force: bool = False,
     delphes_pythia8_path: Path | None = None,
-) -> StageRecord:
+) -> TaskRecord:
     """Shower the generated events of `job` with Pythia 8.
 
     Runs :func:`omphjc.tools.pythia.driver.shower_events` in the job's ``shower/``
@@ -47,7 +47,7 @@ def shower(
 
     Returns
     -------
-    StageRecord
+    TaskRecord
         The stage's record, kept or new.
 
     Raises
@@ -58,14 +58,14 @@ def shower(
     generated = job.require_done(GENERATE)
     lhe_path = job.root_dir / generated.outputs[0]
     n_events = int(generated.metadata["events"])
-    stage_dir = job.stage_dir(SHOWER)
+    task_dir = job.task_dir(SHOWER)
     pythia_overrides = dict(overrides or {})
 
-    def body(overwrite: bool) -> StageOutcome:
+    def body(overwrite: bool) -> TaskOutcome:
         run = shower_events(
             job.spec,
             lhe_path=lhe_path,
-            workdir=stage_dir,
+            workdir=task_dir,
             n_events=n_events,
             seed=job.seed,
             overrides=pythia_overrides,
@@ -87,12 +87,12 @@ def shower(
             metadata["matching_efficiency"] = (
                 statistics.events_accepted / statistics.events_read
             )
-        return StageOutcome(
+        return TaskOutcome(
             metadata=metadata,
             outputs=[run.output_path],
             log_path=run.log_path,
             usage=run.usage.as_record(),
-            set_aside=run.set_aside,
+            set_aside_dir=run.set_aside,
         )
 
     parameters = {
@@ -101,4 +101,4 @@ def shower(
         "pythia": pythia_overrides,
         "generated_with": generated.metadata.get("cards", {}),
     }
-    return job.run_stage(SHOWER, parameters, body, force=force)
+    return job.run_task(SHOWER, parameters, body, force=force)
