@@ -1,9 +1,11 @@
 import gzip
+import hashlib
 from pathlib import Path
 
 import pytest
 
-from omphjc.tools.madgraph.fingerprint import lhe_fingerprint
+from omphjc.tools.madgraph.banner import Banner
+from omphjc.tools.madgraph.lhe_file import LHEFile
 
 # An event file with the blocks MadGraph 3.8.1 writes after MadSpin.
 LHE = """\
@@ -68,8 +70,27 @@ def _write(
     return path
 
 
+def _fingerprint(path: Path) -> str:
+    return LHEFile.read(path).fingerprint()
+
+
+def test_the_banner_is_the_one_of_the_file(tmp_path: Path) -> None:
+    path = _write(tmp_path / "events.lhe.gz")
+    banner = LHEFile.read(path).banner
+    assert banner == Banner.read(path)
+    assert banner.cross_section_error_pb == pytest.approx(2.398374998897e-03)
+
+
+def test_the_events_hash_covers_the_init_block_and_the_events(tmp_path: Path) -> None:
+    text = _write(tmp_path / "events.lhe").read_text()
+    covered = text[text.index("<init>") :].encode()
+    lhe_file = LHEFile.read(tmp_path / "events.lhe")
+    assert lhe_file.events_sha256 == hashlib.sha256(covered).hexdigest()
+    assert lhe_file.content_record()["events"] == lhe_file.events_sha256
+
+
 def test_an_lhe_fingerprint_names_its_scheme(tmp_path: Path) -> None:
-    assert lhe_fingerprint(_write(tmp_path / "events.lhe")).startswith("lhe-v1:")
+    assert _fingerprint(_write(tmp_path / "events.lhe")).startswith("lhe-v1:")
 
 
 def test_the_gzipped_and_plain_forms_of_a_file_have_one_fingerprint(
@@ -78,7 +99,7 @@ def test_the_gzipped_and_plain_forms_of_a_file_have_one_fingerprint(
     plain = _write(tmp_path / "events.lhe")
     compressed = _write(tmp_path / "events.lhe.gz")
     assert plain.read_bytes() != compressed.read_bytes()
-    assert lhe_fingerprint(plain) == lhe_fingerprint(compressed)
+    assert _fingerprint(plain) == _fingerprint(compressed)
 
 
 def test_header_comments_do_not_count(tmp_path: Path) -> None:
@@ -91,7 +112,7 @@ def test_header_comments_do_not_count(tmp_path: Path) -> None:
         param_card=CARDS["param_card"].replace("# WT", "# top width"),
         madspin_card=CARDS["madspin_card"].replace("400", "400  # points"),
     )
-    assert lhe_fingerprint(commented) == lhe_fingerprint(reference)
+    assert _fingerprint(commented) == _fingerprint(reference)
 
 
 def test_the_directories_of_the_model_and_output_paths_do_not_count(
@@ -105,8 +126,8 @@ def test_the_directories_of_the_model_and_output_paths_do_not_count(
     reference = _write(tmp_path / "reference.lhe")
     moved = _write(tmp_path / "moved.lhe", proc_card=located)
     other = _write(tmp_path / "other.lhe", proc_card=located.replace("sm/", "heft/"))
-    assert lhe_fingerprint(moved) == lhe_fingerprint(reference)
-    assert lhe_fingerprint(other) != lhe_fingerprint(reference)
+    assert _fingerprint(moved) == _fingerprint(reference)
+    assert _fingerprint(other) != _fingerprint(reference)
 
 
 def test_the_parameter_and_madspin_cards_count_as_parsed(tmp_path: Path) -> None:
@@ -121,27 +142,27 @@ def test_the_parameter_and_madspin_cards_count_as_parsed(tmp_path: Path) -> None
         tmp_path / "wider.lhe",
         param_card=CARDS["param_card"].replace("1.491500e+00", "1.6"),
     )
-    assert lhe_fingerprint(rewritten) == lhe_fingerprint(reference)
-    assert lhe_fingerprint(wider) != lhe_fingerprint(reference)
+    assert _fingerprint(rewritten) == _fingerprint(reference)
+    assert _fingerprint(wider) != _fingerprint(reference)
 
 
 def test_a_run_card_value_or_one_event_changes_the_fingerprint(tmp_path: Path) -> None:
-    reference = lhe_fingerprint(_write(tmp_path / "reference.lhe"))
+    reference = _fingerprint(_write(tmp_path / "reference.lhe"))
     other_cut = _write(
         tmp_path / "cut.lhe", run_card=CARDS["run_card"].replace("20.0", "30.0")
     )
     other_event = _write(
         tmp_path / "event.lhe", events=EVENTS.replace("+1.0e+02", "+1.1e+02")
     )
-    assert lhe_fingerprint(other_cut) != reference
-    assert lhe_fingerprint(other_event) != reference
+    assert _fingerprint(other_cut) != reference
+    assert _fingerprint(other_event) != reference
 
 
 def test_a_file_without_an_init_block_is_refused(tmp_path: Path) -> None:
     path = tmp_path / "events.lhe"
     path.write_text("<LesHouchesEvents>\n<event>\n</event>\n")
     with pytest.raises(ValueError, match="it has no <init> block"):
-        lhe_fingerprint(path)
+        LHEFile.read(path)
 
 
 @pytest.mark.parametrize(
@@ -159,7 +180,7 @@ def test_a_file_cut_short_is_refused(tmp_path: Path, last_text_kept: str) -> Non
     path = tmp_path / "cut.lhe"
     path.write_text(text[: text.index(last_text_kept) + len(last_text_kept)])
     with pytest.raises(ValueError, match="is not a complete LHE file"):
-        lhe_fingerprint(path)
+        LHEFile.read(path)
 
 
 def test_a_gzip_file_cut_short_is_refused(tmp_path: Path) -> None:
@@ -167,11 +188,11 @@ def test_a_gzip_file_cut_short_is_refused(tmp_path: Path) -> None:
     path = tmp_path / "cut.lhe.gz"
     path.write_bytes(complete[: len(complete) // 2])
     with pytest.raises(ValueError, match="is not a complete gzip file"):
-        lhe_fingerprint(path)
+        LHEFile.read(path)
 
 
 def test_a_gz_file_that_is_not_gzip_data_is_refused(tmp_path: Path) -> None:
     path = tmp_path / "events.lhe.gz"
     path.write_bytes(_write(tmp_path / "events.lhe").read_bytes())
     with pytest.raises(ValueError, match="is not a complete gzip file"):
-        lhe_fingerprint(path)
+        LHEFile.read(path)
