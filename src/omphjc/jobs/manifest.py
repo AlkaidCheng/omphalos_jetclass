@@ -15,14 +15,21 @@ job, under the stage's name::
           "started": "2026-10-23T01:00:00+00:00",
           "finished": "2026-10-23T01:20:00+00:00",
           "parameters": {"events": 1000, "seed": 10000001},
-          "metadata": {
-            "madgraph_version": "3.8.1",
-            "events": 1000,
-            "cross_section_pb": 1.23,
-            "cross_section_error_pb": 0.01,
-            "cards": {"generate/cards/run_card.dat": "<sha256>"}
+          "result": {
+            "outputs": {
+              "events": {
+                "path": "generate/HToBB/Events/run_01/unweighted_events.lhe.gz",
+                "format": "lhe",
+                "n_events": 1000
+              }
+            },
+            "metadata": {
+              "madgraph_version": "3.8.1",
+              "cross_section_pb": 1.23,
+              "cross_section_error_pb": 0.01,
+              "cards": {"generate/cards/run_card.dat": "<sha256>"}
+            }
           },
-          "outputs": ["generate/HToBB/Events/run_01/unweighted_events.lhe.gz"],
           "log": "generate/madgraph.log",
           "usage": {"wall_seconds": 1203.4, "cpu_seconds": 9012.7, "peak_memory_mib": 812.5},
           "set_aside": null,
@@ -34,9 +41,12 @@ job, under the stage's name::
 ``schema`` numbers this layout; a manifest of another schema is refused.
 ``status`` is ``"running"``, ``"done"`` or ``"failed"``. ``parameters`` is
 what the task was asked for, the seed included where its stage uses one, and
-decides whether a later run may keep its result. ``metadata`` is what is known
-about the task and the sample it made; its keys are the stage's own.
-``outputs``, ``log`` and ``set_aside`` are paths relative to the job
+decides whether a later run may keep its result. ``result`` is what the task
+made (:class:`TaskResult`). ``outputs`` holds its files under the names the
+stage gives them: each has its ``path``, and an event file also its ``format``
+and the number of events it holds; the next task reads the one named
+``events``. ``metadata`` is what is known about the task and the sample it
+made; its keys are the stage's own. Every path is relative to the job
 directory; ``set_aside`` names the folder into which the run moved what an
 earlier run left and it could not confirm as that run's
 (:mod:`omphjc.stamps`), ``null`` when it moved nothing. ``usage`` is what the
@@ -48,18 +58,20 @@ half-written manifest.
 :class:`TaskRecord` has one constructor per status. :meth:`TaskRecord.running`
 records a task that has started, :meth:`TaskRecord.failed` one that raised,
 and :meth:`TaskRecord.done` one that returned a :class:`TaskOutcome`, whose
-paths it makes relative to the job directory.
+result it holds unchanged.
 """
 
 import json
 import os
 import tempfile
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from omphjc import __version__
+from omphjc.events.formats import EventFormat
 
 MANIFEST_FILE = "manifest.json"
 SCHEMA_VERSION = 1
@@ -68,18 +80,69 @@ DONE = "done"
 RUNNING = "running"
 FAILED = "failed"
 
+EVENTS_OUTPUT = "events"
+"""The name of the output that holds the events the next task reads."""
+
 
 @dataclass(frozen=True)
-class TaskOutcome:
-    """The result of a stage function, before the job records it.
+class TaskOutput:
+    """A file a task made, inside the job directory."""
+
+    path: Path
+
+
+@dataclass(frozen=True)
+class EventOutput(TaskOutput):
+    """An event file a task made, with its format and the number of events it holds."""
+
+    format: EventFormat
+    n_events: int
+
+
+@dataclass(frozen=True)
+class TaskResult:
+    """What a task made.
 
     Parameters
     ----------
+    outputs : dict[str, TaskOutput]
+        The task's outputs under the names its stage gives them. The next
+        task reads the :class:`EventOutput` named :data:`EVENTS_OUTPUT`; a
+        task that makes no events has none.
     metadata : dict
         What is known about the task and the sample it made, as JSON values;
         the keys are the stage's own.
-    outputs : list[Path]
-        The files the task made, inside the job directory.
+    """
+
+    outputs: dict[str, TaskOutput] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any], root_dir: Path) -> "TaskResult":
+        """Return the result a manifest in `root_dir` holds as `record`.
+
+        An output recorded with an event count is an :class:`EventOutput`.
+        """
+        outputs: dict[str, TaskOutput] = {}
+        for name, output in record["outputs"].items():
+            path = root_dir / output["path"]
+            if "n_events" in output:
+                outputs[name] = EventOutput(
+                    path, EventFormat(output["format"]), output["n_events"]
+                )
+            else:
+                outputs[name] = TaskOutput(path)
+        return cls(outputs=outputs, metadata=record["metadata"])
+
+
+@dataclass(frozen=True)
+class TaskOutcome:
+    """What a stage function returns: the task's result and the run's own facts.
+
+    Parameters
+    ----------
+    result : TaskResult
+        What the task made.
     log_path : Path or None
         The log of the task's program, inside the job directory.
     usage : dict[str, float]
@@ -91,8 +154,7 @@ class TaskOutcome:
         ``None`` when nothing was moved.
     """
 
-    metadata: dict[str, Any]
-    outputs: list[Path]
+    result: TaskResult
     log_path: Path | None = None
     usage: dict[str, float] = field(default_factory=dict)
     set_aside_dir: Path | None = None
@@ -106,8 +168,7 @@ class TaskRecord:
     started: str
     finished: str | None = None
     parameters: dict[str, Any] = field(default_factory=dict)
-    metadata: dict[str, Any] = field(default_factory=dict)
-    outputs: list[str] = field(default_factory=list)
+    result: TaskResult = field(default_factory=TaskResult)
     log: str | None = None
     usage: dict[str, float] = field(default_factory=dict)
     set_aside: str | None = None
@@ -143,8 +204,8 @@ class TaskRecord:
     ) -> "TaskRecord":
         """Return the record of a task that has just returned `outcome`.
 
-        The paths in `outcome` are made relative to `root_dir`, the job
-        directory, and `wall_seconds` is added to its usage.
+        The log and the set-aside folder of `outcome` are made relative to
+        `root_dir`, the job directory, and `wall_seconds` is added to its usage.
         """
 
         def relative(path: Path) -> str:
@@ -155,8 +216,7 @@ class TaskRecord:
             started=started,
             finished=timestamp(),
             parameters=parameters,
-            metadata=outcome.metadata,
-            outputs=[relative(output) for output in outcome.outputs],
+            result=outcome.result,
             log=None if outcome.log_path is None else relative(outcome.log_path),
             usage={"wall_seconds": round(wall_seconds, 3), **outcome.usage},
             set_aside=(
@@ -177,12 +237,26 @@ class Manifest:
     stages: dict[str, TaskRecord] = field(default_factory=dict)
 
     def write(self, path: Path) -> None:
-        """Write the manifest to `path`, replacing it in one step."""
+        """Write the manifest to `path`, replacing it in one step.
+
+        A path in a result is written relative to the directory of `path`.
+
+        Raises
+        ------
+        ValueError
+            If a result names a path outside that directory.
+        """
+
+        def relative_path(value: object) -> str:
+            if isinstance(value, Path):
+                return value.relative_to(path.parent).as_posix()
+            raise TypeError(f"{value!r} is not a JSON value")
+
         record = {"schema": SCHEMA_VERSION, **asdict(self)}
+        text = json.dumps(record, indent=2, default=relative_path)
         descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=".manifest-")
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            json.dump(record, stream, indent=2)
-            stream.write("\n")
+            stream.write(text + "\n")
         os.replace(temporary, path)
 
     @classmethod
@@ -206,16 +280,17 @@ class Manifest:
                 f"version of omphjc reads schema {SCHEMA_VERSION}"
             )
         try:
+            stages = {}
+            for name, stage in record["stages"].items():
+                result = TaskResult.from_record(stage.pop("result"), path.parent)
+                stages[name] = TaskRecord(**stage, result=result)
             return cls(
                 process=record["process"],
                 job_id=record["job_id"],
                 omphjc_version=record["omphjc_version"],
-                stages={
-                    name: TaskRecord(**stage)
-                    for name, stage in record["stages"].items()
-                },
+                stages=stages,
             )
-        except (KeyError, TypeError) as error:
+        except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"{path} is not a manifest: {error}") from None
 
 

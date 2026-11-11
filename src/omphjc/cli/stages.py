@@ -109,16 +109,17 @@ def generate_job(
 
 def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the generate stage of `job` ran with and what it made."""
-    metadata = record.metadata
+    metadata = record.result.metadata
+    events = job.require_events(GENERATE)
     yield f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
     yield format_row("events requested", record.parameters["events"])
-    yield format_row("events generated", metadata["events"])
+    yield format_row("events generated", events.n_events)
     cross_section = (
         f"{metadata['cross_section_pb']:g}"
         f" +- {metadata['cross_section_error_pb']:.3g} pb"
     )
     yield format_row("cross section", cross_section)
-    yield format_row("event file", record.outputs[0])
+    yield format_row("event file", job.relative_path(events.path))
     yield format_row("log", record.log)
     yield format_row("cards", f"{job.relative_path(job.task_dir(GENERATE))}/cards/")
 
@@ -176,13 +177,14 @@ def shower_job(
 
 def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the shower stage of `job` ran with and what it made."""
-    metadata = record.metadata
+    metadata = record.result.metadata
+    events = job.require_events(SHOWER)
     yield f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
     yield format_row("events read", metadata["events_read"])
-    yield format_row("events kept", metadata["events_accepted"])
+    yield format_row("events kept", events.n_events)
     if "matching_efficiency" in metadata:
         yield format_row("kept by matching", f"{metadata['matching_efficiency']:.1%}")
-    yield format_row("output", record.outputs[0])
+    yield format_row("output", job.relative_path(events.path))
     yield format_row("log", record.log)
     yield format_row("settings", ", ".join(metadata["settings"]))
 
@@ -245,11 +247,11 @@ def simulate_job(
 
 def _simulation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the simulation stage of `job` ran with and what it made."""
-    metadata = record.metadata
-    yield format_row("card", ", ".join(metadata["card"]))
+    events = job.require_events(SIMULATE)
+    yield format_row("card", ", ".join(record.result.metadata["card"]))
     yield format_row("seed", record.parameters["seed"])
-    yield format_row("events", metadata["events"])
-    yield format_row("output", record.outputs[0])
+    yield format_row("events", events.n_events)
+    yield format_row("output", job.relative_path(events.path))
     yield format_row("log", record.log)
 
 

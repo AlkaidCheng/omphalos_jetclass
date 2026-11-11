@@ -3,8 +3,15 @@
 import hashlib
 from pathlib import Path
 
+from omphjc.events.formats import EventFormat
 from omphjc.jobs.job import Job, sha256
-from omphjc.jobs.manifest import TaskOutcome, TaskRecord
+from omphjc.jobs.manifest import (
+    EVENTS_OUTPUT,
+    EventOutput,
+    TaskOutcome,
+    TaskRecord,
+    TaskResult,
+)
 from omphjc.jobs.stages.shower import SHOWER
 from omphjc.tools.delphes.driver import detector_card_text, simulate_events
 
@@ -27,8 +34,8 @@ def simulate(
     stage's parameters are the seed, the SHA-256 of the detector card chosen
     and the settings the events were showered with, so a shower rerun with
     the same settings keeps its simulation, and another card is refused
-    unless `force` is set. Its metadata are the events simulated and the
-    SHA-256 of the card as run.
+    unless `force` is set. Its events are the ROOT file with the count of
+    the shower, and its metadata the SHA-256 of the card as run.
 
     Parameters
     ----------
@@ -56,7 +63,7 @@ def simulate(
         If `card_path` is given and is not a file.
     """
     shower_record = job.require_done(SHOWER)
-    events_path = job.root_dir / shower_record.outputs[0]
+    events = job.require_events(SHOWER)
     task_dir = job.task_dir(SIMULATE)
     card_text = detector_card_text(job.spec, card_path)
     card_hash = hashlib.sha256(card_text.encode("utf-8")).hexdigest()
@@ -64,7 +71,7 @@ def simulate(
     def body(overwrite: bool) -> TaskOutcome:
         run = simulate_events(
             job.spec,
-            events_path=events_path,
+            events_path=events.path,
             workdir=task_dir,
             seed=job.seed,
             card_path=card_path,
@@ -73,11 +80,18 @@ def simulate(
             delphes_root_path=delphes_root_path,
         )
         return TaskOutcome(
-            metadata={
-                "events": shower_record.metadata.get("events_accepted"),
-                "card": {job.relative_path(run.card_path): sha256(run.card_path)},
-            },
-            outputs=[run.output_path],
+            TaskResult(
+                outputs={
+                    EVENTS_OUTPUT: EventOutput(
+                        run.output_path,
+                        EventFormat.DELPHES_ROOT,
+                        n_events=events.n_events,
+                    )
+                },
+                metadata={
+                    "card": {job.relative_path(run.card_path): sha256(run.card_path)}
+                },
+            ),
             log_path=run.log_path,
             usage=run.usage.as_record(),
             set_aside_dir=run.set_aside,
@@ -86,6 +100,6 @@ def simulate(
     parameters = {
         "seed": job.seed,
         "card": card_hash,
-        "showered_with": shower_record.metadata.get("settings", {}),
+        "showered_with": shower_record.result.metadata.get("settings", {}),
     }
     return job.run_task(SIMULATE, parameters, body, force=force)
