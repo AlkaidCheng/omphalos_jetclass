@@ -68,8 +68,13 @@
 - `environment/environment.yml` describes a conda environment for omphjc, and
   `environment/Dockerfile` builds an image of it with MadGraph 3.8.1, which
   each release publishes as `ghcr.io/alkaidcheng/omphjc:<version>`. (#44, #46)
-- `omphjc.tools.madgraph.fingerprint.lhe_fingerprint` returns a fingerprint of
-  an LHE file, the same for two files with the same events and cards. (#50)
+- `omphjc.tools.madgraph.lhe_file.LHEFile.fingerprint` returns a fingerprint of
+  an LHE file, the same for two files with the same events and cards. (#50,
+  #51)
+- `omphjc.data_files.DataFile` is the base class of the classes that hold the
+  content of one file format each, the first three being `ProcCard`,
+  `SLHACard` and `LHEFile` for MadGraph's process card, parameter card and
+  event file. (#51)
 
 ### Changed
 
