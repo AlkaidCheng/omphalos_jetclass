@@ -130,6 +130,27 @@ def test_the_directories_of_the_model_and_output_paths_do_not_count(
     assert _fingerprint(other) != _fingerprint(reference)
 
 
+def test_a_path_that_madgraph_writes_on_several_lines_counts_as_one_path(
+    tmp_path: Path,
+) -> None:
+    job_dir = "/scratch/" + "a" * 80 + "/job_1"
+    located = [
+        f"import model {job_dir}/models/sm",
+        "generate p p > t t~",
+        f"output {job_dir}/generate/TTBar",
+    ]
+    # MadGraph cuts a line into pieces of 70 characters. Every piece except
+    # the last ends in a backslash.
+    wrapped = "\n".join(
+        "\\\n".join(line[start : start + 70] for start in range(0, len(line), 70))
+        for line in located
+    )
+    assert "\\\n" in wrapped
+    reference = _write(tmp_path / "reference.lhe")
+    moved = _write(tmp_path / "moved.lhe", proc_card=wrapped)
+    assert _fingerprint(moved) == _fingerprint(reference)
+
+
 def test_the_parameter_and_madspin_cards_count_as_parsed(tmp_path: Path) -> None:
     reference = _write(tmp_path / "reference.lhe")
     options, top, antitop, launch = CARDS["madspin_card"].splitlines()
