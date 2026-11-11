@@ -27,12 +27,12 @@ import gzip
 import hashlib
 import json
 import zlib
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
-from omphjc.processes.catalogue import RunCardValue
 from omphjc.tools.madgraph.banner import Banner
 from omphjc.tools.madgraph.madspin import parse_madspin_card
-from omphjc.tools.madgraph.run_card import parse_value
+from omphjc.tools.madgraph.proc_card import ProcCard
+from omphjc.tools.madgraph.slha_card import SLHACard
 
 LHE_SCHEME = "lhe-v1"
 """The label at the start of every fingerprint.
@@ -50,11 +50,6 @@ _LAST_LINE = b"</LesHouchesEvents>\n"
 
 # Number of bytes read at a time while hashing the events.
 _READ_BYTES = 1 << 20
-
-# Process-card commands that take a path, as
-# omphjc.tools.madgraph.cards.proc_card_commands writes them. Only the last part
-# of the path is kept, because the directories before it change from job to job.
-_PATH_COMMANDS = ("import model", "output")
 
 
 def lhe_fingerprint(path: Path) -> str:
@@ -105,47 +100,11 @@ def lhe_fingerprint(path: Path) -> str:
     madspin = parse_madspin_card(banner.madspin_card or "")
     record = {
         "run_card": banner.run_card,
-        "proc_card": _commands(banner.proc_card or ""),
-        "param_card": _slha_entries(banner.param_card or ""),
+        "proc_card": ProcCard.from_text(banner.proc_card or "").content_record(),
+        "param_card": SLHACard.from_text(banner.param_card or "").content_record(),
         "madspin_options": madspin.options,
         "madspin_decays": sorted(madspin.decays),
         "events": events.hexdigest(),
     }
     canonical = json.dumps(record, sort_keys=True, separators=(",", ":"))
     return f"{LHE_SCHEME}:{hashlib.sha256(canonical.encode()).hexdigest()}"
-
-
-def _commands(proc_card: str) -> list[str]:
-    """Return the commands of a process card, without comments or extra spaces.
-
-    A path given to ``import model`` or ``output`` is cut down to its last part.
-    """
-    commands = []
-    for line in proc_card.splitlines():
-        line = " ".join(line.split("#", 1)[0].split())
-        for command in _PATH_COMMANDS:
-            if line.startswith(f"{command} "):
-                target, *options = line.removeprefix(f"{command} ").split()
-                line = " ".join([command, PurePosixPath(target).name, *options])
-        if line:
-            commands.append(line)
-    return commands
-
-
-def _slha_entries(param_card: str) -> list[list[RunCardValue]]:
-    """Return the entries of a parameter card (SLHA format) in sorted order.
-
-    Each line of the card becomes a list of values. A line inside a block or a
-    decay table starts with the values of its ``block`` or ``decay`` line, so
-    the same entry in two blocks stays distinct after sorting.
-    """
-    entries = []
-    header: list[RunCardValue] = []
-    for line in param_card.splitlines():
-        row = [parse_value(token) for token in line.split("#", 1)[0].lower().split()]
-        if row and row[0] in ("block", "decay"):
-            header = row
-            entries.append(row)
-        elif row:
-            entries.append(header + row)
-    return sorted(entries, key=json.dumps)
