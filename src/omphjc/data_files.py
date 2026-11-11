@@ -4,6 +4,8 @@ Each file format has one class, and every such class is a :class:`DataFile`.
 An object of the class holds the content of one file after parsing. It does
 not hold the location of the file, so the same class also holds content that
 is stored inside another file, such as a card in the header of an event file.
+The class of a file that is too large to keep in memory, such as an event
+file, holds a hash of the large part in its place.
 
 A class states how its format is read (:meth:`DataFile.read`) and how the
 content is written down as plain values (:meth:`DataFile.content_record`). The
