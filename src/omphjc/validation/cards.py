@@ -1,10 +1,9 @@
 """Compare catalogue entries with their reference cards (``omphjc check-cards``).
 
-The reference of a JetClass process is its official gridpack cards: a run card
-and a launch script with ``set`` overrides, a process card and, for the top
-processes, a MadSpin card. Each card class in :data:`INPUT_CARDS`
-compares the card that the catalogue states for a process with the official
-one. Entries without reference cards are not compared.
+The reference cards of a process are its official JetClass cards. Each card
+class in :data:`INPUT_CARDS` compares the card that the catalogue states for a
+process with the official one. Entries without reference cards are not
+compared.
 """
 
 from collections.abc import Iterable
