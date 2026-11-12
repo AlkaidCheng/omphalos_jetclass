@@ -126,6 +126,9 @@
 - `Banner` holds its cards as `RunCard`, `ProcCard`, `SLHACard` and
   `MadSpinCard` objects, whose `from_text` and `differences` methods replace
   the `parse_*` and `compare_*` functions of the MadGraph cards. (#54)
+- `omphjc check-cards` names each difference by its card, as in
+  `madspin_card.decay`, and reports a MadSpin card that only one side has as
+  a missing or an unexpected card. (#54)
 
 ### Fixed
 
