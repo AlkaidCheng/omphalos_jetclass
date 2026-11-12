@@ -32,8 +32,8 @@ def simulate(
     Runs :func:`omphjc.tools.delphes.driver.simulate_events` in the job's ``simulate/``
     directory on the file the shower stage made, with the job's seed. The
     stage's parameters are the seed, the SHA-256 of the detector card chosen
-    and the settings the events were showered with, so a shower rerun with
-    the same settings keeps its simulation, and another card is refused unless
+    and the fingerprint of the event file read, so a shower run again with
+    the same events keeps its simulation, and another card is refused unless
     `force` is set. Its events are the ROOT file with the number of entries
     in its tree and the fingerprint of its content
     (:class:`omphjc.events.delphes_root.DelphesROOTFile`), and its metadata
@@ -64,7 +64,6 @@ def simulate(
     FileNotFoundError
         If `card_path` is given and is not a file.
     """
-    shower_record = job.require_done(SHOWER)
     events = job.require_events(SHOWER)
     task_dir = job.task_dir(SIMULATE)
     card_text = detector_card_text(job.spec, card_path)
@@ -108,6 +107,6 @@ def simulate(
     parameters = {
         "seed": job.seed,
         "card": card_hash,
-        "showered_with": shower_record.result.metadata.get("settings", {}),
+        "input_fingerprint": events.fingerprint,
     }
     return job.run_task(SIMULATE, parameters, body, force=force)

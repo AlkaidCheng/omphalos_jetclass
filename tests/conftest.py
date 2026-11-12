@@ -64,7 +64,8 @@ BANNER = TESTS_DIR / "data" / "madgraph" / "TTBar_banner.txt"
 # writes the files MadGraph would write, and, like MadGraph, exits with status
 # 0 when a command fails (FAKE_MG5_FAIL names the command to fail). With
 # FAKE_MG5_FAIL=hang it never finishes. A launch prints the soft limit on open
-# files it runs with.
+# files it runs with and writes FAKE_MG5_EVENTS events, one when the variable
+# is not set.
 FAKE_MG5 = """\
 #!{python}
 import gzip
@@ -76,6 +77,7 @@ from pathlib import Path
 
 lines = Path(sys.argv[1]).read_text().splitlines()
 fail = os.environ.get("FAKE_MG5_FAIL", "")
+events = "<event>\\n</event>\\n" * int(os.environ.get("FAKE_MG5_EVENTS", "1"))
 if fail == "exit":
     sys.exit(3)
 if fail == "hang":
@@ -108,7 +110,7 @@ for line in lines:
         for run in runs:
             (process / "Events" / run).mkdir()
             with gzip.open(process / "Events" / run / "unweighted_events.lhe.gz", "wt") as out:
-                out.write(banner + "<event>\\n</event>\\n</LesHouchesEvents>\\n")
+                out.write(banner + events + "</LesHouchesEvents>\\n")
 print("MadGraph done")
 """
 

@@ -33,9 +33,9 @@ def shower(
     Runs :func:`omphjc.tools.pythia.driver.shower_events` in the job's ``shower/``
     directory on the event file the generate stage made, with the job's seed
     and as many events as that stage recorded. The stage's parameters are the
-    event count, the seed, the Pythia overrides and the cards the events were
-    generated with, so a sample regenerated with the same seed keeps its
-    shower. Its events are the ROOT file with the count Pythia accepted
+    event count, the seed, the Pythia overrides and the fingerprint of the
+    event file read, so a sample generated again with the same events keeps
+    its shower. Its events are the ROOT file with the count Pythia accepted
     and the fingerprint of its content
     (:class:`omphjc.events.delphes_root.DelphesROOTFile`), and its metadata
     the Pythia version, the events read, the fraction kept by
@@ -65,7 +65,6 @@ def shower(
     ValueError
         If the generate stage of `job` has not run to completion.
     """
-    generated = job.require_done(GENERATE)
     events = job.require_events(GENERATE)
     task_dir = job.task_dir(SHOWER)
     pythia_overrides = dict(overrides or {})
@@ -120,6 +119,6 @@ def shower(
         "events": events.n_events,
         "seed": job.seed,
         "pythia": pythia_overrides,
-        "generated_with": generated.result.metadata.get("cards", {}),
+        "input_fingerprint": events.fingerprint,
     }
     return job.run_task(SHOWER, parameters, body, force=force)
