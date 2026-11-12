@@ -1,60 +1,96 @@
-"""The manifest of a job, ``manifest.json``: what ran, with what, and what came out.
+"""The manifest of a job, ``manifest.json``: an index of the job's tasks.
 
-The manifest names the process and job number, the omphjc version that
-created the job, and one record per task, the work of one stage in the
-job, under the stage's name::
+The manifest names the job and lists each task that has a record, under the
+name of the task::
 
     {
       "schema": 1,
       "process": "HToBB",
       "job_id": 1,
+      "seed": 10000001,
       "omphjc_version": "0.1.0",
-      "stages": {
-        "generate": {"status": "done", "started": "2026-10-23T01:00:00+00:00", ...}
+      "tasks": {
+        "generate": {
+          "status": "done",
+          "started": "2026-10-23T01:00:00+00:00",
+          "record_path": "generate/task.json"
+        }
       }
     }
 
-:mod:`omphjc.jobs.record_file` describes ``schema`` and
-:mod:`omphjc.jobs.task` the record of a task. The file is replaced in one
-step whenever it changes, so a crash never leaves a half-written manifest.
+``process``, ``job_id`` and ``seed`` identify the job as ``job.json`` does
+(:mod:`omphjc.jobs.identity`), and ``omphjc_version`` is the version of omphjc
+that wrote the manifest. A task has the ``status`` and the start time of its
+record (:mod:`omphjc.jobs.task`). ``record_path`` is the path of the
+record, relative to the job directory. :mod:`omphjc.jobs.record_file`
+describes ``schema``.
+
+The manifest is a summary of the records for a reader. A job writes it again
+from the records whenever it writes the record of a task, and reads the
+records themselves to decide what to run.
 """
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
-from omphjc import __version__
+from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.record_file import RecordFile
-from omphjc.jobs.task import TaskRecord
 
 
-@dataclass
+@dataclass(frozen=True)
+class TaskSummary:
+    """The summary of a task's record that the manifest lists.
+
+    Parameters
+    ----------
+    status : str
+        The status in the record of the task.
+    started : str
+        The start time in the record of the task.
+    record_path : Path
+        The file that holds the record of the task.
+    """
+
+    status: str
+    started: str
+    record_path: Path
+
+
+@dataclass(frozen=True)
 class Manifest(RecordFile):
-    """The manifest of one job; the module docstring describes the fields."""
+    """The manifest of one job.
+
+    Parameters
+    ----------
+    identity : JobIdentity
+        The process, the job number and the seed of the job.
+    tasks : dict[str, TaskSummary]
+        The tasks that have a record, by name.
+    """
 
     file_name: ClassVar[str] = "manifest.json"
 
-    process: str
-    job_id: int
-    omphjc_version: str = __version__
-    stages: dict[str, TaskRecord] = field(default_factory=dict)
+    identity: JobIdentity
+    tasks: dict[str, TaskSummary] = field(default_factory=dict)
 
     def as_record(self) -> dict[str, Any]:
-        """Return the fields, with the record of each task by its stage."""
-        return asdict(self)
+        """Return the fields of the identity, then the tasks by name."""
+        tasks = {name: asdict(entry) for name, entry in self.tasks.items()}
+        return {**self.identity.as_record(), "tasks": tasks}
 
     @classmethod
     def from_record(cls, record: dict[str, Any], root_dir: Path) -> "Manifest":
         """Return the manifest that `record` describes.
 
-        A path in a result becomes an absolute path under `root_dir`.
+        The path of a task's record becomes an absolute path under `root_dir`.
         """
-        return cls(
-            process=record["process"],
-            job_id=record["job_id"],
-            omphjc_version=record["omphjc_version"],
-            stages={
-                name: TaskRecord.from_record(stage, root_dir)
-                for name, stage in record["stages"].items()
-            },
-        )
+        tasks = {
+            name: TaskSummary(
+                status=entry["status"],
+                started=entry["started"],
+                record_path=root_dir / entry["record_path"],
+            )
+            for name, entry in record.pop("tasks").items()
+        }
+        return cls(identity=JobIdentity.from_record(record, root_dir), tasks=tasks)

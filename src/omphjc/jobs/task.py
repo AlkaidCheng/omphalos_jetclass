@@ -293,11 +293,14 @@ class Task:
         A clause that names the output that is missing, or the output of
         another size with the size found and the size recorded. It is empty
         for the other statuses.
+    record : TaskRecord or None
+        The record of the task, ``None`` when the task has no record.
     """
 
     name: str
     status: TaskStatus
     detail: str = ""
+    record: TaskRecord | None = None
 
 
 def timestamp() -> str:

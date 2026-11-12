@@ -4,8 +4,9 @@
 
     <outdir>/<process>/job_<n>/
       job.json           the process, the job number and the seed (omphjc.jobs.identity)
-      manifest.json      what ran, with what, and what came out (omphjc.jobs.manifest)
+      manifest.json      an index of the tasks and their records (omphjc.jobs.manifest)
       <stage>/           one directory per task, named and laid out by its stage
+        task.json        what the task ran with and what came out (omphjc.jobs.task)
 
 The job number fixes the seed of every program the job runs
 (:func:`job_seed`); ``docs/reproducibility.md`` lists what else a rerun's
@@ -23,7 +24,7 @@ from types import FrameType
 from typing import Any
 
 from omphjc.jobs.identity import JobIdentity
-from omphjc.jobs.manifest import Manifest
+from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.task import (
     DONE,
     EVENTS_OUTPUT,
@@ -75,7 +76,7 @@ def job_seed(spec: ProcessSpec, job_id: int) -> int:
 
 
 class Job:
-    """One job of a process: its directory, its identity and its manifest.
+    """One job of a process: its directory, its identity and the records of its tasks.
 
     Parameters
     ----------
@@ -99,15 +100,13 @@ class Job:
     identity : JobIdentity
         The process, the job number and the seed. The first task that runs
         writes it to ``job.json`` in the job directory.
-    manifest : Manifest
-        The job's manifest, read from the directory or new.
 
     Raises
     ------
     ValueError
         If `job_id` is not positive, the seed exceeds Pythia's limit, `outdir`
-        is a filesystem root, or the directory holds the ``job.json`` or the
-        manifest of another job.
+        is a filesystem root, or the directory holds the ``job.json`` of
+        another job.
     """
 
     def __init__(self, spec: ProcessSpec, outdir: Path, job_id: int) -> None:
@@ -120,7 +119,6 @@ class Job:
         self.identity = JobIdentity(process=spec.name, job_id=job_id, seed=self.seed)
         if self.identity_path.exists():
             self._check_identity()
-        self.manifest = self._load_manifest()
 
     @property
     def identity_path(self) -> Path:
@@ -138,33 +136,57 @@ class Job:
         """Return `path` as a POSIX path relative to the job directory."""
         return path.relative_to(self.root_dir).as_posix()
 
+    def task_record_path(self, name: str) -> Path:
+        """Return the file of the record of task `name`, ``<root>/<name>/task.json``."""
+        return self.task_dir(name) / TaskRecord.file_name
+
+    def task_record(self, name: str) -> TaskRecord | None:
+        """Return the record of task `name`, or ``None`` when it has no record.
+
+        Raises
+        ------
+        ValueError
+            If the ``task.json`` of the task cannot be read as a record.
+        """
+        try:
+            return TaskRecord.read(self.task_record_path(name), root_dir=self.root_dir)
+        except FileNotFoundError:
+            return None
+
+    def task_names(self) -> list[str]:
+        """Return the names of the tasks that have a record, in alphabetical order.
+
+        A task has a record when its directory holds a ``task.json``. Only the
+        directories directly inside the job directory are looked at.
+        """
+        record_paths = self.root_dir.glob(f"*/{TaskRecord.file_name}")
+        return sorted(record_path.parent.name for record_path in record_paths)
+
     def task(self, name: str) -> Task:
-        """Return the task `name` as it stands, by the manifest and its output files.
+        """Return the task `name` as it stands, by its record and its output files.
 
         The size of each output of a task recorded as done is compared with
-        the size in the manifest. An output of another size is reported
-        before a missing one.
+        the size in the record. An output of another size is reported before
+        a missing one.
         """
-        record = self.manifest.stages.get(name)
+        record = self.task_record(name)
         if record is None or record.status != DONE:
-            return Task(name, TaskStatus.NOT_DONE)
-        task = Task(name, TaskStatus.DONE)
+            return Task(name, TaskStatus.NOT_DONE, record=record)
+        status, detail = TaskStatus.DONE, ""
         for output in record.result.outputs.values():
             try:
                 n_bytes = output.path.stat().st_size
             except FileNotFoundError:
-                task = Task(
-                    name, TaskStatus.MISSING_OUTPUT, f"{output.path} is missing"
-                )
+                status, detail = TaskStatus.MISSING_OUTPUT, f"{output.path} is missing"
                 continue
             if n_bytes != output.n_bytes:
-                return Task(
-                    name,
-                    TaskStatus.CHANGED,
+                status = TaskStatus.CHANGED
+                detail = (
                     f"{output.path} holds {n_bytes} bytes, not the "
-                    f"{output.n_bytes} the {name} stage recorded",
+                    f"{output.n_bytes} the {name} stage recorded"
                 )
-        return task
+                break
+        return Task(name, status, detail, record)
 
     def require_done(self, name: str) -> TaskRecord:
         """Return the record of task `name`, which must be done with its outputs intact.
@@ -173,9 +195,8 @@ class Job:
         ------
         ValueError
             If the task is not done or an output is missing; the message names
-            the command to run first. If an output has another size than the
-            manifest records; the message names the file, both sizes and
-            ``--force``.
+            the command to run first. If an output has another size than
+            recorded; the message names the file, both sizes and ``--force``.
         """
         task = self.task(name)
         if task.status is TaskStatus.CHANGED:
@@ -183,12 +204,12 @@ class Job:
                 f"{task.detail}; run omphjc {name} with --force to regenerate "
                 "the file"
             )
-        if task.status is not TaskStatus.DONE:
+        if task.record is None or task.status is not TaskStatus.DONE:
             raise ValueError(
                 f"The {name} stage of {self.root_dir} has not run to completion; "
                 f"run omphjc {name} first"
             )
-        return self.manifest.stages[name]
+        return task.record
 
     def require_events(self, name: str) -> EventOutput:
         """Return the events task `name` made; it must be done with its outputs intact.
@@ -215,14 +236,14 @@ class Job:
 
         A task recorded as done, with its outputs present and the same
         `parameters`, is kept. One recorded as done with other parameters, or
-        with an output of another size than the manifest records, is refused
-        unless `force` is set. One recorded as failed or interrupted,
-        or run under `force`, runs again, and `body` is told to replace what
-        the earlier run left. The first task that runs creates the job
-        directory with its ``job.json``. The manifest is written before `body`
-        runs and
-        after it returns or raises, so a failed or interrupted job records
-        how far it got.
+        with an output of another size than recorded, is refused unless
+        `force` is set. One recorded as failed or interrupted, or run under
+        `force`, runs again, and `body` is told to replace what the earlier
+        run left. The first task that runs creates the job directory with its
+        ``job.json``. The record of the task, ``task.json`` in its directory,
+        is written before `body` runs and after it returns or raises, so a
+        failed or interrupted task records how far it got. The manifest is
+        written again after each of these writes.
 
         Parameters
         ----------
@@ -245,23 +266,23 @@ class Job:
         ------
         ValueError
             If the task is recorded as done with other parameters, or with an
-            output of another size than the manifest records, and `force` is
-            not set. If the ``job.json`` of the directory identifies another
-            job.
+            output of another size than recorded, and `force` is not set. If
+            the ``job.json`` of the directory identifies another job. If the
+            ``task.json`` of a task of the job cannot be read as a record.
         FileNotFoundError
             If the ``job.json`` of the directory was removed while the task
             ran. The task is then not recorded.
         Exception
             Whatever `body` raised, after the failure is recorded.
         """
-        earlier = self.manifest.stages.get(name)
+        task = self.task(name)
+        earlier = task.record
         if earlier is not None and earlier.status == DONE and not force:
             if earlier.parameters != parameters:
                 raise ValueError(
                     f"{name} in {self.root_dir} ran with {earlier.parameters}; "
                     f"pass force to run it with {parameters}"
                 )
-            task = self.task(name)
             if task.status is TaskStatus.DONE:
                 return earlier
             if task.status is TaskStatus.CHANGED:
@@ -273,17 +294,18 @@ class Job:
         started = timestamp()
         clock = time.monotonic()
         self._record_identity()
-        self.manifest.stages[name] = TaskRecord.running(
-            started=started, parameters=parameters
+        self._write_record(
+            name, TaskRecord.running(started=started, parameters=parameters)
         )
-        self._write_manifest()
         try:
             outcome = body(overwrite)
         except BaseException as error:
-            self.manifest.stages[name] = TaskRecord.failed(
-                started=started, parameters=parameters, error=str(error)
+            self._write_record(
+                name,
+                TaskRecord.failed(
+                    started=started, parameters=parameters, error=str(error)
+                ),
             )
-            self._write_manifest()
             raise
         record = TaskRecord.done(
             outcome,
@@ -292,8 +314,7 @@ class Job:
             wall_seconds=time.monotonic() - clock,
             root_dir=self.root_dir,
         )
-        self.manifest.stages[name] = record
-        self._write_manifest()
+        self._write_record(name, record)
         return record
 
     def set_aside_folders(self) -> list[SetAsideFolder]:
@@ -306,7 +327,7 @@ class Job:
         """
         found = [
             folder
-            for name in self.manifest.stages
+            for name in self.task_names()
             for folder in set_aside_folders(self.task_dir(name))
         ]
         return sorted(found, key=lambda folder: (folder.created, folder.path))
@@ -322,7 +343,7 @@ class Job:
         """
         removed = [
             folder
-            for name in self.manifest.stages
+            for name in self.task_names()
             for folder in clear_set_aside_folders(self.task_dir(name))
         ]
         return sorted(removed, key=lambda folder: (folder.created, folder.path))
@@ -348,24 +369,29 @@ class Job:
                 "choose another output directory."
             )
 
-    def _load_manifest(self) -> Manifest:
-        if not self.manifest_path.exists():
-            return Manifest(process=self.spec.name, job_id=self.job_id)
-        manifest = Manifest.read(self.manifest_path)
-        if (manifest.process, manifest.job_id) != (self.spec.name, self.job_id):
-            raise ValueError(
-                f"{self.manifest_path} belongs to {manifest.process} job {manifest.job_id}"
-            )
-        return manifest
+    def _write_record(self, name: str, record: TaskRecord) -> None:
+        """Write `record` as the record of task `name`, then the manifest.
 
-    def _write_manifest(self) -> None:
-        """Write the manifest to a job directory that still holds its ``job.json``."""
+        The job directory must still hold its ``job.json``. The manifest
+        lists every task that has a record, so the record of every task is
+        read.
+        """
         if not self.identity_path.exists():
             raise FileNotFoundError(
-                f"{self.identity_path} was removed while a task of the job ran; "
-                f"the task is not recorded in {self.manifest_path.name}"
+                f"{self.identity_path} was removed while the {name} task ran; "
+                "the outcome of the task is not recorded"
             )
-        self.manifest.write(self.manifest_path)
+        record_path = self.task_record_path(name)
+        record_path.parent.mkdir(exist_ok=True)
+        record.write(record_path, root_dir=self.root_dir)
+        tasks = {}
+        for task_name in self.task_names():
+            path = self.task_record_path(task_name)
+            task_record = TaskRecord.read(path, root_dir=self.root_dir)
+            tasks[task_name] = TaskSummary(
+                task_record.status, task_record.started, path
+            )
+        Manifest(self.identity, tasks).write(self.manifest_path)
 
 
 @contextmanager
@@ -374,8 +400,8 @@ def exception_on_termination() -> Iterator[None]:
 
     A batch system ends a job that exceeds its time limit with ``SIGTERM``,
     which would otherwise end the process without running any ``finally``;
-    as an exception it stops the running program, records the failure in the
-    manifest and leaves the run's files sealed.
+    as an exception it stops the running program, records the failure of the
+    task and leaves the run's files sealed.
     """
 
     def raise_terminated(signum: int, frame: FrameType | None) -> None:

@@ -159,7 +159,7 @@ class ProgramUsage:
         )
 
     def as_record(self) -> dict[str, float]:
-        """Return the CPU time and peak memory as manifest values, the unknown left out."""
+        """Return the CPU time and peak memory as values for a record, the unknown left out."""
         record = {}
         if self.cpu_seconds is not None:
             record["cpu_seconds"] = round(self.cpu_seconds, 3)

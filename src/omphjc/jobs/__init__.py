@@ -2,18 +2,20 @@
 
 A job directory, ``<outdir>/<process>/job_<n>/``, holds ``job.json``,
 ``manifest.json`` and one directory per task, the work of one stage in the
-job. The job number fixes the seed of every program the job runs;
+job. A task directory holds the record of its task, ``task.json``. The job
+number fixes the seed of every program the job runs;
 ``docs/reproducibility.md`` lists what else a rerun's events depend on.
 
 The modules, by what they hold::
 
     job.py          Job: the job directory, its seed, and the rules that decide
                     whether a task runs again (Job.run_task)
-    task.py         Task and TaskStatus, a task as found on disk; TaskRecord and
-                    what a task makes: TaskResult, TaskOutput, EventOutput,
-                    TaskOutcome
+    task.py         Task and TaskStatus, a task as found on disk; TaskRecord, the
+                    content of task.json, and what a task makes: TaskResult,
+                    TaskOutput, EventOutput, TaskOutcome
     identity.py     JobIdentity, the content of job.json
-    manifest.py     Manifest, the content of manifest.json
+    manifest.py     Manifest, the content of manifest.json, which lists a
+                    TaskSummary of each task's record
     record_file.py  RecordFile, the base class of the job's JSON files
     stages/         one function per stage: generate, shower, simulate
 
@@ -23,8 +25,8 @@ which returns a run record with absolute paths. The stage function builds a
 outputs by name (a :class:`TaskOutput` each, an :class:`EventOutput` for an
 event file) and its metadata, with the log and usage of the run.
 :meth:`Job.run_task` adds the status, the start and finish times and the
-parameters and stores them as a :class:`TaskRecord` in the job's
-:class:`Manifest`, which writes every path relative to the job directory.
+parameters and writes them as a :class:`TaskRecord` to ``task.json``, with
+every path relative to the job directory.
 """
 
 from omphjc.jobs.identity import JobIdentity
@@ -35,7 +37,7 @@ from omphjc.jobs.job import (
     job_seed,
     sha256,
 )
-from omphjc.jobs.manifest import Manifest
+from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.stages import GENERATE, SHOWER, SIMULATE, generate, shower, simulate
 from omphjc.jobs.task import (
     DONE,
@@ -69,6 +71,7 @@ __all__ = [
     "TaskRecord",
     "TaskResult",
     "TaskStatus",
+    "TaskSummary",
     "TerminationError",
     "exception_on_termination",
     "generate",
