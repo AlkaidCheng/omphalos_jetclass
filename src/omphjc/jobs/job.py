@@ -3,6 +3,7 @@
 ::
 
     <outdir>/<process>/job_<n>/
+      job.json           the process, the job number and the seed (omphjc.jobs.identity)
       manifest.json      what ran, with what, and what came out (omphjc.jobs.manifest)
       <stage>/           one directory per task, named and laid out by its stage
 
@@ -23,6 +24,7 @@ from pathlib import Path
 from types import FrameType
 from typing import Any
 
+from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.manifest import Manifest
 from omphjc.jobs.records import (
     DONE,
@@ -105,7 +107,7 @@ def job_seed(spec: ProcessSpec, job_id: int) -> int:
 
 
 class Job:
-    """One job of a process: its directory, its seed and its manifest.
+    """One job of a process: its directory, its identity and its manifest.
 
     Parameters
     ----------
@@ -126,6 +128,9 @@ class Job:
     seed : int
         The seed of every program the job runs. A stage that uses it records
         it among its parameters.
+    identity : JobIdentity
+        The process, the job number and the seed. The first task that runs
+        writes it to ``job.json`` in the job directory.
     manifest : Manifest
         The job's manifest, read from the directory or new.
 
@@ -133,8 +138,8 @@ class Job:
     ------
     ValueError
         If `job_id` is not positive, the seed exceeds Pythia's limit, `outdir`
-        is a filesystem root, or the directory holds the manifest of another
-        job.
+        is a filesystem root, or the directory holds the ``job.json`` or the
+        manifest of another job.
     """
 
     def __init__(self, spec: ProcessSpec, outdir: Path, job_id: int) -> None:
@@ -144,7 +149,14 @@ class Job:
         self.root_dir = inside(
             working_directory(outdir), spec.name, f"{JOB_DIR_PREFIX}{job_id}"
         )
+        self.identity = JobIdentity(process=spec.name, job_id=job_id, seed=self.seed)
+        if self.identity_path.exists():
+            self._check_identity()
         self.manifest = self._load_manifest()
+
+    @property
+    def identity_path(self) -> Path:
+        return self.root_dir / JobIdentity.file_name
 
     @property
     def manifest_path(self) -> Path:
@@ -237,7 +249,9 @@ class Job:
         with an output of another size than the manifest records, is refused
         unless `force` is set. One recorded as failed or interrupted,
         or run under `force`, runs again, and `body` is told to replace what
-        the earlier run left. The manifest is written before `body` runs and
+        the earlier run left. The first task that runs creates the job
+        directory with its ``job.json``. The manifest is written before `body`
+        runs and
         after it returns or raises, so a failed or interrupted job records
         how far it got.
 
@@ -262,7 +276,11 @@ class Job:
         ValueError
             If the task is recorded as done with other parameters, or with an
             output of another size than the manifest records, and `force` is
-            not set.
+            not set. If the ``job.json`` of the directory identifies another
+            job.
+        FileNotFoundError
+            If the ``job.json`` of the directory was removed while the task
+            ran. The task is then not recorded.
         Exception
             Whatever `body` raised, after the failure is recorded.
         """
@@ -284,6 +302,7 @@ class Job:
         overwrite = force or earlier is not None
         started = timestamp()
         clock = time.monotonic()
+        self._record_identity()
         self.manifest.stages[stage] = TaskRecord.running(
             started=started, parameters=parameters
         )
@@ -338,6 +357,27 @@ class Job:
         ]
         return sorted(removed, key=lambda folder: (folder.created, folder.path))
 
+    def _record_identity(self) -> None:
+        """Create the job directory with its ``job.json``, or check the one it holds."""
+        self.root_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.identity.create(self.identity_path)
+        except FileExistsError:
+            self._check_identity()
+
+    def _check_identity(self) -> None:
+        """Refuse a job directory whose ``job.json`` identifies another job."""
+        recorded = JobIdentity.read(self.identity_path)
+        differences = self.identity.differences(recorded)
+        if differences:
+            raise ValueError(
+                "The current configuration is inconsistent with that of the "
+                f"existing job in {self.root_dir} ({JobIdentity.file_name}):"
+                + "".join(f"\n  {difference}" for difference in differences)
+                + "\nRerun with the configuration the job was created with, or "
+                "choose another output directory."
+            )
+
     def _load_manifest(self) -> Manifest:
         if not self.manifest_path.exists():
             return Manifest(process=self.spec.name, job_id=self.job_id)
@@ -349,7 +389,12 @@ class Job:
         return manifest
 
     def _write_manifest(self) -> None:
-        self.root_dir.mkdir(parents=True, exist_ok=True)
+        """Write the manifest to a job directory that still holds its ``job.json``."""
+        if not self.identity_path.exists():
+            raise FileNotFoundError(
+                f"{self.identity_path} was removed while a task of the job ran; "
+                f"the task is not recorded in {self.manifest_path.name}"
+            )
         self.manifest.write(self.manifest_path)
 
 
