@@ -81,6 +81,9 @@
 - `omphjc.events.delphes_root.DelphesROOTFile.fingerprint` returns a
   fingerprint of a Delphes ROOT file from the structure of its tree and a
   sample of its entries, the same for two files with the same events. (#55)
+- A job directory holds `job.json` with the job's process, number and seed
+  (`omphjc.jobs.JobIdentity`), and no stage runs in the directory of another
+  job. (#61)
 
 ### Changed
 
