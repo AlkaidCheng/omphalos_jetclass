@@ -234,6 +234,11 @@ def test_the_event_file_contracts_load_no_array_library(module: str) -> None:
     assert {name for name in loaded if name.split(".")[0] in ARRAY_LIBRARIES} == set()
 
 
+def test_the_commands_load_no_array_library() -> None:
+    loaded = _loaded_after("import omphjc.cli.main")
+    assert {name for name in loaded if name.split(".")[0] in ARRAY_LIBRARIES} == set()
+
+
 def test_a_tool_module_loads_no_driver_and_no_other_tool() -> None:
     loaded = _loaded_after("import omphjc.tools.madgraph.run_card")
     tools = {name for name in loaded if _within(name, "omphjc.tools")}

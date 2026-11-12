@@ -137,6 +137,8 @@
   (#54)
 - `compare_process` and `compare_all` are in `omphjc.validation.cards`,
   which replaces `omphjc.tools.madgraph.reference`. (#54)
+- `omphjc simulate` records the number of events counted in `delphes.root`
+  in place of the shower's count. (#56)
 
 ### Fixed
 

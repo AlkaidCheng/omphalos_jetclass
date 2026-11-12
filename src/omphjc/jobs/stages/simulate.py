@@ -34,8 +34,9 @@ def simulate(
     stage's parameters are the seed, the SHA-256 of the detector card chosen
     and the settings the events were showered with, so a shower rerun with
     the same settings keeps its simulation, and another card is refused
-    unless `force` is set. Its events are the ROOT file with the count of
-    the shower, and its metadata the SHA-256 of the card as run.
+    unless `force` is set. Its events are the ROOT file with the number of
+    entries counted in its tree, and its metadata the SHA-256 of the card as
+    run.
 
     Parameters
     ----------
@@ -69,6 +70,11 @@ def simulate(
     card_hash = hashlib.sha256(card_text.encode("utf-8")).hexdigest()
 
     def body(overwrite: bool) -> TaskOutcome:
+        # These modules load the array libraries, so they are imported here
+        # and not when a command starts.
+        from omphjc.events.delphes_root import TREE_NAME
+        from omphjc.root_io import count_entries
+
         run = simulate_events(
             job.spec,
             events_path=events.path,
@@ -85,7 +91,7 @@ def simulate(
                     EVENTS_OUTPUT: EventOutput(
                         run.output_path,
                         EventFormat.DELPHES_ROOT,
-                        n_events=events.n_events,
+                        n_events=count_entries(run.output_path, TREE_NAME),
                     )
                 },
                 metadata={
