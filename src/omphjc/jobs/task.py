@@ -1,9 +1,10 @@
 """A task of a job: its record, what it made, and its status.
 
-A task is the work of one stage in a job. The manifest of the job
-(:mod:`omphjc.jobs.manifest`) holds one record per task, written as::
+A task is the work of one stage in a job. Its record is the file
+``task.json`` in the directory of the task, written as::
 
     {
+      "schema": 1,
       "status": "done",
       "started": "2026-10-23T01:00:00+00:00",
       "finished": "2026-10-23T01:20:00+00:00",
@@ -31,6 +32,7 @@ A task is the work of one stage in a job. The manifest of the job
       "error": null
     }
 
+:mod:`omphjc.jobs.record_file` describes ``schema``.
 ``status`` is ``"running"``, ``"done"`` or ``"failed"``. ``parameters`` is
 what the task was asked for, the seed included where its stage uses one, and
 decides whether a later run may keep its result. ``result`` is what the task
@@ -58,13 +60,14 @@ since: :class:`Task` holds a task as found on disk, and its
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from omphjc.events.formats import EventFormat
+from omphjc.jobs.record_file import RecordFile
 
 DONE = "done"
 RUNNING = "running"
@@ -135,7 +138,7 @@ class TaskResult:
 
     @classmethod
     def from_record(cls, record: Mapping[str, Any], root_dir: Path) -> "TaskResult":
-        """Return the result a manifest in `root_dir` holds as `record`.
+        """Return the result that `record` describes, with its paths under `root_dir`.
 
         An output recorded with an event count is an :class:`EventOutput`.
         """
@@ -181,8 +184,10 @@ class TaskOutcome:
 
 
 @dataclass
-class TaskRecord:
+class TaskRecord(RecordFile):
     """What one task did; the module docstring describes the fields."""
+
+    file_name: ClassVar[str] = "task.json"
 
     status: str
     started: str
@@ -193,6 +198,19 @@ class TaskRecord:
     usage: dict[str, float] = field(default_factory=dict)
     set_aside: str | None = None
     error: str | None = None
+
+    def as_record(self) -> dict[str, Any]:
+        """Return the fields by name."""
+        return asdict(self)
+
+    @classmethod
+    def from_record(cls, record: dict[str, Any], root_dir: Path) -> "TaskRecord":
+        """Return the task record that `record` describes.
+
+        A path in the result becomes an absolute path under `root_dir`.
+        """
+        result = TaskResult.from_record(record.pop("result"), root_dir)
+        return cls(**record, result=result)
 
     @classmethod
     def running(cls, *, started: str, parameters: dict[str, Any]) -> "TaskRecord":

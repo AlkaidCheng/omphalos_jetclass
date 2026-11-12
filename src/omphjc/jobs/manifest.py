@@ -25,7 +25,7 @@ from typing import Any, ClassVar
 
 from omphjc import __version__
 from omphjc.jobs.record_file import RecordFile
-from omphjc.jobs.task import TaskRecord, TaskResult
+from omphjc.jobs.task import TaskRecord
 
 
 @dataclass
@@ -49,13 +49,12 @@ class Manifest(RecordFile):
 
         A path in a result becomes an absolute path under `root_dir`.
         """
-        stages = {}
-        for name, stage in record["stages"].items():
-            result = TaskResult.from_record(stage.pop("result"), root_dir)
-            stages[name] = TaskRecord(**stage, result=result)
         return cls(
             process=record["process"],
             job_id=record["job_id"],
             omphjc_version=record["omphjc_version"],
-            stages=stages,
+            stages={
+                name: TaskRecord.from_record(stage, root_dir)
+                for name, stage in record["stages"].items()
+            },
         )

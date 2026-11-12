@@ -71,7 +71,7 @@ def test_a_job_has_a_directory_per_process_and_number(
         Job(specs["HToBB"], Path("/"), 1)
 
 
-def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
+def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
     output_path = tmp_path / "x" / "out"
     record = TaskRecord(
         status="done",
@@ -91,13 +91,13 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
             metadata={"cards": {"x/c.dat": "abc"}},
         ),
     )
-    running = TaskRecord(status="running", started="t")
-    manifest = Manifest(process="HToBB", job_id=1, stages={"x": record, "y": running})
-    path = tmp_path / "manifest.json"
-    manifest.write(path)
+    path = tmp_path / "x" / "task.json"
+    path.parent.mkdir()
+    record.write(path, root_dir=tmp_path)
     written = json.loads(path.read_text())
     assert written["schema"] == 1
-    assert written["stages"]["x"]["result"] == {
+    assert written["status"] == "done" and written["parameters"] == {"events": 10}
+    assert written["result"] == {
         "outputs": {
             "events": {
                 "path": "x/out",
@@ -110,36 +110,38 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
         },
         "metadata": {"cards": {"x/c.dat": "abc"}},
     }
-    assert Manifest.read(path) == manifest
-    events = written["stages"]["x"]["result"]["outputs"]["events"]
+    assert TaskRecord.read(path, root_dir=tmp_path) == record
+    events = written["result"]["outputs"]["events"]
     events["format"] = "hepmc"
     path.write_text(json.dumps(written))
-    with pytest.raises(ValueError, match="manifest.json has invalid content: 'hepmc'"):
-        Manifest.read(path)
+    with pytest.raises(ValueError, match="task.json has invalid content: 'hepmc'"):
+        TaskRecord.read(path, root_dir=tmp_path)
     events["format"] = "lhe"
     del events["fingerprint"]
     path.write_text(json.dumps(written))
     with pytest.raises(ValueError, match="has invalid content: 'fingerprint'"):
-        Manifest.read(path)
+        TaskRecord.read(path, root_dir=tmp_path)
     events["fingerprint"] = "lhe-v1:abc"
-    del written["stages"]["x"]["result"]["outputs"]["summary"]["n_bytes"]
+    del written["result"]["outputs"]["summary"]["n_bytes"]
     path.write_text(json.dumps(written))
     with pytest.raises(ValueError, match="has invalid content: 'n_bytes'"):
-        Manifest.read(path)
+        TaskRecord.read(path, root_dir=tmp_path)
     path.write_text('{"schema": 99}')
     with pytest.raises(ValueError, match="schema 99; .* reads schema 1"):
-        Manifest.read(path)
-    path.write_text('{"process": "HToBB"}')
+        TaskRecord.read(path, root_dir=tmp_path)
+    path.write_text('{"status": "done"}')
     with pytest.raises(ValueError, match="no schema"):
-        Manifest.read(path)
+        TaskRecord.read(path, root_dir=tmp_path)
     path.write_text("not json")
-    with pytest.raises(ValueError, match="manifest.json is not valid JSON"):
-        Manifest.read(path)
+    with pytest.raises(ValueError, match="task.json is not valid JSON"):
+        TaskRecord.read(path, root_dir=tmp_path)
 
 
-def test_a_manifest_refuses_a_path_outside_its_directory(tmp_path: Path) -> None:
-    path = tmp_path / "job" / "manifest.json"
-    path.parent.mkdir()
+def test_a_task_record_refuses_a_path_outside_its_root_directory(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "job" / "x" / "task.json"
+    path.parent.mkdir(parents=True)
     record = TaskRecord(
         status="done",
         started="t",
@@ -148,8 +150,21 @@ def test_a_manifest_refuses_a_path_outside_its_directory(tmp_path: Path) -> None
         ),
     )
     with pytest.raises(ValueError, match="elsewhere"):
-        Manifest(process="HToBB", job_id=1, stages={"x": record}).write(path)
+        record.write(path, root_dir=tmp_path / "job")
     assert list(path.parent.iterdir()) == []
+
+
+def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
+    done = TaskRecord(
+        status="done",
+        started="t",
+        result=TaskResult(outputs={"out": TaskOutput(tmp_path / "x" / "out", 7)}),
+    )
+    running = TaskRecord(status="running", started="t")
+    manifest = Manifest(process="HToBB", job_id=1, stages={"x": done, "y": running})
+    path = tmp_path / "manifest.json"
+    manifest.write(path)
+    assert Manifest.read(path) == manifest
 
 
 def _make_output(job: Job) -> TaskOutcome:

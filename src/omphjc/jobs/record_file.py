@@ -38,8 +38,8 @@ class RecordFile(ABC):
     def as_record(self) -> dict[str, Any]:
         """Return the content as a mapping of JSON values.
 
-        A value may also be a :class:`~pathlib.Path`. It is written relative
-        to the directory of the file.
+        A value may also be a :class:`~pathlib.Path`. :meth:`write` writes
+        it as a relative path.
         """
 
     @classmethod
@@ -54,7 +54,7 @@ class RecordFile(ABC):
         record : dict
             The mapping read from the file, without its ``schema`` field.
         root_dir : Path
-            The directory of the file. A path in `record` is relative to it.
+            The directory that the paths in `record` are relative to.
         """
 
     def create(self, path: Path) -> None:
@@ -71,17 +71,25 @@ class RecordFile(ABC):
         with path.open("x", encoding="utf-8") as stream:
             stream.write(text)
 
-    def write(self, path: Path) -> None:
+    def write(self, path: Path, *, root_dir: Path | None = None) -> None:
         """Write the content to `path`, replacing the file in one step.
 
         A crash during the write leaves the earlier file as it was.
 
+        Parameters
+        ----------
+        path : Path
+            The file to write.
+        root_dir : Path, optional
+            The directory that the paths in the file are relative to. It is
+            the directory of `path` unless given.
+
         Raises
         ------
         ValueError
-            If the content names a path outside the directory of `path`.
+            If the content names a path outside `root_dir`.
         """
-        text = self._json_text(path.parent)
+        text = self._json_text(path.parent if root_dir is None else root_dir)
         descriptor, temporary_path = tempfile.mkstemp(
             dir=path.parent, prefix=f".{path.name}-"
         )
@@ -90,8 +98,18 @@ class RecordFile(ABC):
         os.replace(temporary_path, path)
 
     @classmethod
-    def read(cls: type[_RecordFileT], path: Path) -> _RecordFileT:
+    def read(
+        cls: type[_RecordFileT], path: Path, *, root_dir: Path | None = None
+    ) -> _RecordFileT:
         """Return the content of the file at `path`.
+
+        Parameters
+        ----------
+        path : Path
+            The file to read.
+        root_dir : Path, optional
+            The directory that the paths in the file are relative to. It is
+            the directory of `path` unless given.
 
         Raises
         ------
@@ -112,7 +130,9 @@ class RecordFile(ABC):
                 f"omphjc reads schema {SCHEMA_VERSION}"
             )
         try:
-            return cls.from_record(record, path.parent)
+            return cls.from_record(
+                record, path.parent if root_dir is None else root_dir
+            )
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"{path} has invalid content: {error}") from None
 
