@@ -1,9 +1,12 @@
 from collections.abc import Mapping
 from pathlib import Path
 
+from omphjc.config_paths import config_dir
 from omphjc.processes import ProcessSpec
 from omphjc.tools.madgraph.cards import proc_card_commands
 from omphjc.tools.madgraph.proc_card import ProcCard
+
+REFERENCES_DIR = config_dir() / "references" / "jetclass"
 
 CARD = """\
 # the model
@@ -82,3 +85,33 @@ def test_a_process_card_is_read_from_a_file(tmp_path: Path) -> None:
     path = tmp_path / "proc_card_mg5.dat"
     path.write_text(CARD, encoding="utf-8")
     assert ProcCard.read(path) == ProcCard.from_text(CARD)
+
+
+def test_the_official_card_holds_the_definition_of_the_process() -> None:
+    assert ProcCard.reference(REFERENCES_DIR / "HToBB").commands == (
+        "import model heft",
+        "define p = p b b~",
+        "define j = j b b~",
+        "generate p p > ve ve~ h, h > b b~",
+    )
+
+
+def test_an_official_card_without_a_model_loads_the_standard_model() -> None:
+    card = ProcCard.reference(REFERENCES_DIR / "ZJetsToNuNu")
+    assert card.commands[0] == "import model sm"
+
+
+def test_the_model_of_an_official_card_has_its_catalogue_name() -> None:
+    card = ProcCard.reference(REFERENCES_DIR / "HToCC")
+    assert card.commands[0] == "import model heft_c_mass_jetclass"
+
+
+def test_the_card_of_a_process_holds_its_definition_without_the_output(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    assert ProcCard.from_process(specs["HToBB"]).commands == (
+        "import model heft",
+        "define p = p b b~",
+        "define j = j b b~",
+        "generate p p > ve ve~ h, h > b b~",
+    )

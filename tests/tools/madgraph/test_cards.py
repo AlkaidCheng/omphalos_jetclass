@@ -13,7 +13,6 @@ from omphjc.tools.madgraph.cards import (
 from omphjc.tools.madgraph.reference import (
     compare_all,
     compare_process,
-    reference_proc_card,
 )
 from omphjc.tools.madgraph.run_card import (
     DISABLED_DEFAULTS,
@@ -100,22 +99,6 @@ def test_vendored_models_are_imported_by_path(
     assert model_import_target(specs["TTBar"]) == "sm-ckm"
 
 
-def test_the_reference_proc_card_holds_the_definition_of_the_process(
-    specs: Mapping[str, ProcessSpec],
-) -> None:
-    assert reference_proc_card(specs["HToBB"]).commands == (
-        "import model heft",
-        "define p = p b b~",
-        "define j = j b b~",
-        "generate p p > ve ve~ h, h > b b~",
-    )
-    assert reference_proc_card(specs["ZJetsToNuNu"]).commands[0] == "import model sm"
-    assert (
-        reference_proc_card(specs["HToCC"]).commands[0]
-        == "import model heft_c_mass_jetclass"
-    )
-
-
 def test_another_process_definition_is_reported(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
@@ -124,7 +107,7 @@ def test_another_process_definition_is_reported(
         **{**original.__dict__, "processes": ("p p > ve ve~ h, h > c c~",)}
     )
     assert [str(d) for d in compare_process(altered)] == [
-        "proc_card: expected import model heft | define p = p b b~ | "
+        "proc_card.commands: expected import model heft | define p = p b b~ | "
         "define j = j b b~ | generate p p > ve ve~ h, h > b b~, "
         "got import model heft | define p = p b b~ | "
         "define j = j b b~ | generate p p > ve ve~ h, h > c c~"
