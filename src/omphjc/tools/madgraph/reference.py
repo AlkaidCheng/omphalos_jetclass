@@ -15,12 +15,7 @@ from omphjc.comparison import Difference
 from omphjc.processes.catalogue import ProcessSpec, RunCardValue, default_catalogue
 from omphjc.tools.madgraph.cards import madspin_card_text, proc_card_commands
 from omphjc.tools.madgraph.madspin import compare_madspin_cards, parse_madspin_card
-from omphjc.tools.madgraph.run_card import (
-    format_value,
-    parse_launch_overrides,
-    parse_run_card,
-    values_equal,
-)
+from omphjc.tools.madgraph.run_card import RunCard, values_equal
 
 TRACKED_PARAMETERS: frozenset[str] = frozenset(
     {
@@ -94,11 +89,11 @@ _PROC_CARD_PREAMBLE: tuple[str, ...] = (
 _OFFICIAL_MODEL_ALIASES: dict[str, str] = {"heft-c_mass": "heft_c_mass_jetclass"}
 
 
-def reference_run_settings(spec: ProcessSpec) -> dict[str, RunCardValue]:
-    """Return the reference run-card values with the launch overrides applied.
+def reference_run_card(spec: ProcessSpec) -> RunCard:
+    """Return the reference run card as its launch scripts leave it.
 
-    The overrides are the ``set`` lines of the ``run_*.mg5`` launch scripts in
-    the reference directory.
+    The launch scripts are the ``run_*.mg5`` files of the reference directory.
+    Their ``set`` commands change settings of the run card.
 
     Raises
     ------
@@ -106,10 +101,10 @@ def reference_run_settings(spec: ProcessSpec) -> dict[str, RunCardValue]:
         If `spec` has no reference cards.
     """
     reference_dir = _reference_dir(spec)
-    settings = parse_run_card((reference_dir / "run_card.dat").read_text("utf-8"))
-    for launcher in sorted(reference_dir.glob("run_*.mg5")):
-        settings.update(parse_launch_overrides(launcher.read_text("utf-8")))
-    return settings
+    card = RunCard.read(reference_dir / "run_card.dat")
+    for launcher_path in sorted(reference_dir.glob("run_*.mg5")):
+        card = card.with_set_commands(launcher_path.read_text("utf-8"))
+    return card
 
 
 def reference_proc_lines(spec: ProcessSpec) -> list[str]:
@@ -176,29 +171,22 @@ def _reference_dir(spec: ProcessSpec) -> Path:
 
 
 def _compare_run_card(spec: ProcessSpec) -> list[Difference]:
-    reference = reference_run_settings(spec)
+    card = RunCard(settings=dict(spec.run_card))
+    reference = reference_run_card(spec)
     differences = []
-    for name, value in spec.run_card.items():
-        if name not in reference:
-            differences.append(
-                Difference(f"run_card.{name}", None, format_value(value))
-            )
-        elif not values_equal(value, reference[name]):
-            differences.append(
-                Difference(
-                    f"run_card.{name}",
-                    format_value(reference[name]),
-                    format_value(value),
-                )
-            )
-    untracked = TRACKED_PARAMETERS & (reference.keys() - spec.run_card.keys())
-    for name in sorted(untracked):
-        if name in DISABLED_DEFAULTS and values_equal(
-            reference[name], DISABLED_DEFAULTS[name]
-        ):
-            continue
+    for difference in card.differences(reference):
+        name = difference.item
+        if difference.actual is None:
+            # A setting of the reference alone counts when it is tracked and
+            # the reference does not leave it switched off.
+            if name not in TRACKED_PARAMETERS:
+                continue
+            if name in DISABLED_DEFAULTS and values_equal(
+                reference.settings[name], DISABLED_DEFAULTS[name]
+            ):
+                continue
         differences.append(
-            Difference(f"run_card.{name}", format_value(reference[name]), None)
+            Difference(f"run_card.{name}", difference.expected, difference.actual)
         )
     return differences
 

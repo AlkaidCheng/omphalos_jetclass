@@ -16,8 +16,8 @@ def test_banner_of_a_decayed_sample() -> None:
     assert banner.cross_section_pb == pytest.approx(1.052824254921272)
     assert banner.cross_section_error_pb == pytest.approx(2.398374998897e-3)
     assert banner.seed == 42
-    assert banner.run_card["ebeam1"] == 6500.0
-    assert banner.run_card["pt_min_pdg"] == {6: 450.0}
+    assert banner.run_card.settings["ebeam1"] == 6500.0
+    assert banner.run_card.settings["pt_min_pdg"] == {6: 450.0}
     assert banner.uses_madspin is True
 
 

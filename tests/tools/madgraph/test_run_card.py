@@ -2,9 +2,8 @@ import pytest
 
 from omphjc.processes import RunCardValue
 from omphjc.tools.madgraph.run_card import (
+    RunCard,
     format_value,
-    parse_launch_overrides,
-    parse_run_card,
     parse_value,
     values_equal,
 )
@@ -47,8 +46,8 @@ def test_parse_value_rejects_malformed_mapping() -> None:
         parse_value("{25: }")
 
 
-def test_parse_run_card_reads_active_lines_and_ignores_comments() -> None:
-    settings = parse_run_card(RUN_CARD_SNIPPET)
+def test_a_run_card_holds_its_settings_without_comments() -> None:
+    settings = RunCard.from_text(RUN_CARD_SNIPPET).settings
     assert settings["nevents"] == 10000
     assert settings["ebeam1"] == 6500.0
     assert settings["pdlabel"] == "nn23lo1"
@@ -59,16 +58,39 @@ def test_parse_run_card_reads_active_lines_and_ignores_comments() -> None:
     assert "run_tag" in settings
 
 
-def test_parse_launch_overrides_keeps_the_last_value() -> None:
-    overrides = parse_launch_overrides(
+def test_the_set_commands_of_a_launch_script_change_the_card() -> None:
+    card = RunCard(settings={"nevents": 10000, "ptj": 20.0})
+    launched = card.with_set_commands(
         "launch TTBar\n\nset use_syst False\nset pt_min_pdg {6: 450.0}\n"
-        "set nevents _NEVENTS_\nset nevents 5000\n"
+        "set nevents _NEVENTS_\nset nevents 5000  # the last value counts\n"
     )
-    assert overrides == {
-        "use_syst": False,
-        "pt_min_pdg": {6: 450.0},
-        "nevents": 5000,
-    }
+    assert launched == RunCard(
+        settings={
+            "nevents": 5000,
+            "ptj": 20.0,
+            "use_syst": False,
+            "pt_min_pdg": {6: 450.0},
+        }
+    )
+    assert card.settings == {"nevents": 10000, "ptj": 20.0}
+
+
+def test_layout_and_comments_do_not_change_the_fingerprint() -> None:
+    card = RunCard.from_text("  42 = iseed ! random seed\n  20.0 = ptj\n")
+    rewritten = RunCard.from_text("20.0=ptj # minimum jet pt\n\n42   =   iseed\n")
+    assert rewritten.fingerprint() == card.fingerprint()
+    assert card.fingerprint().startswith("run-card-v1:")
+    assert rewritten.differences(card) == []
+
+
+def test_run_card_differences_come_in_the_order_of_the_setting_names() -> None:
+    reference = RunCard(settings={"ptl": 10.0, "misset": 450.0, "ebeam1": 6500})
+    card = RunCard(settings={"xqcut": 30.0, "misset": 400.0, "ebeam1": 6500.0})
+    assert [str(difference) for difference in card.differences(reference)] == [
+        "misset: expected 450.0, got 400.0",
+        "missing ptl: 10.0",
+        "unexpected xqcut: 30.0",
+    ]
 
 
 @pytest.mark.parametrize(

@@ -16,7 +16,7 @@ from omphjc.tools.madgraph.reference import (
     compare_all,
     compare_process,
     reference_proc_lines,
-    reference_run_settings,
+    reference_run_card,
 )
 
 
@@ -28,7 +28,7 @@ def test_every_tracked_official_setting_is_pinned(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     for name, spec in specs.items():
-        reference = reference_run_settings(spec)
+        reference = reference_run_card(spec).settings
         expected = {
             key
             for key in TRACKED_PARAMETERS & reference.keys()
@@ -57,6 +57,20 @@ def test_a_missing_tracked_setting_is_reported(
     differences = compare_process(altered)
     assert [d.item for d in differences] == ["run_card.ptl"]
     assert differences[0].actual is None
+
+
+def test_run_card_differences_come_in_the_order_of_the_setting_names(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    original = specs["HToWW2Q1L"]
+    changed = {"ptl": 5.0, "ebeam1": 7000.0, "pdlabel": "cteq6l1"}
+    run_card = dict(reversed({**original.run_card, **changed}.items()))
+    altered = ProcessSpec(**{**original.__dict__, "run_card": run_card})
+    assert [d.item for d in compare_process(altered)] == [
+        "run_card.ebeam1",
+        "run_card.pdlabel",
+        "run_card.ptl",
+    ]
 
 
 def test_proc_card_commands_for_a_matched_process(
@@ -149,8 +163,8 @@ def test_madspin_card_text_is_the_named_card(specs: Mapping[str, ProcessSpec]) -
 def test_a_tracked_cut_at_its_disabled_default_needs_no_entry(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
-    reference = reference_run_settings(specs["WToQQ"])
-    assert reference["pt_min_pdg"] == {}
+    reference = reference_run_card(specs["WToQQ"])
+    assert reference.settings["pt_min_pdg"] == {}
     assert "pt_min_pdg" not in specs["WToQQ"].run_card
     assert compare_process(specs["WToQQ"]) == []
 

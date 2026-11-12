@@ -15,8 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, overload
 
-from omphjc.processes.catalogue import RunCardValue
-from omphjc.tools.madgraph.run_card import parse_run_card
+from omphjc.tools.madgraph.run_card import RunCard
 
 # Blocks of the banner, captured without their tags.
 _GENERATION_INFO_BLOCK_PATTERN = re.compile(
@@ -67,7 +66,7 @@ class Banner:
     cross_section_error_pb : float or None
         Statistical error in pb, summed in quadrature over the subprocesses
         of the ``<init>`` block; ``None`` when the text has no such block.
-    run_card : dict[str, RunCardValue]
+    run_card : RunCard
         The run card as MadGraph used it.
     proc_card, param_card, madspin_card : str or None
         The text of the process card, the parameter card and the MadSpin card.
@@ -78,7 +77,7 @@ class Banner:
     n_events: int
     cross_section_pb: float
     cross_section_error_pb: float | None
-    run_card: dict[str, RunCardValue]
+    run_card: RunCard
     proc_card: str | None
     param_card: str | None
     madspin_card: str | None
@@ -97,7 +96,7 @@ class Banner:
         ValueError
             If the run card holds no integer ``iseed``.
         """
-        value = self.run_card.get("iseed")
+        value = self.run_card.settings.get("iseed")
         if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError(f"The run card holds no integer iseed: {value!r}")
         return value
@@ -140,7 +139,7 @@ class Banner:
                 _capture(_CROSS_SECTION_PATTERN, summary, missing="integrated weight")
             ),
             cross_section_error_pb=None if init is None else _init_error(init),
-            run_card=parse_run_card(
+            run_card=RunCard.from_text(
                 _capture(_RUN_CARD_BLOCK_PATTERN, text, missing="MGRunCard block")
             ),
             proc_card=_capture(_PROC_CARD_BLOCK_PATTERN, text),

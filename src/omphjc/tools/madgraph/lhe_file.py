@@ -123,7 +123,7 @@ class LHEFile(DataFile):
         banner = self.banner
         madspin = parse_madspin_card(banner.madspin_card or "")
         return {
-            "run_card": banner.run_card,
+            "run_card": banner.run_card.content_record(),
             "proc_card": ProcCard.from_text(banner.proc_card or "").content_record(),
             "param_card": SLHACard.from_text(banner.param_card or "").content_record(),
             "madspin_options": madspin.options,

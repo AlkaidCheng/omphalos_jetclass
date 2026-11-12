@@ -1,15 +1,20 @@
-"""Read and write MadGraph run-card values.
+"""The run card of MadGraph.
 
-A run card stores one setting per line as ``value = name ! comment``; a launch
-script overrides settings with ``set name value``. Both forms carry the same
-value syntax: booleans as ``True``/``False``, numbers, bare strings, and
-PDG-keyed mappings such as ``{25: 450.0}``.
+A run card holds one setting on each line, written as ``value = name``, with a
+comment after ``!`` or ``#``. A launch script changes a setting with the
+command ``set name value``. Both forms write a value in the same way: ``True``
+or ``False``, a number, a word, or a mapping from PDG codes to cuts such as
+``{25: 450.0}``.
 """
 
 import ast
 import math
 import re
+from dataclasses import dataclass
+from typing import ClassVar
 
+from omphjc.comparison import Difference
+from omphjc.data_files import Card
 from omphjc.processes.catalogue import RunCardValue
 
 _CARD_LINE = re.compile(r"^\s*(?P<value>.+?)\s*=\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)")
@@ -19,32 +24,60 @@ _SET_LINE = re.compile(
 _INTEGER = re.compile(r"^[+-]?\d+$")
 
 
-def parse_run_card(text: str) -> dict[str, RunCardValue]:
-    """Return the active settings of a run card, keyed by parameter name.
+@dataclass(frozen=True)
+class RunCard(Card):
+    """The settings of a MadGraph run card.
 
-    Comment-only lines and anything after ``#`` or ``!`` are ignored. Values
-    keep their run-card spelling apart from the normalisation done by
-    :func:`parse_value`.
+    Parameters
+    ----------
+    settings : dict[str, RunCardValue]
+        The value of each setting by its name. Each value is converted with
+        :func:`parse_value`.
     """
-    settings: dict[str, RunCardValue] = {}
-    for raw_line in text.splitlines():
-        line = _strip_comment(raw_line)
-        match = _CARD_LINE.match(line)
-        if match is None:
-            continue
-        settings[match["name"]] = parse_value(match["value"])
-    return settings
 
+    record_scheme: ClassVar[str] = "run-card-v1"
 
-def parse_launch_overrides(text: str) -> dict[str, RunCardValue]:
-    """Return the ``set name value`` overrides of a launch script, in order."""
-    overrides: dict[str, RunCardValue] = {}
-    for raw_line in text.splitlines():
-        match = _SET_LINE.match(_strip_comment(raw_line))
-        if match is None:
-            continue
-        overrides[match["name"]] = parse_value(match["value"])
-    return overrides
+    settings: dict[str, RunCardValue]
+
+    @classmethod
+    def from_text(cls, text: str) -> "RunCard":
+        """Return the settings of a run card given as text."""
+        settings = {}
+        for line in text.splitlines():
+            match = _CARD_LINE.match(_strip_comment(line))
+            if match is not None:
+                settings[match["name"]] = parse_value(match["value"])
+        return cls(settings=settings)
+
+    def with_set_commands(self, text: str) -> "RunCard":
+        """Return the card after the ``set name value`` commands in `text`.
+
+        `text` is a launch script. A command gives its setting a new value,
+        and it adds a setting that the card does not hold. When several
+        commands name one setting, the last one counts.
+        """
+        settings = dict(self.settings)
+        for line in text.splitlines():
+            match = _SET_LINE.match(_strip_comment(line))
+            if match is not None:
+                settings[match["name"]] = parse_value(match["value"])
+        return RunCard(settings=settings)
+
+    def content_record(self) -> dict[str, RunCardValue]:
+        """Return the settings."""
+        return self.settings
+
+    def differences(self, reference: "RunCard") -> list[Difference]:
+        """Return one difference for each setting with another value.
+
+        The differences come in the order of the setting names. A setting
+        that one card lacks has the value ``None`` there.
+        Values are compared with :func:`values_equal` and written with
+        :func:`format_value`.
+        """
+        return Difference.between_mappings(
+            self.settings, reference.settings, equal=values_equal, text=format_value
+        )
 
 
 def parse_value(text: str) -> RunCardValue:
