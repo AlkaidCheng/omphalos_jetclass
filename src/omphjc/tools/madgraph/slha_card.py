@@ -11,6 +11,7 @@ import json
 from dataclasses import dataclass
 from typing import ClassVar
 
+from omphjc.comparison import Difference
 from omphjc.data_files import Card
 from omphjc.processes.catalogue import RunCardValue
 from omphjc.tools.madgraph.run_card import parse_value
@@ -61,3 +62,15 @@ class SLHACard(Card):
         The order of the lines in the card does not change the record.
         """
         return [list(entry) for entry in sorted(self.entries, key=json.dumps)]
+
+    def differences(self, reference: "SLHACard") -> list[Difference]:
+        """Return one difference for each entry that only one card holds.
+
+        A difference names the entry by its words. An entry with another
+        value in `reference` gives two differences, one for each value.
+        """
+        return Difference.between_collections(
+            self.content_record(),
+            reference.content_record(),
+            name=lambda entry: " ".join(str(word) for word in entry),
+        )

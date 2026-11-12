@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
+from omphjc.comparison import Difference
 from omphjc.data_files import Card
 
 
@@ -25,6 +26,9 @@ class SettingsCard(Card):
 
     def content_record(self) -> dict[str, str]:
         return self.settings
+
+    def differences(self, reference: "SettingsCard") -> list[Difference]:
+        return Difference.between_mappings(self.settings, reference.settings)
 
 
 def test_a_fingerprint_is_the_scheme_and_the_hash_of_the_content_record() -> None:
