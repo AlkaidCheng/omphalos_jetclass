@@ -123,6 +123,9 @@
 - `omphjc check-cards` and `omphjc delphes compare` report an item that only
   one side holds as `missing <item>: <value>` or `unexpected <item>: <value>`,
   and `Difference` holds `None` as the value of the side that lacks it. (#53)
+- `Banner` holds its cards as `RunCard`, `ProcCard`, `SLHACard` and
+  `MadSpinCard` objects, whose `from_text` and `differences` methods replace
+  the `parse_*` and `compare_*` functions of the MadGraph cards. (#54)
 
 ### Fixed
 
