@@ -15,7 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, overload
 
+from omphjc.tools.madgraph.madspin_card import MadSpinCard
+from omphjc.tools.madgraph.proc_card import ProcCard
 from omphjc.tools.madgraph.run_card import RunCard
+from omphjc.tools.madgraph.slha_card import SLHACard
 
 # Blocks of the banner, captured without their tags.
 _GENERATION_INFO_BLOCK_PATTERN = re.compile(
@@ -68,9 +71,12 @@ class Banner:
         of the ``<init>`` block; ``None`` when the text has no such block.
     run_card : RunCard
         The run card as MadGraph used it.
-    proc_card, param_card, madspin_card : str or None
-        The text of the process card, the parameter card and the MadSpin card.
-        A card that is missing from the banner is ``None``.
+    proc_card : ProcCard or None
+        The process card, or ``None`` when the banner holds none.
+    param_card : SLHACard or None
+        The parameter card, or ``None`` when the banner holds none.
+    madspin_card : MadSpinCard or None
+        The MadSpin card, or ``None`` when MadSpin did not decay the events.
     """
 
     version: str
@@ -78,9 +84,9 @@ class Banner:
     cross_section_pb: float
     cross_section_error_pb: float | None
     run_card: RunCard
-    proc_card: str | None
-    param_card: str | None
-    madspin_card: str | None
+    proc_card: ProcCard | None
+    param_card: SLHACard | None
+    madspin_card: MadSpinCard | None
 
     @property
     def uses_madspin(self) -> bool:
@@ -130,6 +136,9 @@ class Banner:
             _GENERATION_INFO_BLOCK_PATTERN, text, missing="MGGenerationInfo block"
         )
         init = _capture(_INIT_BLOCK_PATTERN, text)
+        proc_card = _capture(_PROC_CARD_BLOCK_PATTERN, text)
+        param_card = _capture(_PARAM_CARD_BLOCK_PATTERN, text)
+        madspin_card = _capture(_MADSPIN_BLOCK_PATTERN, text)
         return cls(
             version=_capture(
                 _VERSION_BLOCK_PATTERN, text, missing="MGVersion block"
@@ -142,9 +151,11 @@ class Banner:
             run_card=RunCard.from_text(
                 _capture(_RUN_CARD_BLOCK_PATTERN, text, missing="MGRunCard block")
             ),
-            proc_card=_capture(_PROC_CARD_BLOCK_PATTERN, text),
-            param_card=_capture(_PARAM_CARD_BLOCK_PATTERN, text),
-            madspin_card=_capture(_MADSPIN_BLOCK_PATTERN, text),
+            proc_card=None if proc_card is None else ProcCard.from_text(proc_card),
+            param_card=None if param_card is None else SLHACard.from_text(param_card),
+            madspin_card=(
+                None if madspin_card is None else MadSpinCard.from_text(madspin_card)
+            ),
         )
 
 

@@ -5,6 +5,9 @@ from pathlib import Path
 import pytest
 
 from omphjc.tools.madgraph.banner import Banner
+from omphjc.tools.madgraph.madspin_card import MadSpinCard
+from omphjc.tools.madgraph.proc_card import ProcCard
+from omphjc.tools.madgraph.slha_card import SLHACard
 
 BANNER = Path(__file__).parents[2] / "data" / "madgraph" / "TTBar_banner.txt"
 
@@ -31,20 +34,29 @@ def test_banner_file_without_init_block_has_no_error() -> None:
     assert banner.uses_madspin is False
 
 
-def test_cards_are_kept_without_their_tags_and_cdata_sections() -> None:
+def test_the_cards_of_the_header_are_held_as_objects() -> None:
     banner = Banner.read(BANNER)
     assert (banner.proc_card, banner.param_card) == (None, None)
-    assert banner.madspin_card is not None
-    assert banner.madspin_card.startswith("set max_weight_ps_point 400")
-    assert banner.madspin_card.endswith("decay w- > j j\nlaunch")
+    assert banner.madspin_card == MadSpinCard(
+        options={"max_weight_ps_point": 400},
+        decays=frozenset(
+            {
+                "t > w+ b, w+ > j j",
+                "t~ > w- b~, w- > j j",
+                "w+ > j j",
+                "w- > j j",
+            }
+        ),
+    )
     text = BANNER.read_text().replace(
         "<MGRunCard>",
         "<MG5ProcCard>\n<![CDATA[\ngenerate p p > t t~ @0\n]]>\n</MG5ProcCard>\n"
         "<slha>\nBLOCK MASS\n    6 1.725e+02\n</slha>\n<MGRunCard>",
     )
     banner = Banner.from_text(text)
-    assert banner.proc_card == "generate p p > t t~ @0"
-    assert banner.param_card == "BLOCK MASS\n    6 1.725e+02"
+    assert banner.proc_card == ProcCard(commands=("generate p p > t t~ @0",))
+    assert banner.param_card == SLHACard.from_text("BLOCK MASS\n    6 1.725e+02")
+    assert banner.param_card.entries == (("block", "mass"), ("block", "mass", 6, 172.5))
 
 
 def test_gzipped_event_file_is_read_up_to_the_first_event(tmp_path: Path) -> None:
