@@ -29,7 +29,7 @@ from typing import Any, ClassVar
 
 from omphjc.data_files import DataFile
 from omphjc.tools.madgraph.banner import Banner
-from omphjc.tools.madgraph.madspin import parse_madspin_card
+from omphjc.tools.madgraph.madspin_card import MadSpinCard
 from omphjc.tools.madgraph.proc_card import ProcCard
 from omphjc.tools.madgraph.slha_card import SLHACard
 
@@ -121,7 +121,7 @@ class LHEFile(DataFile):
         decay chains of the MadSpin card.
         """
         banner = self.banner
-        madspin = parse_madspin_card(banner.madspin_card or "")
+        madspin = MadSpinCard.from_text(banner.madspin_card or "")
         return {
             "run_card": banner.run_card.content_record(),
             "proc_card": ProcCard.from_text(banner.proc_card or "").content_record(),

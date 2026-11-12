@@ -14,7 +14,7 @@ from pathlib import Path
 from omphjc.comparison import Difference
 from omphjc.processes.catalogue import ProcessSpec, RunCardValue, default_catalogue
 from omphjc.tools.madgraph.cards import madspin_card_text, proc_card_commands
-from omphjc.tools.madgraph.madspin import compare_madspin_cards, parse_madspin_card
+from omphjc.tools.madgraph.madspin_card import MadSpinCard
 from omphjc.tools.madgraph.run_card import RunCard, values_equal
 
 TRACKED_PARAMETERS: frozenset[str] = frozenset(
@@ -204,18 +204,17 @@ def _compare_proc_card(spec: ProcessSpec) -> list[Difference]:
 
 
 def _compare_madspin(spec: ProcessSpec) -> list[Difference]:
-    reference_card = _reference_dir(spec) / "madspin_card.dat"
-    if reference_card.is_file() != spec.uses_madspin:
+    reference_path = _reference_dir(spec) / "madspin_card.dat"
+    if reference_path.is_file() != spec.uses_madspin:
         return [
-            Difference("madspin", str(reference_card.is_file()), str(spec.uses_madspin))
+            Difference("madspin", str(reference_path.is_file()), str(spec.uses_madspin))
         ]
     if not spec.uses_madspin:
         return []
-    reference = parse_madspin_card(reference_card.read_text("utf-8"))
-    card = parse_madspin_card(madspin_card_text(spec))
+    card = MadSpinCard.from_text(madspin_card_text(spec))
     return [
         Difference(f"madspin {d.item}", d.expected, d.actual)
-        for d in compare_madspin_cards(card, reference)
+        for d in card.differences(MadSpinCard.read(reference_path))
     ]
 
 
