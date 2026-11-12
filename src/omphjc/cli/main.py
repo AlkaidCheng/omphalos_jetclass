@@ -22,12 +22,7 @@ from omphjc.config_paths import config_dir, export_config
 from omphjc.jobs import Job
 from omphjc.processes import default_catalogue, read_catalogue
 from omphjc.stamps import StampError
-from omphjc.tools.delphes.card import (
-    DelphesCard,
-    compare_cards,
-    read_card,
-    reference_card,
-)
+from omphjc.tools.delphes.card import DelphesCard, reference_card
 from omphjc.tools.madgraph.cards import launch_commands, proc_card_commands
 from omphjc.tools.madgraph.run_card import format_value
 from omphjc.tools.pythia.cmnd import PythiaCmnd
@@ -245,7 +240,9 @@ def delphes() -> None:
 )
 def delphes_show(card_path: Path | None) -> None:
     """Print the evaluated configuration of a card (default: the official one)."""
-    configuration = reference_card() if card_path is None else read_card(card_path)
+    configuration = (
+        reference_card() if card_path is None else DelphesCard.read(card_path)
+    )
     click.echo("ExecutionPath:")
     for name in configuration.execution_path:
         click.echo(f"  {name}")
@@ -271,10 +268,10 @@ def delphes_show(card_path: Path | None) -> None:
 )
 def delphes_compare(card_path: Path, reference_path: Path | None) -> None:
     """Report configuration differences between a card and a reference."""
-    reference_configuration: DelphesCard = (
-        reference_card() if reference_path is None else read_card(reference_path)
+    reference_configuration = (
+        reference_card() if reference_path is None else DelphesCard.read(reference_path)
     )
-    differences = compare_cards(read_card(card_path), reference_configuration)
+    differences = DelphesCard.read(card_path).differences(reference_configuration)
     if not differences:
         click.echo("The cards configure Delphes identically.")
         return
