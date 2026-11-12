@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 import signal
 from collections.abc import Mapping
 from dataclasses import replace
@@ -17,6 +18,8 @@ from omphjc.jobs import (
     EventOutput,
     Job,
     Manifest,
+    StageCheck,
+    StageStatus,
     TaskOutcome,
     TaskOutput,
     TaskRecord,
@@ -71,9 +74,13 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
         result=TaskResult(
             outputs={
                 EVENTS_OUTPUT: EventOutput(
-                    output_path, EventFormat.LHE, n_events=10, fingerprint="lhe-v1:abc"
+                    output_path,
+                    n_bytes=7,
+                    format=EventFormat.LHE,
+                    n_events=10,
+                    fingerprint="lhe-v1:abc",
                 ),
-                "summary": TaskOutput(tmp_path / "x" / "summary.txt"),
+                "summary": TaskOutput(tmp_path / "x" / "summary.txt", n_bytes=3),
             },
             metadata={"cards": {"x/c.dat": "abc"}},
         ),
@@ -88,11 +95,12 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
         "outputs": {
             "events": {
                 "path": "x/out",
+                "n_bytes": 7,
                 "format": "lhe",
                 "n_events": 10,
                 "fingerprint": "lhe-v1:abc",
             },
-            "summary": {"path": "x/summary.txt"},
+            "summary": {"path": "x/summary.txt", "n_bytes": 3},
         },
         "metadata": {"cards": {"x/c.dat": "abc"}},
     }
@@ -106,6 +114,11 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
     del events["fingerprint"]
     path.write_text(json.dumps(written))
     with pytest.raises(ValueError, match="not a manifest: 'fingerprint'"):
+        Manifest.read(path)
+    events["fingerprint"] = "lhe-v1:abc"
+    del written["stages"]["x"]["result"]["outputs"]["summary"]["n_bytes"]
+    path.write_text(json.dumps(written))
+    with pytest.raises(ValueError, match="not a manifest: 'n_bytes'"):
         Manifest.read(path)
     path.write_text('{"schema": 99}')
     with pytest.raises(ValueError, match="schema 99; .* reads schema 1"):
@@ -124,7 +137,9 @@ def test_a_manifest_refuses_a_path_outside_its_directory(tmp_path: Path) -> None
     record = TaskRecord(
         status="done",
         started="t",
-        result=TaskResult(outputs={"out": TaskOutput(tmp_path / "elsewhere" / "out")}),
+        result=TaskResult(
+            outputs={"out": TaskOutput(tmp_path / "elsewhere" / "out", n_bytes=0)}
+        ),
     )
     with pytest.raises(ValueError, match="elsewhere"):
         Manifest(process="HToBB", job_id=1, stages={"x": record}).write(path)
@@ -137,7 +152,10 @@ def _make_output(job: Job) -> TaskOutcome:
     output = directory / "out.txt"
     output.write_text("made")
     return TaskOutcome(
-        TaskResult(outputs={"out": TaskOutput(output)}, metadata={"n": 1})
+        TaskResult(
+            outputs={"out": TaskOutput(output, n_bytes=len("made"))},
+            metadata={"n": 1},
+        )
     )
 
 
@@ -156,13 +174,14 @@ def test_a_stage_runs_once_and_its_result_is_kept(
     assert record.status == "done" and record.finished is not None
     assert record.parameters == {"events": 10}
     assert record.result == TaskResult(
-        outputs={"out": TaskOutput(job.root_dir / "x" / "out.txt")}, metadata={"n": 1}
+        outputs={"out": TaskOutput(job.root_dir / "x" / "out.txt", n_bytes=4)},
+        metadata={"n": 1},
     )
     assert record.log is None
     assert Manifest.read(job.manifest_path).stages["x"] == record
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.is_done("x")
+    assert job.check_stage("x") == StageCheck(StageStatus.DONE)
     assert job.run_task("x", {"events": 10}, body) == record
     assert calls == [False]
 
@@ -196,10 +215,14 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
+    assert job.check_stage("x") == StageCheck(StageStatus.NOT_DONE)
     job.run_task("x", {}, body)
-    (job.root_dir / "x" / "out.txt").unlink()
+    output_path = job.root_dir / "x" / "out.txt"
+    output_path.unlink()
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert not job.is_done("x")
+    assert job.check_stage("x") == StageCheck(
+        StageStatus.OUTPUT_MISSING, f"{output_path} is missing"
+    )
     job.run_task("x", {}, body)
     assert calls == [False, True]
 
@@ -224,6 +247,59 @@ def test_require_done_returns_the_record_or_says_which_stage_to_run(
         job.require_done("x")
 
 
+def test_a_stage_whose_output_has_another_size_is_refused_unless_forced(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    calls: list[bool] = []
+
+    def body(overwrite: bool) -> TaskOutcome:
+        calls.append(overwrite)
+        return _make_output(job)
+
+    job = Job(specs["HToBB"], tmp_path, 1)
+    job.run_task("x", {}, body)
+    output_path = job.root_dir / "x" / "out.txt"
+    output_path.write_text("made and changed")
+    job = Job(specs["HToBB"], tmp_path, 1)
+    detail = f"{output_path} holds 16 bytes, not the 4 the x stage recorded"
+    assert job.check_stage("x") == StageCheck(StageStatus.OUTPUT_SIZE_MISMATCH, detail)
+    refused = re.escape(f"{detail}; run omphjc x with --force to regenerate the file")
+    with pytest.raises(ValueError, match=refused):
+        job.require_done("x")
+    with pytest.raises(ValueError, match=refused):
+        job.run_task("x", {}, body)
+    assert calls == [False]
+    assert job.run_task("x", {}, body, force=True).status == "done"
+    assert calls == [False, True]
+    assert job.require_done("x").result.outputs["out"].n_bytes == 4
+
+
+def test_an_output_of_another_size_is_reported_before_a_missing_one(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    first_path = job.task_dir("x") / "first.txt"
+    second_path = job.task_dir("x") / "second.txt"
+
+    def body(overwrite: bool) -> TaskOutcome:
+        job.task_dir("x").mkdir(parents=True, exist_ok=True)
+        outputs = {}
+        for name, path in (("first", first_path), ("second", second_path)):
+            path.write_text("made")
+            outputs[name] = TaskOutput(path, n_bytes=len("made"))
+        return TaskOutcome(TaskResult(outputs=outputs))
+
+    job.run_task("x", {}, body)
+    first_path.unlink()
+    second_path.write_text("made and changed")
+    assert job.check_stage("x") == StageCheck(
+        StageStatus.OUTPUT_SIZE_MISMATCH,
+        f"{second_path} holds 16 bytes, not the 4 the x stage recorded",
+    )
+    with pytest.raises(ValueError, match="with --force to regenerate the file"):
+        job.run_task("x", {}, body)
+
+
 def test_require_events_returns_the_events_a_done_stage_made(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
@@ -236,7 +312,8 @@ def test_require_events_returns_the_events_a_done_stage_made(
 
     events = EventOutput(
         job.task_dir("x") / "out.txt",
-        EventFormat.LHE,
+        n_bytes=len("made"),
+        format=EventFormat.LHE,
         n_events=3,
         fingerprint="lhe-v1:abc",
     )
@@ -304,7 +381,8 @@ def test_generate_records_what_madgraph_made(
     assert record.result.outputs == {
         EVENTS_OUTPUT: EventOutput(
             lhe_path,
-            EventFormat.LHE,
+            n_bytes=lhe_path.stat().st_size,
+            format=EventFormat.LHE,
             n_events=10000,
             fingerprint=LHEFile.read(lhe_path).fingerprint(),
         )
@@ -419,7 +497,8 @@ def test_shower_records_what_it_made_and_keeps_it(
     assert record.result.outputs == {
         EVENTS_OUTPUT: EventOutput(
             root_path,
-            EventFormat.DELPHES_ROOT,
+            n_bytes=root_path.stat().st_size,
+            format=EventFormat.DELPHES_ROOT,
             n_events=1,
             fingerprint=DelphesROOTFile.read(root_path).fingerprint(),
         )
@@ -514,7 +593,7 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
     assert job.clear_set_aside_folders() == folders
     assert job.set_aside_folders() == []
     assert not (job.task_dir("generate") / "omphjc-set-aside").exists()
-    assert job.is_done("generate")
+    assert job.check_stage("generate").status is StageStatus.DONE
 
 
 def test_simulate_needs_a_finished_shower_stage(
@@ -598,6 +677,31 @@ def test_a_kept_stage_reads_no_event_file(
     assert _run_all(job, mg5_path, delphes_pythia8_path, delphes_root_path) == done
 
 
+def test_an_event_file_of_another_size_is_refused_by_its_stage_and_the_next(
+    specs: Mapping[str, ProcessSpec],
+    mg5_path: Path,
+    delphes_pythia8_path: Path,
+    delphes_root_path: Path,
+    tmp_path: Path,
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    generate(job, n_events=10, mg5_path=mg5_path)
+    shower(job, delphes_pythia8_path=delphes_pythia8_path)
+    root_path = job.require_events("shower").path
+    recorded = root_path.stat().st_size
+    root_path.write_bytes(root_path.read_bytes()[: recorded // 2])
+    refused = re.escape(
+        f"{root_path} holds {recorded // 2} bytes, not the {recorded} the shower "
+        "stage recorded; run omphjc shower with --force to regenerate the file"
+    )
+    with pytest.raises(ValueError, match=refused):
+        shower(job, delphes_pythia8_path=delphes_pythia8_path)
+    with pytest.raises(ValueError, match=refused):
+        simulate(job, delphes_root_path=delphes_root_path)
+    shower(job, delphes_pythia8_path=delphes_pythia8_path, force=True)
+    assert simulate(job, delphes_root_path=delphes_root_path).status == "done"
+
+
 def test_simulate_records_what_it_made_and_keeps_it(
     specs: Mapping[str, ProcessSpec],
     mg5_path: Path,
@@ -622,7 +726,8 @@ def test_simulate_records_what_it_made_and_keeps_it(
     assert record.result.outputs == {
         EVENTS_OUTPUT: EventOutput(
             root_path,
-            EventFormat.DELPHES_ROOT,
+            n_bytes=root_path.stat().st_size,
+            format=EventFormat.DELPHES_ROOT,
             n_events=1,
             fingerprint=DelphesROOTFile.read(root_path).fingerprint(),
         )
@@ -681,6 +786,10 @@ def test_simulate_counts_the_events_of_its_output(
     # events while the shower stage recorded one.
     pids = ak.Array([[2212, 211], [2212], [211, 211, 22]])
     write_delphes_file(showered.path, {"PID": pids}, omit=omit)
+    # The shower stage is recorded with the size of the file put in its place.
+    job.manifest.stages["shower"].result.outputs[EVENTS_OUTPUT] = replace(
+        showered, n_bytes=showered.path.stat().st_size
+    )
     simulate(job, delphes_root_path=delphes_root_path)
     assert showered.n_events == 1
     assert job.require_events("simulate").n_events == 3

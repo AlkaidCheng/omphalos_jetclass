@@ -88,7 +88,8 @@ def generate(
                 outputs={
                     EVENTS_OUTPUT: EventOutput(
                         run.output_path,
-                        EventFormat.LHE,
+                        n_bytes=run.output_path.stat().st_size,
+                        format=EventFormat.LHE,
                         n_events=run.banner.n_events,
                         fingerprint=LHEFile.read(run.output_path).fingerprint(),
                     )

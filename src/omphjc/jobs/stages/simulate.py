@@ -90,7 +90,8 @@ def simulate(
                 outputs={
                     EVENTS_OUTPUT: EventOutput(
                         run.output_path,
-                        EventFormat.DELPHES_ROOT,
+                        n_bytes=run.output_path.stat().st_size,
+                        format=EventFormat.DELPHES_ROOT,
                         n_events=delphes_file.n_entries,
                         fingerprint=delphes_file.fingerprint(),
                     )

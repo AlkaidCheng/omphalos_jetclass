@@ -103,7 +103,8 @@ def shower(
                 outputs={
                     EVENTS_OUTPUT: EventOutput(
                         run.output_path,
-                        EventFormat.DELPHES_ROOT,
+                        n_bytes=run.output_path.stat().st_size,
+                        format=EventFormat.DELPHES_ROOT,
                         n_events=statistics.events_accepted,
                         fingerprint=DelphesROOTFile.read(run.output_path).fingerprint(),
                     )

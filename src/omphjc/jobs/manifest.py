@@ -19,6 +19,7 @@ job, under the stage's name::
             "outputs": {
               "events": {
                 "path": "generate/HToBB/Events/run_01/unweighted_events.lhe.gz",
+                "n_bytes": 12345678,
                 "format": "lhe",
                 "n_events": 1000,
                 "fingerprint": "lhe-v1:<sha256>"
@@ -44,11 +45,12 @@ job, under the stage's name::
 what the task was asked for, the seed included where its stage uses one, and
 decides whether a later run may keep its result. ``result`` is what the task
 made (:class:`TaskResult`). ``outputs`` holds its files under the names the
-stage gives them: each has its ``path``, and an event file also its
-``format``, the number of events it holds and the ``fingerprint`` of its
-content; the next task reads the one named ``events``. ``metadata`` is what is known about the task and the sample it
-made; its keys are the stage's own. Every path is relative to the job
-directory; ``set_aside`` names the folder into which the run moved what an
+stage gives them: each has its ``path`` and its size in bytes, ``n_bytes``,
+and an event file also its ``format``, the number of events it holds and the
+``fingerprint`` of its content; the next task reads the one named ``events``.
+``metadata`` is what is known about the task and the sample it made; its keys
+are the stage's own. Every path is relative to the job directory;
+``set_aside`` names the folder into which the run moved what an
 earlier run left and it could not confirm as that run's
 (:mod:`omphjc.stamps`), ``null`` when it moved nothing. ``usage`` is what the
 task took: its wall time, and the CPU time and peak memory (MiB) of the
@@ -87,9 +89,18 @@ EVENTS_OUTPUT = "events"
 
 @dataclass(frozen=True)
 class TaskOutput:
-    """A file a task made, inside the job directory."""
+    """A file a task made.
+
+    Parameters
+    ----------
+    path : Path
+        The file, inside the job directory.
+    n_bytes : int
+        The size of the file in bytes when the task finished.
+    """
 
     path: Path
+    n_bytes: int
 
 
 @dataclass(frozen=True)
@@ -100,6 +111,8 @@ class EventOutput(TaskOutput):
     ----------
     path : Path
         The file, inside the job directory.
+    n_bytes : int
+        The size of the file in bytes when the task finished.
     format : EventFormat
         The format of the file.
     n_events : int
@@ -145,12 +158,13 @@ class TaskResult:
             if "n_events" in output:
                 outputs[name] = EventOutput(
                     path,
+                    output["n_bytes"],
                     EventFormat(output["format"]),
                     output["n_events"],
                     output["fingerprint"],
                 )
             else:
-                outputs[name] = TaskOutput(path)
+                outputs[name] = TaskOutput(path, output["n_bytes"])
         return cls(outputs=outputs, metadata=record["metadata"])
 
 

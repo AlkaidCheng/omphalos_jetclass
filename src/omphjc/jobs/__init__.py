@@ -21,6 +21,8 @@ parameters and stores them as a :class:`TaskRecord` in the job's
 
 from omphjc.jobs.job import (
     Job,
+    StageCheck,
+    StageStatus,
     TerminationError,
     exception_on_termination,
     job_seed,
@@ -51,6 +53,8 @@ __all__ = [
     "EventOutput",
     "Job",
     "Manifest",
+    "StageCheck",
+    "StageStatus",
     "TaskOutcome",
     "TaskOutput",
     "TaskRecord",
