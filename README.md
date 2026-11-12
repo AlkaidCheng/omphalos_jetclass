@@ -27,8 +27,8 @@ back as final particles, the convention Parnassus was trained with.
 
 Dashed boxes in the diagram are the stages not yet available, and the
 sections below cover the available ones. Each stage is a command that runs in
-a job's directory and records what it did in the job's manifest: `omphjc
-generate`, `omphjc shower` and `omphjc simulate` (see
+a job's directory and records there what it did: `omphjc generate`,
+`omphjc shower` and `omphjc simulate` (see
 [Running a job](#running-a-job)).
 
 New to MadGraph, Pythia or Delphes? [The guide](docs/guide.md) explains what
@@ -359,7 +359,7 @@ Reading a card uses the Tcl interpreter that comes with Python (`tkinter`).
 
 A job is one process and one job number in a directory of its own,
 `<outdir>/<process>/job_<n>/`. Each stage of the pipeline is a command that
-runs in that directory and records what it did in the job's manifest:
+runs in a directory of its own inside it and records there what it did:
 `generate` runs MadGraph, `shower` runs Pythia 8 on the generated events
 through `DelphesPythia8`, keeping the generator record of every showered event
 and simulating nothing, and `simulate` runs the detector card on that record
@@ -380,19 +380,22 @@ omphjc clean HToBB --job-id 1 --outdir runs/dev --set-aside  # drop what reruns 
 ```
 runs/dev/HToBB/job_1/
 ├── job.json               the process, the job number and the seed
-├── manifest.json          what ran, with what, and what came out
+├── manifest.json          the stages that have a record, with the status of each
 ├── generate/              the MadGraph working directory, MadGraph's own layout inside
-│   ├── cards/             the cards MadGraph ran with, hashed in the manifest
+│   ├── task.json          the record: what the stage ran with and what came out
+│   ├── cards/             the cards MadGraph ran with, hashed in the record
 │   ├── madgraph.log
 │   └── HToBB/Events/run_01/unweighted_events.lhe.gz
 ├── shower/                the DelphesPythia8 working directory
+│   ├── task.json
 │   ├── events.lhe         the generated events, uncompressed for DelphesPythia8
-│   ├── pythia.cmnd        the Pythia settings as run, hashed in the manifest
+│   ├── pythia.cmnd        the Pythia settings as run, hashed in the record
 │   ├── particles_card.tcl the card that writes the record and simulates nothing, hashed
 │   ├── shower.log         DelphesPythia8's output, Pythia's statistics included
 │   └── particles.root     every showered event's generator record (Particle branch)
 └── simulate/              the DelphesROOT working directory
-    ├── delphes_card.tcl   the detector card as run, seeded, hashed in the manifest
+    ├── task.json
+    ├── delphes_card.tcl   the detector card as run, seeded, hashed in the record
     ├── simulate.log       DelphesROOT's output
     └── delphes.root
 ```
@@ -403,10 +406,10 @@ same events; [What a rerun reproduces](docs/reproducibility.md) lists what else
 they depend on, such as the core count for a process with MadSpin. The first
 stage that runs writes the process, the job number and the seed to `job.json`,
 and no stage runs in a directory whose `job.json` gives another process, job
-number or seed. The manifest records the process, the job number, the omphjc
-version, and for each stage its status, its start and end times, the
-parameters it was asked for, its result, its log, and what it took: the wall
-time of the stage and the CPU time and peak memory of the program's processes.
+number or seed. Each stage keeps a record, `task.json`, in its directory: its
+status, its start and end times, the parameters it was asked for, its result,
+its log, and what it took: the wall time of the stage and the CPU time and
+peak memory of the program's processes.
 The result names the stage's outputs, giving
 each file's size and an event file's format, number of events and fingerprint,
 and holds the metadata of what it made. Two event files with the same events
@@ -425,13 +428,20 @@ events is counted in `delphes.root`. A stage run again with the same events
 therefore keeps the stages after it, and a stage whose input events changed is
 refused unless `--force` is given.
 
+`manifest.json` is an index of the job: the process, the job number, the seed
+and the omphjc version, and for each stage that has a record its status, its
+start time and the path of its `task.json`. A stage writes it again from the
+records whenever it writes its own. The commands read the records and never
+the manifest, so a deleted manifest is written again by the next stage that
+runs.
+
 Running a stage again keeps a result recorded as done whose outputs are
 present and whose parameters match, runs again a stage that failed or was
 interrupted, replacing what it left, and refuses other parameters unless
 `--force` is given. A changed seed, as after an edit of the process's
 `seed_offset`, is refused with `--force` too, since the job keeps the seed in
 its `job.json`. A stage with an output that no
-longer has the size the manifest records, as after a truncated copy, is
+longer has the size in the stage's record, as after a truncated copy, is
 refused, and so is the stage that reads it, until it is run again with
 `--force`. A job that receives `SIGTERM`, as from a batch system's time limit,
 stops its running program and records the failure before it exits. A rerun deletes only what it can recognise as the
@@ -441,7 +451,7 @@ instead and stays there. A file a system tool writes into one of the run's
 folders counts as a change too, such as the `.DS_Store` that the macOS Finder
 writes into a folder it opens. On Windows a rerun cannot see changes, so it
 sets aside everything the earlier run left. The stage's report counts those
-folders, the manifest names the folder each run made, and
+folders, the stage's record names the folder its run made, and
 `omphjc clean --set-aside` deletes them (`--dry-run` lists them with their
 sizes first).
 MadGraph's directory and the showered events are kept after the simulation.

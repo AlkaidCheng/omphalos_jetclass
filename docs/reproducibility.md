@@ -32,7 +32,7 @@ Python generator. The TTBar and TTBarLep cards keep MadSpin's commented-out
 
 MadGraph resets `iseed` to 0 in `Cards/run_card.dat` before it runs, so the
 copy the job keeps, `generate/cards/run_card.dat`, shows `iseed = 0`. The seed
-the run used is the stage's `seed` parameter in `manifest.json` and the `iseed`
+the run used is the `seed` parameter in `generate/task.json` and the `iseed`
 of the run card in the event file's banner.
 
 ### The core count
@@ -40,10 +40,10 @@ of the run card in the event file's banner.
 MadSpin decays the events in one separately seeded shard per core, so a process
 with MadSpin (TTBar and TTBarLep in the default catalogue) gives the same events
 only on the same number of cores. A rerun with another `--cores` keeps a
-finished stage, and the manifest records the count MadGraph ran on as the
-stage's `n_cores`. Without `--cores`, MadGraph runs on every CPU the job may
-use, which a batch system sets per allocation, so give `--cores` explicitly for
-a process with MadSpin. For a process without MadSpin the core count does not
+finished stage, and `generate/task.json` records the count MadGraph ran on as
+`n_cores`. Without `--cores`, MadGraph runs on every CPU the job may use,
+which a batch system sets per allocation, so give `--cores` explicitly for a
+process with MadSpin. For a process without MadSpin the core count does not
 change the events.
 
 ### Runs with many channels
@@ -83,8 +83,8 @@ itself has no effect.
 
 ## Versions and builds
 
-Another version of a program can give other events; the manifest records the
-MadGraph and Pythia versions. A program built with another compiler, other
+Another version of a program can give other events; the records of the
+generation and the shower give the MadGraph and Pythia versions. A program built with another compiler, other
 compiler options or for another CPU can give other floating-point results and
 so other events. None of the three programs documents how far this goes, and
 omphjc has not tested it.
@@ -97,10 +97,10 @@ unique identifier, and Delphes writes the wall-clock times `Event.ReadTime` and
 `Event.ProcTime` into every event. Compare the events, not checksums of the
 files.
 
-omphjc records a fingerprint of each stage's event file in `manifest.json`, and
-the fingerprint leaves those differences out. The shower and the simulation
-record the fingerprint of the events they read as the parameter
-`input_fingerprint`. A stage run again with the same events therefore keeps the
+omphjc records a fingerprint of each stage's event file in the stage's
+`task.json`, and the fingerprint leaves those differences out. The shower and
+the simulation record the fingerprint of the events they read as the
+parameter `input_fingerprint`. A stage run again with the same events therefore keeps the
 stages after it, and a stage whose input events changed is refused unless
 forced.
 
