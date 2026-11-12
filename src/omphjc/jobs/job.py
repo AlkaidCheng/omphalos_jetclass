@@ -23,12 +23,11 @@ from pathlib import Path
 from types import FrameType
 from typing import Any
 
-from omphjc.jobs.manifest import (
+from omphjc.jobs.manifest import MANIFEST_FILE, Manifest
+from omphjc.jobs.records import (
     DONE,
     EVENTS_OUTPUT,
-    MANIFEST_FILE,
     EventOutput,
-    Manifest,
     TaskOutcome,
     TaskRecord,
     timestamp,
