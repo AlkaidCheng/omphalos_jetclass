@@ -142,6 +142,10 @@
 - `omphjc shower` and `omphjc simulate` compare the fingerprint of the events
   they read, recorded in `manifest.json` with each stage's event file, in
   place of the cards and settings of the stage before. (#57)
+- `PythiaCmnd` and `DelphesCard` hold the Pythia command file and the
+  Delphes card, and their methods replace the functions of
+  `omphjc.tools.pythia.cmnd` and `omphjc.tools.delphes.card` that parsed,
+  wrote and compared them. (#58)
 
 ### Fixed
 
