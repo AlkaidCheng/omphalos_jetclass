@@ -1,16 +1,83 @@
-"""Read and write MadGraph run-card values.
+"""The run card of MadGraph.
 
-A run card stores one setting per line as ``value = name ! comment``; a launch
-script overrides settings with ``set name value``. Both forms carry the same
-value syntax: booleans as ``True``/``False``, numbers, bare strings, and
-PDG-keyed mappings such as ``{25: 450.0}``.
+A run card holds one setting on each line, written as ``value = name``, with a
+comment after ``!`` or ``#``. A launch script changes a setting with the
+command ``set name value``. Both forms write a value in the same way: ``True``
+or ``False``, a number, a word, or a mapping from PDG codes to cuts such as
+``{25: 450.0}``.
 """
 
 import ast
 import math
 import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import ClassVar
 
-from omphjc.processes.catalogue import RunCardValue
+from omphjc.comparison import Difference
+from omphjc.processes.catalogue import ProcessSpec, RunCardValue
+from omphjc.processes.input_card import InputCard
+
+TRACKED_PARAMETERS: frozenset[str] = frozenset(
+    {
+        # beams and PDF
+        "lpp1",
+        "lpp2",
+        "ebeam1",
+        "ebeam2",
+        "pdlabel",
+        "lhaid",
+        # scales
+        "fixed_ren_scale",
+        "fixed_fac_scale",
+        "dynamical_scale_choice",
+        "scalefact",
+        # flavour scheme, widths, systematics
+        "maxjetflavor",
+        "bwcutoff",
+        "use_syst",
+        "cut_decays",
+        # generator-level cuts
+        "ptj",
+        "ptl",
+        "etaj",
+        "etal",
+        "drjj",
+        "drjl",
+        "drll",
+        "misset",
+        "pt_min_pdg",
+        "eta_max_pdg",
+        "ptheavy",
+        # MLM matching
+        "ickkw",
+        "xqcut",
+        "auto_ptj_mjj",
+        "alpsfact",
+        "asrwgtflavor",
+    }
+)
+"""Run-card parameters that carry physics and are compared with the reference cards.
+
+Parameters left out are MadGraph internals (run tag, event count, seed,
+integration strategy, event normalisation, bias modules, systematics program
+arguments) or cut maxima left at their disabled default in every official card.
+"""
+
+DISABLED_DEFAULTS: dict[str, RunCardValue] = {
+    "pt_min_pdg": {},
+    "eta_max_pdg": {},
+    "ptheavy": 0.0,
+}
+"""Values at which a tracked cut is switched off.
+
+The catalogue only lists active physics, so a tracked parameter that the
+reference card leaves at one of these values needs no catalogue entry.
+"""
+
+# The pattern of the names of the launch scripts among the official cards of a
+# process.
+_REFERENCE_LAUNCH_SCRIPT_GLOB = "run_*.mg5"
 
 _CARD_LINE = re.compile(r"^\s*(?P<value>.+?)\s*=\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)")
 _SET_LINE = re.compile(
@@ -19,32 +86,102 @@ _SET_LINE = re.compile(
 _INTEGER = re.compile(r"^[+-]?\d+$")
 
 
-def parse_run_card(text: str) -> dict[str, RunCardValue]:
-    """Return the active settings of a run card, keyed by parameter name.
+@dataclass(frozen=True)
+class RunCard(InputCard):
+    """The settings of a MadGraph run card.
 
-    Comment-only lines and anything after ``#`` or ``!`` are ignored. Values
-    keep their run-card spelling apart from the normalisation done by
-    :func:`parse_value`.
+    Parameters
+    ----------
+    settings : dict[str, RunCardValue]
+        The value of each setting by its name. Each value is converted with
+        :func:`parse_value`.
     """
-    settings: dict[str, RunCardValue] = {}
-    for raw_line in text.splitlines():
-        line = _strip_comment(raw_line)
-        match = _CARD_LINE.match(line)
-        if match is None:
-            continue
-        settings[match["name"]] = parse_value(match["value"])
-    return settings
 
+    format_name: ClassVar[str] = "run_card"
+    record_version: ClassVar[int] = 1
+    reference_file_name: ClassVar[str] = "run_card.dat"
 
-def parse_launch_overrides(text: str) -> dict[str, RunCardValue]:
-    """Return the ``set name value`` overrides of a launch script, in order."""
-    overrides: dict[str, RunCardValue] = {}
-    for raw_line in text.splitlines():
-        match = _SET_LINE.match(_strip_comment(raw_line))
-        if match is None:
-            continue
-        overrides[match["name"]] = parse_value(match["value"])
-    return overrides
+    settings: dict[str, RunCardValue]
+
+    @classmethod
+    def from_text(cls, text: str) -> "RunCard":
+        """Return the settings of a run card given as text."""
+        settings = {}
+        for line in text.splitlines():
+            match = _CARD_LINE.match(_strip_comment(line))
+            if match is not None:
+                settings[match["name"]] = parse_value(match["value"])
+        return cls(settings=settings)
+
+    @classmethod
+    def from_process(cls, spec: ProcessSpec) -> "RunCard":
+        """Return the settings that the catalogue gives the run card of `spec`."""
+        return cls(settings=dict(spec.run_card))
+
+    @classmethod
+    def reference(cls, reference_dir: Path) -> "RunCard | None":
+        """Return the official run card as its launch scripts leave it.
+
+        The launch scripts are the ``run_*.mg5`` files of `reference_dir`.
+        Their ``set`` commands change settings of the run card. The result is
+        ``None`` when `reference_dir` holds no run card.
+        """
+        card = super().reference(reference_dir)
+        if card is None:
+            return None
+        for launcher_path in sorted(reference_dir.glob(_REFERENCE_LAUNCH_SCRIPT_GLOB)):
+            card = card.with_set_commands(launcher_path.read_text("utf-8"))
+        return card
+
+    def with_set_commands(self, text: str) -> "RunCard":
+        """Return the card after the ``set name value`` commands in `text`.
+
+        `text` is a launch script. A command gives its setting a new value,
+        and it adds a setting that the card does not hold. When several
+        commands name one setting, the last one counts.
+        """
+        settings = dict(self.settings)
+        for line in text.splitlines():
+            match = _SET_LINE.match(_strip_comment(line))
+            if match is not None:
+                settings[match["name"]] = parse_value(match["value"])
+        return RunCard(settings=settings)
+
+    def content_record(self) -> dict[str, RunCardValue]:
+        """Return the settings."""
+        return self.settings
+
+    def differences(self, reference: "RunCard") -> list[Difference]:
+        """Return one difference for each setting with another value.
+
+        The differences come in the order of the setting names. A setting
+        that one card lacks has the value ``None`` there. Values are compared
+        with :func:`values_equal` and written with :func:`format_value`.
+        """
+        return Difference.between_mappings(
+            self.settings, reference.settings, equal=values_equal, text=format_value
+        )
+
+    def checked_differences(self, reference: "RunCard") -> list[Difference]:
+        """Return the differences from `reference` that a check reports.
+
+        The catalogue lists only the settings that carry physics. A setting
+        that only `reference` holds is therefore reported when it is one of
+        :data:`TRACKED_PARAMETERS` and `reference` does not leave it at its
+        value in :data:`DISABLED_DEFAULTS`.
+        """
+        differences = []
+        for difference in self.differences(reference):
+            name = difference.item
+            if difference.actual is None:
+                if name not in TRACKED_PARAMETERS:
+                    continue
+                if name in DISABLED_DEFAULTS and values_equal(
+                    reference.settings[name], DISABLED_DEFAULTS[name]
+                ):
+                    continue
+            differences.append(difference)
+        return differences
 
 
 def parse_value(text: str) -> RunCardValue:

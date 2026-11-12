@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -10,13 +11,14 @@ from omphjc.tools.madgraph.cards import (
     model_import_target,
     proc_card_commands,
 )
-from omphjc.tools.madgraph.reference import (
+from omphjc.tools.madgraph.run_card import (
     DISABLED_DEFAULTS,
     TRACKED_PARAMETERS,
+    RunCard,
+)
+from omphjc.validation.cards import (
     compare_all,
     compare_process,
-    reference_proc_lines,
-    reference_run_settings,
 )
 
 
@@ -28,7 +30,8 @@ def test_every_tracked_official_setting_is_pinned(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     for name, spec in specs.items():
-        reference = reference_run_settings(spec)
+        assert spec.reference_cards is not None
+        reference = RunCard.reference(spec.reference_cards).settings
         expected = {
             key
             for key in TRACKED_PARAMETERS & reference.keys()
@@ -59,6 +62,20 @@ def test_a_missing_tracked_setting_is_reported(
     assert differences[0].actual is None
 
 
+def test_run_card_differences_come_in_the_order_of_the_setting_names(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    original = specs["HToWW2Q1L"]
+    changed = {"ptl": 5.0, "ebeam1": 7000.0, "pdlabel": "cteq6l1"}
+    run_card = dict(reversed({**original.run_card, **changed}.items()))
+    altered = ProcessSpec(**{**original.__dict__, "run_card": run_card})
+    assert [d.item for d in compare_process(altered)] == [
+        "run_card.ebeam1",
+        "run_card.pdlabel",
+        "run_card.ptl",
+    ]
+
+
 def test_proc_card_commands_for_a_matched_process(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
@@ -83,19 +100,19 @@ def test_vendored_models_are_imported_by_path(
     assert model_import_target(specs["TTBar"]) == "sm-ckm"
 
 
-def test_reference_proc_lines_drop_the_madgraph_preamble(
+def test_another_process_definition_is_reported(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
-    assert reference_proc_lines(specs["HToBB"]) == [
-        "import model heft",
-        "define p = p b b~",
-        "define j = j b b~",
-        "generate p p > ve ve~ h, h > b b~",
-    ]
-    assert reference_proc_lines(specs["ZJetsToNuNu"])[0] == "import model sm"
-    assert (
-        reference_proc_lines(specs["HToCC"])[0] == "import model heft_c_mass_jetclass"
+    original = specs["HToBB"]
+    altered = ProcessSpec(
+        **{**original.__dict__, "processes": ("p p > ve ve~ h, h > c c~",)}
     )
+    assert [str(d) for d in compare_process(altered)] == [
+        "proc_card.commands: expected import model heft | define p = p b b~ | "
+        "define j = j b b~ | generate p p > ve ve~ h, h > b b~, "
+        "got import model heft | define p = p b b~ | "
+        "define j = j b b~ | generate p p > ve ve~ h, h > c c~"
+    ]
 
 
 def test_launch_commands_switch_shower_and_detector_off(
@@ -149,8 +166,10 @@ def test_madspin_card_text_is_the_named_card(specs: Mapping[str, ProcessSpec]) -
 def test_a_tracked_cut_at_its_disabled_default_needs_no_entry(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
-    reference = reference_run_settings(specs["WToQQ"])
-    assert reference["pt_min_pdg"] == {}
+    reference_dir = specs["WToQQ"].reference_cards
+    assert reference_dir is not None
+    reference = RunCard.reference(reference_dir)
+    assert reference.settings["pt_min_pdg"] == {}
     assert "pt_min_pdg" not in specs["WToQQ"].run_card
     assert compare_process(specs["WToQQ"]) == []
 
@@ -168,6 +187,19 @@ def test_a_changed_decay_is_reported(
     card.write_text(text.replace(hadronic, leptonic), encoding="utf-8")
     altered = ProcessSpec(**{**original.__dict__, "madspin_card": card})
     assert sorted(str(d) for d in compare_process(altered)) == [
-        f"missing madspin decay: {hadronic.removeprefix('decay ')}",
-        f"unexpected madspin decay: {leptonic.removeprefix('decay ')}",
+        f"missing madspin_card.decay: {hadronic.removeprefix('decay ')}",
+        f"unexpected madspin_card.decay: {leptonic.removeprefix('decay ')}",
+    ]
+
+
+def test_a_madspin_card_that_only_one_side_has_is_reported(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    without_card = replace(specs["TTBar"], madspin_card=None)
+    assert [str(d) for d in compare_process(without_card)] == [
+        "missing card: madspin_card"
+    ]
+    with_card = replace(specs["HToBB"], madspin_card=specs["TTBar"].madspin_card)
+    assert [str(d) for d in compare_process(with_card)] == [
+        "unexpected card: madspin_card"
     ]

@@ -11,7 +11,8 @@ from omphjc.data_files import Card
 class SettingsCard(Card):
     """A card of ``name = value`` lines, with comments after ``#``."""
 
-    record_scheme: ClassVar[str] = "settings-v1"
+    format_name: ClassVar[str] = "settings"
+    record_version: ClassVar[int] = 1
 
     settings: dict[str, str]
 
@@ -31,7 +32,7 @@ class SettingsCard(Card):
         return Difference.between_mappings(self.settings, reference.settings)
 
 
-def test_a_fingerprint_is_the_scheme_and_the_hash_of_the_content_record() -> None:
+def test_a_fingerprint_is_the_format_the_version_and_the_content_hash() -> None:
     card = SettingsCard.from_text("ptj = 20\niseed = 42\n")
     canonical = b'{"iseed":"42","ptj":"20"}'
     assert card.fingerprint() == f"settings-v1:{hashlib.sha256(canonical).hexdigest()}"

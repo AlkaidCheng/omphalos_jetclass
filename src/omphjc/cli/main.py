@@ -29,9 +29,9 @@ from omphjc.tools.delphes.card import (
     reference_card,
 )
 from omphjc.tools.madgraph.cards import launch_commands, proc_card_commands
-from omphjc.tools.madgraph.reference import compare_all
 from omphjc.tools.madgraph.run_card import format_value
 from omphjc.tools.pythia.cmnd import format_cmnd, shower_settings
+from omphjc.validation.cards import compare_all
 
 
 @click.group()

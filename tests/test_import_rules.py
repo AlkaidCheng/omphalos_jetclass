@@ -192,6 +192,17 @@ def test_the_jobs_layer_imports_tools_only_where_accepted() -> None:
     assert reaches == JOBS_TOOL_IMPORTS
 
 
+def test_the_validation_imports_no_stage_and_no_command() -> None:
+    reaches = {
+        (name, target)
+        for name, targets in IMPORTS.items()
+        if _within(name, "omphjc.validation")
+        for target in targets
+        if _within(target, "omphjc.jobs") or _within(target, "omphjc.cli")
+    }
+    assert reaches == set()
+
+
 def _loaded_after(statement: str) -> set[str]:
     """Return the modules a fresh interpreter holds after running `statement`."""
     code = f"import sys\n{statement}\nprint('\\n'.join(sys.modules))"

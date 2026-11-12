@@ -34,13 +34,16 @@ class DataFile(ABC):
 
     Attributes
     ----------
-    record_scheme : str
-        A label for the way :meth:`content_record` writes the content down,
-        such as ``"lhe-v1"``. A class gets a new label whenever that way
-        changes, so that fingerprints made in two ways never match.
+    format_name : str
+        The name of the file format, such as ``"lhe"`` or ``"run_card"``.
+    record_version : int
+        The version of the way :meth:`content_record` writes the content
+        down. A class gets the next number whenever that way changes, so that
+        fingerprints made in two ways never match.
     """
 
-    record_scheme: ClassVar[str]
+    format_name: ClassVar[str]
+    record_version: ClassVar[int]
 
     @classmethod
     @abstractmethod
@@ -65,13 +68,15 @@ class DataFile(ABC):
         Returns
         -------
         str
-            The label :attr:`record_scheme`, a colon, and the SHA-256 hash of
-            the content record in hexadecimal.
+            The name :attr:`format_name`, the letters ``-v``, the number
+            :attr:`record_version`, a colon, and the SHA-256 hash of the
+            content record in hexadecimal, as in ``lhe-v1:<hash>``.
         """
         canonical = json.dumps(
             self.content_record(), sort_keys=True, separators=(",", ":")
         )
-        return f"{self.record_scheme}:{hashlib.sha256(canonical.encode()).hexdigest()}"
+        content_sha256 = hashlib.sha256(canonical.encode()).hexdigest()
+        return f"{self.format_name}-v{self.record_version}:{content_sha256}"
 
 
 class Card(DataFile):

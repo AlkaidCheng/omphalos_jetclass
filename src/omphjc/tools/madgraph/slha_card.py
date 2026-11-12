@@ -37,7 +37,8 @@ class SLHACard(Card):
         gives two different entries.
     """
 
-    record_scheme: ClassVar[str] = "slha-v1"
+    format_name: ClassVar[str] = "slha"
+    record_version: ClassVar[int] = 1
 
     entries: tuple[tuple[RunCardValue, ...], ...]
 

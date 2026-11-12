@@ -29,7 +29,7 @@ from typing import Any, ClassVar
 
 from omphjc.data_files import DataFile
 from omphjc.tools.madgraph.banner import Banner
-from omphjc.tools.madgraph.madspin import parse_madspin_card
+from omphjc.tools.madgraph.madspin_card import MadSpinCard
 from omphjc.tools.madgraph.proc_card import ProcCard
 from omphjc.tools.madgraph.slha_card import SLHACard
 
@@ -59,7 +59,8 @@ class LHEFile(DataFile):
         the events.
     """
 
-    record_scheme: ClassVar[str] = "lhe-v1"
+    format_name: ClassVar[str] = "lhe"
+    record_version: ClassVar[int] = 1
 
     banner: Banner
     events_sha256: str
@@ -115,18 +116,19 @@ class LHEFile(DataFile):
     def content_record(self) -> dict[str, Any]:
         """Return the content of the cards and the hash of the events.
 
-        Each card is written down as parsed, so its layout and its comments
-        do not count: the settings of the run card, the commands of the
-        process card, the entries of the parameter card, and the options and
-        decay chains of the MadSpin card.
+        Each card is written down with its own content record, so its layout
+        and its comments do not count. A card that the header lacks is
+        written down as an empty card.
         """
         banner = self.banner
-        madspin = parse_madspin_card(banner.madspin_card or "")
+        proc_card = banner.proc_card or ProcCard.from_text("")
+        param_card = banner.param_card or SLHACard.from_text("")
+        madspin = (banner.madspin_card or MadSpinCard.from_text("")).content_record()
         return {
-            "run_card": banner.run_card,
-            "proc_card": ProcCard.from_text(banner.proc_card or "").content_record(),
-            "param_card": SLHACard.from_text(banner.param_card or "").content_record(),
-            "madspin_options": madspin.options,
-            "madspin_decays": sorted(madspin.decays),
+            "run_card": banner.run_card.content_record(),
+            "proc_card": proc_card.content_record(),
+            "param_card": param_card.content_record(),
+            "madspin_options": madspin["options"],
+            "madspin_decays": madspin["decays"],
             "events": self.events_sha256,
         }

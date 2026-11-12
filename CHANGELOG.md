@@ -123,6 +123,17 @@
 - `omphjc check-cards` and `omphjc delphes compare` report an item that only
   one side holds as `missing <item>: <value>` or `unexpected <item>: <value>`,
   and `Difference` holds `None` as the value of the side that lacks it. (#53)
+- `Banner` holds its cards as `RunCard`, `ProcCard`, `SLHACard` and
+  `MadSpinCard` objects, whose `from_text` and `differences` methods replace
+  the `parse_*` and `compare_*` functions of the MadGraph cards. (#54)
+- `omphjc check-cards` names each difference by its card, as in
+  `madspin_card.decay`, and reports a MadSpin card that only one side has as
+  a missing or an unexpected card. (#54)
+- A `DataFile` class states `format_name` and `record_version` in place of
+  `record_scheme`, and a fingerprint starts with both, as in `run_card-v1:`.
+  (#54)
+- `compare_process` and `compare_all` are in `omphjc.validation.cards`,
+  which replaces `omphjc.tools.madgraph.reference`. (#54)
 
 ### Fixed
 
