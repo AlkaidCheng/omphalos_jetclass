@@ -14,88 +14,48 @@ job, under the stage's name::
       }
     }
 
-``schema`` numbers this layout; a manifest of another schema is refused.
-:mod:`omphjc.jobs.records` describes the record of a task. The file is
-replaced in one step whenever it changes, so a crash never leaves a
-half-written manifest.
+:mod:`omphjc.jobs.record_file` describes ``schema`` and
+:mod:`omphjc.jobs.records` the record of a task. The file is replaced in one
+step whenever it changes, so a crash never leaves a half-written manifest.
 """
 
-import json
-import os
-import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from omphjc import __version__
+from omphjc.jobs.record_file import RecordFile
 from omphjc.jobs.records import TaskRecord, TaskResult
-
-MANIFEST_FILE = "manifest.json"
-SCHEMA_VERSION = 1
 
 
 @dataclass
-class Manifest:
+class Manifest(RecordFile):
     """The manifest of one job; the module docstring describes the fields."""
+
+    file_name: ClassVar[str] = "manifest.json"
 
     process: str
     job_id: int
     omphjc_version: str = __version__
     stages: dict[str, TaskRecord] = field(default_factory=dict)
 
-    def write(self, path: Path) -> None:
-        """Write the manifest to `path`, replacing it in one step.
-
-        A path in a result is written relative to the directory of `path`.
-
-        Raises
-        ------
-        ValueError
-            If a result names a path outside that directory.
-        """
-
-        def relative_path(value: object) -> str:
-            if isinstance(value, Path):
-                return value.relative_to(path.parent).as_posix()
-            raise TypeError(f"{value!r} is not a JSON value")
-
-        record = {"schema": SCHEMA_VERSION, **asdict(self)}
-        text = json.dumps(record, indent=2, default=relative_path)
-        descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=".manifest-")
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            stream.write(text + "\n")
-        os.replace(temporary, path)
+    def as_record(self) -> dict[str, Any]:
+        """Return the fields, with the record of each task by its stage."""
+        return asdict(self)
 
     @classmethod
-    def read(cls, path: Path) -> "Manifest":
-        """Read the manifest at `path`.
+    def from_record(cls, record: dict[str, Any], root_dir: Path) -> "Manifest":
+        """Return the manifest that `record` describes.
 
-        Raises
-        ------
-        ValueError
-            If the file is not a manifest of a known schema.
+        A path in a result becomes an absolute path under `root_dir`.
         """
-        try:
-            record: Any = json.loads(path.read_text(encoding="utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError(f"{path} is not a manifest: {error}") from None
-        if not isinstance(record, dict) or "schema" not in record:
-            raise ValueError(f"{path} is not a manifest: no schema field")
-        if record["schema"] != SCHEMA_VERSION:
-            raise ValueError(
-                f"{path} was written with manifest schema {record['schema']}; this "
-                f"version of omphjc reads schema {SCHEMA_VERSION}"
-            )
-        try:
-            stages = {}
-            for name, stage in record["stages"].items():
-                result = TaskResult.from_record(stage.pop("result"), path.parent)
-                stages[name] = TaskRecord(**stage, result=result)
-            return cls(
-                process=record["process"],
-                job_id=record["job_id"],
-                omphjc_version=record["omphjc_version"],
-                stages=stages,
-            )
-        except (KeyError, TypeError, ValueError) as error:
-            raise ValueError(f"{path} is not a manifest: {error}") from None
+        stages = {}
+        for name, stage in record["stages"].items():
+            result = TaskResult.from_record(stage.pop("result"), root_dir)
+            stages[name] = TaskRecord(**stage, result=result)
+        return cls(
+            process=record["process"],
+            job_id=record["job_id"],
+            omphjc_version=record["omphjc_version"],
+            stages=stages,
+        )

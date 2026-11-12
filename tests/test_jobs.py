@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import signal
 from collections.abc import Mapping
 from dataclasses import replace
@@ -11,12 +12,15 @@ import awkward as ak
 import pytest
 from delphes_records import write_delphes_file
 
+from omphjc import __version__
+from omphjc.comparison import Difference
 from omphjc.events import EventFormat
 from omphjc.events.delphes_root import DelphesROOTFile
 from omphjc.jobs import (
     EVENTS_OUTPUT,
     EventOutput,
     Job,
+    JobIdentity,
     Manifest,
     StageCheck,
     StageStatus,
@@ -57,6 +61,8 @@ def test_a_job_has_a_directory_per_process_and_number(
     assert job.task_dir("generate") == job.root_dir / "generate"
     assert job.relative_path(job.root_dir / "generate" / "x.log") == "generate/x.log"
     assert job.seed == 10000007
+    assert job.identity_path == job.root_dir / "job.json"
+    assert job.identity == JobIdentity(process="HToBB", job_id=7, seed=10000007)
     assert job.manifest == Manifest(process="HToBB", job_id=7)
     assert not job.root_dir.exists()
     with pytest.raises(ValueError, match="job_id"):
@@ -108,17 +114,17 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
     events = written["stages"]["x"]["result"]["outputs"]["events"]
     events["format"] = "hepmc"
     path.write_text(json.dumps(written))
-    with pytest.raises(ValueError, match="not a manifest: 'hepmc'"):
+    with pytest.raises(ValueError, match="manifest.json has invalid content: 'hepmc'"):
         Manifest.read(path)
     events["format"] = "lhe"
     del events["fingerprint"]
     path.write_text(json.dumps(written))
-    with pytest.raises(ValueError, match="not a manifest: 'fingerprint'"):
+    with pytest.raises(ValueError, match="has invalid content: 'fingerprint'"):
         Manifest.read(path)
     events["fingerprint"] = "lhe-v1:abc"
     del written["stages"]["x"]["result"]["outputs"]["summary"]["n_bytes"]
     path.write_text(json.dumps(written))
-    with pytest.raises(ValueError, match="not a manifest: 'n_bytes'"):
+    with pytest.raises(ValueError, match="has invalid content: 'n_bytes'"):
         Manifest.read(path)
     path.write_text('{"schema": 99}')
     with pytest.raises(ValueError, match="schema 99; .* reads schema 1"):
@@ -127,7 +133,7 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="no schema"):
         Manifest.read(path)
     path.write_text("not json")
-    with pytest.raises(ValueError, match="not a manifest"):
+    with pytest.raises(ValueError, match="manifest.json is not valid JSON"):
         Manifest.read(path)
 
 
@@ -360,6 +366,116 @@ def test_a_manifest_of_another_job_is_refused(
         Job(specs["HToBB"], tmp_path, 1)
 
 
+def test_the_first_task_writes_the_identity_of_the_job(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    job.run_task("x", {}, lambda overwrite: _make_output(job))
+    assert json.loads(job.identity_path.read_text()) == {
+        "schema": 1,
+        "process": "HToBB",
+        "job_id": 1,
+        "seed": 10000001,
+        "omphjc_version": __version__,
+    }
+
+
+def test_a_later_task_keeps_the_identity_file(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    job.root_dir.mkdir(parents=True)
+    created = JobIdentity(
+        process="HToBB", job_id=1, seed=10000001, omphjc_version="0.0.1"
+    )
+    created.create(job.identity_path)
+    later = Job(specs["HToBB"], tmp_path, 1)
+    record = later.run_task("x", {}, lambda overwrite: _make_output(later))
+    assert record.status == "done"
+    assert JobIdentity.read(job.identity_path).omphjc_version == "0.0.1"
+
+
+def test_a_directory_of_another_job_is_refused(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    shifted = Job(replace(specs["HToBB"], seed_offset=20_000_000), tmp_path, 1)
+    job.run_task("x", {}, lambda overwrite: _make_output(job))
+    refusal = (
+        "The current configuration is inconsistent with that of the existing"
+        " job in .*job_1 \\(job.json\\):"
+        "\n  seed: expected 10000001, got 20000001"
+        "\nRerun with the configuration the job was created with, or choose"
+        " another output directory.$"
+    )
+    calls = []
+    with pytest.raises(ValueError, match=refusal):
+        shifted.run_task("y", {}, calls.append, force=True)
+    assert calls == []
+    with pytest.raises(ValueError, match=refusal):
+        Job(shifted.spec, tmp_path, 1)
+    JobIdentity(process="HToGG", job_id=1, seed=5).write(job.identity_path)
+    with pytest.raises(
+        ValueError,
+        match=(
+            "\n  process: expected HToGG, got HToBB"
+            "\n  seed: expected 5, got 10000001\nRerun"
+        ),
+    ):
+        Job(specs["HToBB"], tmp_path, 1)
+
+
+def test_identities_differ_by_process_job_number_and_seed() -> None:
+    identity = JobIdentity(process="HToBB", job_id=1, seed=10000001)
+    same = JobIdentity(process="HToBB", job_id=1, seed=10000001, omphjc_version="0.0.1")
+    assert identity.differences(same) == []
+    other = JobIdentity(process="HToBB", job_id=2, seed=10000002)
+    assert identity.differences(other) == [
+        Difference("job_id", expected="2", actual="1"),
+        Difference("seed", expected="10000002", actual="10000001"),
+    ]
+
+
+def test_a_job_directory_removed_during_a_task_is_not_recreated(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+
+    def remove_then_finish(overwrite: bool) -> TaskOutcome:
+        shutil.rmtree(job.root_dir)
+        return _make_output(job)
+
+    with pytest.raises(FileNotFoundError, match="job.json was removed while a task"):
+        job.run_task("x", {}, remove_then_finish)
+    assert not job.identity_path.exists()
+    assert not job.manifest_path.exists()
+
+    def remove_then_fail(overwrite: bool) -> TaskOutcome:
+        shutil.rmtree(job.root_dir)
+        raise RuntimeError("the program stopped")
+
+    with pytest.raises(FileNotFoundError, match="is not recorded") as failure:
+        Job(specs["HToBB"], tmp_path, 1).run_task("x", {}, remove_then_fail)
+    assert isinstance(failure.value.__context__, RuntimeError)
+    assert not job.root_dir.exists()
+
+
+def test_an_identity_file_that_cannot_be_read_is_refused(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    job.root_dir.mkdir(parents=True)
+    job.identity_path.write_text('{"schema": 99}')
+    with pytest.raises(ValueError, match="schema 99; .* reads schema 1"):
+        Job(specs["HToBB"], tmp_path, 1)
+    job.identity_path.write_text('{"schema": 1, "process": "HToBB"}')
+    with pytest.raises(ValueError, match="job.json has invalid content"):
+        Job(specs["HToBB"], tmp_path, 1)
+    job.identity_path.write_text("not json")
+    with pytest.raises(ValueError, match="job.json is not valid JSON"):
+        job.run_task("x", {}, lambda overwrite: _make_output(job))
+
+
 def test_generate_records_what_madgraph_made(
     specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
@@ -427,7 +543,7 @@ def test_generate_keeps_a_finished_run_unless_forced(
     with pytest.raises(ValueError, match="ran with"):
         generate(Job(specs["HToBB"], tmp_path, 1), n_events=20, mg5_path=mg5_path)
     shifted = replace(specs["HToBB"], seed_offset=20_000_000)
-    with pytest.raises(ValueError, match="'seed': 10000001.*'seed': 20000001"):
+    with pytest.raises(ValueError, match="seed: expected 10000001, got 20000001"):
         generate(Job(shifted, tmp_path, 1), n_events=10, mg5_path=mg5_path)
     again = generate(
         Job(specs["HToBB"], tmp_path, 1), n_events=20, mg5_path=mg5_path, force=True

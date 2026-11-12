@@ -379,6 +379,7 @@ omphjc clean HToBB --job-id 1 --outdir runs/dev --set-aside  # drop what reruns 
 
 ```
 runs/dev/HToBB/job_1/
+├── job.json               the process, the job number and the seed
 ├── manifest.json          what ran, with what, and what came out
 ├── generate/              the MadGraph working directory, MadGraph's own layout inside
 │   ├── cards/             the cards MadGraph ran with, hashed in the manifest
@@ -399,11 +400,14 @@ runs/dev/HToBB/job_1/
 The job number gives the seed of every program the job runs
 (`seed_offset + job`, see [Seeds](#seeds)), so running a job again gives the
 same events; [What a rerun reproduces](docs/reproducibility.md) lists what else
-they depend on, such as the core count for a process with MadSpin. The manifest
-records the process, the job number, the omphjc version, and for each stage its
-status, its start and end times, the parameters it was asked for, its result,
-its log, and what it took: the wall time of the stage and the CPU time and peak
-memory of the program's processes. The result names the stage's outputs, giving
+they depend on, such as the core count for a process with MadSpin. The first
+stage that runs writes the process, the job number and the seed to `job.json`,
+and no stage runs in a directory whose `job.json` gives another process, job
+number or seed. The manifest records the process, the job number, the omphjc
+version, and for each stage its status, its start and end times, the
+parameters it was asked for, its result, its log, and what it took: the wall
+time of the stage and the CPU time and peak memory of the program's processes.
+The result names the stage's outputs, giving
 each file's size and an event file's format, number of events and fingerprint,
 and holds the metadata of what it made. Two event files with the same events
 have the same fingerprint
@@ -423,8 +427,10 @@ refused unless `--force` is given.
 
 Running a stage again keeps a result recorded as done whose outputs are
 present and whose parameters match, runs again a stage that failed or was
-interrupted, replacing what it left, and refuses other parameters, a changed
-seed included, unless `--force` is given. A stage with an output that no
+interrupted, replacing what it left, and refuses other parameters unless
+`--force` is given. A changed seed, as after an edit of the process's
+`seed_offset`, is refused with `--force` too, since the job keeps the seed in
+its `job.json`. A stage with an output that no
 longer has the size the manifest records, as after a truncated copy, is
 refused, and so is the stage that reads it, until it is run again with
 `--force`. A job that receives `SIGTERM`, as from a batch system's time limit,

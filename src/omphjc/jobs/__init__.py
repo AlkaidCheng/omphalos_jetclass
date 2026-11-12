@@ -1,11 +1,12 @@
 """Jobs: one process and one job number, run in a directory of their own.
 
-A job directory, ``<outdir>/<process>/job_<n>/``, holds ``manifest.json`` and
-one directory per task, the work of one stage in the job. The job number fixes
-the seed of every program the job runs; ``docs/reproducibility.md`` lists what
-else a rerun's events depend on.
+A job directory, ``<outdir>/<process>/job_<n>/``, holds ``job.json``,
+``manifest.json`` and one directory per task, the work of one stage in the
+job. The job number fixes the seed of every program the job runs;
+``docs/reproducibility.md`` lists what else a rerun's events depend on.
 :class:`Job` builds the directory, keeps the manifest and applies the rerun
-rules; :mod:`omphjc.jobs.manifest` defines the file and
+rules; :mod:`omphjc.jobs.identity` defines ``job.json``,
+:mod:`omphjc.jobs.manifest` the manifest and
 :mod:`omphjc.jobs.records` the record of a task; the functions in
 :mod:`omphjc.jobs.stages` run the stages: MadGraph generation, the Pythia
 shower, then the Delphes simulation.
@@ -20,6 +21,7 @@ parameters and stores them as a :class:`TaskRecord` in the job's
 :class:`Manifest`, which writes every path relative to the job directory.
 """
 
+from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.job import (
     Job,
     StageCheck,
@@ -53,6 +55,7 @@ __all__ = [
     "SIMULATE",
     "EventOutput",
     "Job",
+    "JobIdentity",
     "Manifest",
     "StageCheck",
     "StageStatus",
