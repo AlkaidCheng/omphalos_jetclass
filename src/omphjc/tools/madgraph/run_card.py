@@ -98,8 +98,8 @@ class RunCard(ReferencedCard):
         :func:`parse_value`.
     """
 
-    record_scheme: ClassVar[str] = "run-card-v1"
-    card_name: ClassVar[str] = "run_card"
+    format_name: ClassVar[str] = "run_card"
+    record_version: ClassVar[int] = 1
 
     settings: dict[str, RunCardValue]
 

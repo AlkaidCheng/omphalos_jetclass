@@ -59,7 +59,8 @@ class LHEFile(DataFile):
         the events.
     """
 
-    record_scheme: ClassVar[str] = "lhe-v1"
+    format_name: ClassVar[str] = "lhe"
+    record_version: ClassVar[int] = 1
 
     banner: Banner
     events_sha256: str

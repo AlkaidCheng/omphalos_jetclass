@@ -57,7 +57,7 @@ def test_cards_written_for_two_job_directories_have_one_fingerprint(
     )
     assert first.commands != second.commands
     assert first.fingerprint() == second.fingerprint()
-    assert first.fingerprint().startswith("proc-card-v1:")
+    assert first.fingerprint().startswith("proc_card-v1:")
 
 
 def test_another_process_changes_the_fingerprint() -> None:

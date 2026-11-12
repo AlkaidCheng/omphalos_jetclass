@@ -33,8 +33,8 @@ class MadSpinCard(ReferencedCard):
         words.
     """
 
-    record_scheme: ClassVar[str] = "madspin-card-v1"
-    card_name: ClassVar[str] = "madspin_card"
+    format_name: ClassVar[str] = "madspin_card"
+    record_version: ClassVar[int] = 1
 
     options: dict[str, RunCardValue]
     decays: frozenset[str]

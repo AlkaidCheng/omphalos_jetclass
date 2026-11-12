@@ -18,8 +18,8 @@ class DefinitionsCard(ReferencedCard):
     file ``definitions.dat``.
     """
 
-    record_scheme: ClassVar[str] = "definitions-v1"
-    card_name: ClassVar[str] = "definitions_card"
+    format_name: ClassVar[str] = "definitions_card"
+    record_version: ClassVar[int] = 1
 
     definitions: tuple[str, ...]
 

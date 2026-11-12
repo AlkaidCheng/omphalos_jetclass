@@ -79,7 +79,7 @@ def test_layout_and_comments_do_not_change_the_fingerprint() -> None:
     card = RunCard.from_text("  42 = iseed ! random seed\n  20.0 = ptj\n")
     rewritten = RunCard.from_text("20.0=ptj # minimum jet pt\n\n42   =   iseed\n")
     assert rewritten.fingerprint() == card.fingerprint()
-    assert card.fingerprint().startswith("run-card-v1:")
+    assert card.fingerprint().startswith("run_card-v1:")
     assert rewritten.differences(card) == []
 
 

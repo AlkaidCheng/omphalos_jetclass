@@ -89,7 +89,7 @@ def test_the_events_hash_covers_the_init_block_and_the_events(tmp_path: Path) ->
     assert lhe_file.content_record()["events"] == lhe_file.events_sha256
 
 
-def test_an_lhe_fingerprint_names_its_scheme(tmp_path: Path) -> None:
+def test_an_lhe_fingerprint_starts_with_its_format_and_version(tmp_path: Path) -> None:
     assert _fingerprint(_write(tmp_path / "events.lhe")).startswith("lhe-v1:")
 
 

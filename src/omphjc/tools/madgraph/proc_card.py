@@ -60,8 +60,8 @@ class ProcCard(ReferencedCard):
         that the card holds on several lines is one command here.
     """
 
-    record_scheme: ClassVar[str] = "proc-card-v1"
-    card_name: ClassVar[str] = "proc_card"
+    format_name: ClassVar[str] = "proc_card"
+    record_version: ClassVar[int] = 1
 
     commands: tuple[str, ...]
 

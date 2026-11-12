@@ -8,7 +8,7 @@ check-cards`` reports for that class.
 
 from abc import abstractmethod
 from pathlib import Path
-from typing import ClassVar, TypeVar
+from typing import TypeVar
 
 from omphjc.comparison import Difference
 from omphjc.data_files import Card
@@ -18,15 +18,7 @@ _ReferencedCardT = TypeVar("_ReferencedCardT", bound="ReferencedCard")
 
 
 class ReferencedCard(Card):
-    """A MadGraph card of a catalogue process that has an official card.
-
-    Attributes
-    ----------
-    card_name : str
-        The name of the card in a report, such as ``run_card``.
-    """
-
-    card_name: ClassVar[str]
+    """A MadGraph card of a catalogue process that has an official card."""
 
     @classmethod
     @abstractmethod
@@ -71,9 +63,9 @@ class ReferencedCard(Card):
     def compare_with_reference(cls, spec: ProcessSpec) -> list[Difference]:
         """Return the differences between the card of `spec` and its reference.
 
-        The item of each difference starts with :attr:`card_name` and a dot.
-        A card that only one side has gives one difference with the item
-        ``card``, whose value is :attr:`card_name`.
+        The item of each difference starts with :attr:`format_name` and a
+        dot. A card that only one side has gives one difference with the item
+        ``card``, whose value is :attr:`format_name`.
 
         Raises
         ------
@@ -87,10 +79,10 @@ class ReferencedCard(Card):
         if card is None and reference is None:
             return []
         if card is None:
-            return [Difference("card", cls.card_name, None)]
+            return [Difference("card", cls.format_name, None)]
         if reference is None:
-            return [Difference("card", None, cls.card_name)]
+            return [Difference("card", None, cls.format_name)]
         return [
-            Difference(f"{cls.card_name}.{d.item}", d.expected, d.actual)
+            Difference(f"{cls.format_name}.{d.item}", d.expected, d.actual)
             for d in card.checked_differences(reference)
         ]

@@ -29,7 +29,7 @@ def test_layout_and_comments_do_not_change_the_configuration(
     rewritten = MadSpinCard.from_text(reformatted)
     assert rewritten.differences(reference) == []
     assert rewritten.fingerprint() == reference.fingerprint()
-    assert reference.fingerprint().startswith("madspin-card-v1:")
+    assert reference.fingerprint().startswith("madspin_card-v1:")
 
 
 def test_the_content_record_holds_the_options_and_the_sorted_decay_chains() -> None:
