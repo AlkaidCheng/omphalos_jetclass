@@ -74,6 +74,6 @@ def test_a_changed_value_is_reported_as_one_entry_of_each_card() -> None:
     reference = SLHACard.from_text(CARD)
     card = SLHACard.from_text(CARD.replace("1.725000e+02 # MT", "1.730000e+02 # MT"))
     assert [str(difference) for difference in card.differences(reference)] == [
-        "block mass 6 172.5: expected present, got absent",
-        "block mass 6 173.0: expected absent, got present",
+        "missing entry: block mass 6 172.5",
+        "unexpected entry: block mass 6 173.0",
     ]

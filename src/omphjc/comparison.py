@@ -8,28 +8,27 @@ from typing import TypeVar
 _ValueT = TypeVar("_ValueT")
 _MemberT = TypeVar("_MemberT")
 
-# The values of an item that only one side holds.
-_PRESENT = "present"
-_ABSENT = "absent"
-
 
 @dataclass(frozen=True)
 class Difference:
     """One difference between a configuration and its reference.
 
+    An item that only the reference holds is missing from the configuration.
+    An item that only the configuration holds is unexpected.
+
     Parameters
     ----------
     item : str
         What differs, for example a module parameter or a decay chain.
-    expected : str
-        The reference value.
-    actual : str
-        The value found.
+    expected : str or None
+        The reference value. It is ``None`` when the reference lacks the item.
+    actual : str or None
+        The value found. It is ``None`` when the configuration lacks the item.
     """
 
     item: str
-    expected: str
-    actual: str
+    expected: str | None
+    actual: str | None
 
     @classmethod
     def between_mappings(
@@ -44,7 +43,7 @@ class Difference:
         """Return one difference for each key with two different values.
 
         The differences come in the sorted order of the keys. A key that one
-        mapping lacks has the value ``absent`` there.
+        mapping lacks has the value ``None`` there.
 
         Parameters
         ----------
@@ -66,7 +65,7 @@ class Difference:
             if in_both and equal(actual[key], reference[key]):
                 continue
             expected, found = (
-                text(values[key]) if key in values else _ABSENT
+                text(values[key]) if key in values else None
                 for values in (reference, actual)
             )
             differences.append(cls(name(key), expected, found))
@@ -78,14 +77,15 @@ class Difference:
         actual: Collection[_MemberT],
         reference: Collection[_MemberT],
         *,
-        name: Callable[[_MemberT], str] = str,
+        item: str,
+        text: Callable[[_MemberT], str] = str,
     ) -> list["Difference"]:
         """Return one difference for each member that only one collection holds.
 
         The members of `reference` alone come first, then the members of
-        `actual` alone, each group in the order of its collection. A member
-        has the value ``present`` in the collection that holds it and
-        ``absent`` in the other.
+        `actual` alone, each group in the order of its collection. The value
+        of a difference is the member, on the side of the collection that
+        holds it.
 
         Parameters
         ----------
@@ -93,18 +93,30 @@ class Difference:
             The members found.
         reference : Collection[_MemberT]
             The reference members.
-        name : callable, optional
-            Returns the item name of a member. Defaults to :class:`str`.
+        item : str
+            The item name of every difference, which says what a member is,
+            such as ``"decay"``.
+        text : callable, optional
+            Returns a member as a difference writes it. Defaults to
+            :class:`str`.
         """
         return [
-            cls(name(member), expected, found)
-            for members, others, expected, found in (
-                (reference, actual, _PRESENT, _ABSENT),
-                (actual, reference, _ABSENT, _PRESENT),
-            )
-            for member in members
-            if member not in others
+            *(
+                cls(item, text(member), None)
+                for member in reference
+                if member not in actual
+            ),
+            *(
+                cls(item, None, text(member))
+                for member in actual
+                if member not in reference
+            ),
         ]
 
     def __str__(self) -> str:
+        """Return the difference as one line of a report."""
+        if self.actual is None:
+            return f"missing {self.item}: {self.expected}"
+        if self.expected is None:
+            return f"unexpected {self.item}: {self.actual}"
         return f"{self.item}: expected {self.expected}, got {self.actual}"

@@ -221,10 +221,10 @@ def compare_settings(
             continue
         if lowered not in expected:
             key, value = actual[lowered]
-            differences.append(Difference(key, "absent", value))
+            differences.append(Difference(key, None, value))
         elif lowered not in actual:
             key, value = expected[lowered]
-            differences.append(Difference(key, value, "absent"))
+            differences.append(Difference(key, value, None))
         elif not _values_equal(actual[lowered][1], expected[lowered][1]):
             key, value = expected[lowered]
             differences.append(Difference(key, value, actual[lowered][1]))

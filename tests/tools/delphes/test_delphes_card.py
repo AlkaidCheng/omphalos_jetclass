@@ -84,10 +84,10 @@ def test_missing_and_extra_modules_are_reported() -> None:
         "module TrackSmearing TrackSmearing", "module TrackSmearing TrackSmearingAlt", 1
     )
     differences = compare_cards(parse_card(text), reference_card())
-    assert {difference.item for difference in differences} == {
-        "module TrackSmearing",
-        "module TrackSmearingAlt",
-    }
+    assert [str(difference) for difference in differences] == [
+        "missing module: TrackSmearing",
+        "unexpected module: TrackSmearingAlt",
+    ]
 
 
 def test_random_seed_becomes_a_top_level_setting() -> None:
@@ -127,37 +127,34 @@ def test_the_card_a_run_reads_starts_as_the_official_one() -> None:
 def test_the_jetclass_card_adapts_the_delphes_cms_card() -> None:
     cms = read_card(config_dir() / "references" / "delphes" / "delphes_card_CMS.tcl")
     differences = compare_cards(reference_card(), cms)
-    modules = {d.item: d.actual for d in differences if d.item.startswith("module ")}
-    removed = {item for item, actual in modules.items() if actual == "absent"}
-    added = {item for item, actual in modules.items() if actual == "defined"}
-    assert added == {"module TrackSmearing"}
+    modules = [d for d in differences if d.item == "module"]
+    removed = {d.expected for d in modules if d.actual is None}
+    added = {d.actual for d in modules if d.expected is None}
+    assert added == {"TrackSmearing"}
     assert removed == {
-        f"module {name}"
-        for name in (
-            "BTagging",
-            "ChargedHadronFilter",
-            "EFlowFilter",
-            "ElectronEfficiency",
-            "ElectronFilter",
-            "ElectronIsolation",
-            "FastJetFinder",
-            "GenMissingET",
-            "JetEnergyScale",
-            "JetFlavorAssociation",
-            "MissingET",
-            "MuonEfficiency",
-            "MuonIsolation",
-            "PhotonEfficiency",
-            "PhotonIsolation",
-            "ScalarHT",
-            "TauTagging",
-            "UniqueObjectFinder",
-        )
+        "BTagging",
+        "ChargedHadronFilter",
+        "EFlowFilter",
+        "ElectronEfficiency",
+        "ElectronFilter",
+        "ElectronIsolation",
+        "FastJetFinder",
+        "GenMissingET",
+        "JetEnergyScale",
+        "JetFlavorAssociation",
+        "MissingET",
+        "MuonEfficiency",
+        "MuonIsolation",
+        "PhotonEfficiency",
+        "PhotonIsolation",
+        "ScalarHT",
+        "TauTagging",
+        "UniqueObjectFinder",
     }
     adapted = {"ExecutionPath", "FatJetFinder", "GenJetFinder", "TreeWriter"}
     changed_cms_parameters = {
         d.item
         for d in differences
-        if d.item not in modules and d.item.partition(".")[0] not in adapted
+        if d not in modules and d.item.partition(".")[0] not in adapted
     }
     assert changed_cms_parameters == {"ECal.TrackInputArray"}

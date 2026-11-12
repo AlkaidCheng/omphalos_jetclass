@@ -47,12 +47,12 @@ def compare_madspin_cards(
     for name in sorted(card.options.keys() | reference.options.keys()):
         if name not in reference.options:
             differences.append(
-                Difference(f"option {name}", "absent", format_value(card.options[name]))
+                Difference(f"option {name}", None, format_value(card.options[name]))
             )
         elif name not in card.options:
             differences.append(
                 Difference(
-                    f"option {name}", format_value(reference.options[name]), "absent"
+                    f"option {name}", format_value(reference.options[name]), None
                 )
             )
         elif not values_equal(card.options[name], reference.options[name]):
@@ -64,7 +64,7 @@ def compare_madspin_cards(
                 )
             )
     for decay in sorted(reference.decays - card.decays):
-        differences.append(Difference(f"decay {decay}", "present", "absent"))
+        differences.append(Difference("decay", decay, None))
     for decay in sorted(card.decays - reference.decays):
-        differences.append(Difference(f"decay {decay}", "absent", "present"))
+        differences.append(Difference("decay", None, decay))
     return differences

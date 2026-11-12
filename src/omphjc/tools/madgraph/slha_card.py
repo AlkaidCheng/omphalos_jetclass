@@ -66,11 +66,13 @@ class SLHACard(Card):
     def differences(self, reference: "SLHACard") -> list[Difference]:
         """Return one difference for each entry that only one card holds.
 
-        A difference names the entry by its words. An entry with another
-        value in `reference` gives two differences, one for each value.
+        The value of a difference is the words of the entry. An entry with
+        another value in `reference` gives two differences, one for each
+        value.
         """
         return Difference.between_collections(
             self.content_record(),
             reference.content_record(),
-            name=lambda entry: " ".join(str(word) for word in entry),
+            item="entry",
+            text=lambda entry: " ".join(str(word) for word in entry),
         )
