@@ -132,6 +132,8 @@
 - A `DataFile` class states `format_name` and `record_version` in place of
   `record_scheme`, and a fingerprint starts with both, as in `run_card-v1:`.
   (#54)
+- `compare_process` and `compare_all` are in `omphjc.validation.cards`,
+  which replaces `omphjc.tools.madgraph.reference`. (#54)
 
 ### Fixed
 
