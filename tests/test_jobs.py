@@ -6,7 +6,9 @@ from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 
+import awkward as ak
 import pytest
+from delphes_records import write_delphes_file
 
 from omphjc.events import EventFormat
 from omphjc.jobs import (
@@ -522,11 +524,7 @@ def test_simulate_records_what_it_made_and_keeps_it(
     root_path = job.root_dir / "simulate" / "delphes.root"
     assert root_path.is_file()
     assert record.result.outputs == {
-        EVENTS_OUTPUT: EventOutput(
-            root_path,
-            EventFormat.DELPHES_ROOT,
-            n_events=job.require_events("shower").n_events,
-        )
+        EVENTS_OUTPUT: EventOutput(root_path, EventFormat.DELPHES_ROOT, n_events=1)
     }
     assert record.log == "simulate/simulate.log"
     card = (job.root_dir / "simulate" / "delphes_card.tcl").read_text()
@@ -561,3 +559,27 @@ def test_simulate_records_what_it_made_and_keeps_it(
         .read_text()
         .startswith(other.read_text())
     )
+
+
+# A detector card may leave out branches of the generator record, which the
+# count does not read.
+@pytest.mark.parametrize("omit", [(), ("Particle.Charge",)])
+def test_simulate_counts_the_events_of_its_output(
+    specs: Mapping[str, ProcessSpec],
+    mg5_path: Path,
+    delphes_pythia8_path: Path,
+    delphes_root_path: Path,
+    tmp_path: Path,
+    omit: tuple[str, ...],
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    generate(job, n_events=10, mg5_path=mg5_path)
+    shower(job, delphes_pythia8_path=delphes_pythia8_path)
+    showered = job.require_events("shower")
+    # The fake DelphesROOT copies its input, so the simulated file holds three
+    # events while the shower stage recorded one.
+    pids = ak.Array([[2212, 211], [2212], [211, 211, 22]])
+    write_delphes_file(showered.path, {"PID": pids}, omit=omit)
+    simulate(job, delphes_root_path=delphes_root_path)
+    assert showered.n_events == 1
+    assert job.require_events("simulate").n_events == 3

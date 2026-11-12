@@ -57,7 +57,8 @@ def link_fake_program(
     return link
 
 
-BANNER = Path(__file__).parent / "data" / "madgraph" / "TTBar_banner.txt"
+TESTS_DIR = Path(__file__).parent
+BANNER = TESTS_DIR / "data" / "madgraph" / "TTBar_banner.txt"
 
 # Stands in for MadGraph's bin/mg5_aMC: it follows the script it is given,
 # writes the files MadGraph would write, and, like MadGraph, exits with status
@@ -121,13 +122,17 @@ def mg5_path(link_fake_program: Callable[[str, str], Path]) -> Path:
 
 # Stands in for Delphes's DelphesPythia8: it takes the card, the Pythia command
 # file and the output file, reads the LHE file the command file names as text,
-# prints Pythia's banner and event statistics, and writes the output. Like
-# DelphesPythia8 it refuses an existing output file and, with
-# FAKE_DP8_FAIL=abort, gives up with exit status 0. FAKE_DP8_FAIL=exit fails
-# with status 1; FAKE_DP8_FAIL=hang never finishes.
+# prints Pythia's banner and event statistics, and writes a file with the
+# layout of a Delphes ROOT file (tests/delphes_records.py) that holds one entry
+# for each event it accepts. It writes that file with uproot once for each
+# number of events in a test session and copies it afterwards, since loading
+# uproot takes about 0.3 s. Like DelphesPythia8 it refuses an existing output
+# file and, with FAKE_DP8_FAIL=abort, gives up with exit status 0.
+# FAKE_DP8_FAIL=exit fails with status 1; FAKE_DP8_FAIL=hang never finishes.
 FAKE_DELPHES_PYTHIA8 = """\
 #!{python}
 import os
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -163,7 +168,18 @@ if fail == "abort":
     sys.exit(0)
 matched = settings.get("jetmatching:merge", "off") == "on"
 accepted = tried - tried // 2 if matched else tried
-Path(output).write_bytes(b"ROOT fake")
+record = Path({records_dir!r}) / f"delphes_{{accepted}}_events.root"
+if not record.exists():
+    sys.path.insert(0, {tests_dir!r})
+    import awkward as ak
+    import numpy as np
+    from delphes_records import write_delphes_file
+
+    pids = np.tile([2212, 2212, 211], accepted)
+    written = record.with_name(f"{{record.name}}.{{os.getpid()}}")
+    write_delphes_file(written, {{"PID": ak.unflatten(pids, np.full(accepted, 3))}})
+    os.replace(written, record)
+shutil.copyfile(record, output)
 print(" *-------  PYTHIA Event and Cross Section Statistics  -----*")
 print(f" | Les Houches User Process(es)                  9999 | {{tried:11d}} {{tried:10d}} {{accepted:10d}} |   1.000e-09  0.000e+00 |")
 print(f" | {{'sum':<50}} | {{tried:11d}} {{tried:10d}} {{accepted:10d}} |   1.000e-09  0.000e+00 |")
@@ -173,20 +189,29 @@ print("** Exiting...")
 
 
 @pytest.fixture
-def delphes_pythia8_path(link_fake_program: Callable[[str, str], Path]) -> Path:
+def delphes_pythia8_path(
+    link_fake_program: Callable[[str, str], Path], fake_program_store: Path
+) -> Path:
     return link_fake_program(
-        "DelphesPythia8", FAKE_DELPHES_PYTHIA8.format(python=sys.executable)
+        "DelphesPythia8",
+        FAKE_DELPHES_PYTHIA8.format(
+            python=sys.executable,
+            tests_dir=str(TESTS_DIR),
+            records_dir=str(fake_program_store),
+        ),
     )
 
 
 # Stands in for Delphes's DelphesROOT: it takes the card, the output file and
-# the input files, reads the card, requires every input to exist, and writes
-# the output. Like DelphesROOT it refuses an existing output file and exits
-# with status 1 when it cannot open a file. FAKE_DROOT_FAIL=exit fails with
-# status 1; FAKE_DROOT_FAIL=hang never finishes.
+# the input files, reads the card, requires every input to exist, and copies
+# the first input to the output, so the output holds as many events as that
+# input. Like DelphesROOT it refuses an existing output file and exits with
+# status 1 when it cannot open a file. FAKE_DROOT_FAIL=exit fails with status
+# 1; FAKE_DROOT_FAIL=hang never finishes.
 FAKE_DELPHES_ROOT = """\
 #!{python}
 import os
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -210,7 +235,7 @@ for name in inputs:
     if not Path(name).is_file():
         print(f"** ERROR: can't open {{name}}", file=sys.stderr)
         sys.exit(1)
-Path(output).write_bytes(b"ROOT fake")
+shutil.copyfile(inputs[0], output)
 print("** Exiting...")
 """
 

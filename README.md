@@ -414,7 +414,7 @@ read, the fraction kept by matching for a matched process, and the SHA-256 of
 the command file and the record-only card as run. For the simulation the
 parameters are the seed, the SHA-256 of the detector card chosen and the
 settings the events were showered with, and the metadata the SHA-256 of the
-card as run.
+card as run; its number of events is counted in `delphes.root`.
 
 Running a stage again keeps a result recorded as done whose outputs are
 present and whose parameters match, runs again a stage that failed or was
