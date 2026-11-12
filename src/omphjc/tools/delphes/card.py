@@ -231,9 +231,9 @@ def compare_cards(card: DelphesCard, reference: DelphesCard) -> list[Difference]
         )
     differences.extend(_compare_values("settings", card.settings, reference.settings))
     for name in sorted(reference.modules.keys() - card.modules.keys()):
-        differences.append(Difference(f"module {name}", "defined", "absent"))
+        differences.append(Difference("module", name, None))
     for name in sorted(card.modules.keys() - reference.modules.keys()):
-        differences.append(Difference(f"module {name}", "absent", "defined"))
+        differences.append(Difference("module", None, name))
     for name in sorted(card.modules.keys() & reference.modules.keys()):
         module, expected = card.modules[name], reference.modules[name]
         if module.type != expected.type:
@@ -253,11 +253,11 @@ def _compare_values(
     for key in sorted(actual.keys() | expected.keys()):
         if key not in expected:
             differences.append(
-                Difference(f"{scope}.{key}", "absent", _abbreviate(actual[key]))
+                Difference(f"{scope}.{key}", None, _abbreviate(actual[key]))
             )
         elif key not in actual:
             differences.append(
-                Difference(f"{scope}.{key}", _abbreviate(expected[key]), "absent")
+                Difference(f"{scope}.{key}", _abbreviate(expected[key]), None)
             )
         elif not _values_equal(actual[key], expected[key]):
             differences.append(

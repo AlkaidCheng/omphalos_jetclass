@@ -13,7 +13,8 @@ content record holds what the program that reads the file gets from it. The
 layout of the file and its comments are left out. Two files with equal content
 records have the same fingerprint (:meth:`DataFile.fingerprint`).
 
-A :class:`Card` is a data file made of text, with settings or commands.
+A :class:`Card` is a data file made of text, with settings or commands. Two
+cards of one class are compared part by part (:meth:`Card.differences`).
 """
 
 import hashlib
@@ -21,6 +22,8 @@ import json
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, ClassVar, TypeVar
+
+from omphjc.comparison import Difference
 
 _DataFileT = TypeVar("_DataFileT", bound="DataFile")
 _CardT = TypeVar("_CardT", bound="Card")
@@ -83,3 +86,12 @@ class Card(DataFile):
     def read(cls: type[_CardT], path: Path) -> _CardT:
         """Return the content of the card at `path`, read as UTF-8 text."""
         return cls.from_text(path.read_text(encoding="utf-8"))
+
+    @abstractmethod
+    def differences(self: _CardT, reference: _CardT) -> list[Difference]:
+        """Return the differences between this card and `reference`.
+
+        Each difference names one part of the content. Its expected value is
+        the one of `reference`, and its actual value is the one of this card.
+        The layout of a card and its comments give no differences.
+        """

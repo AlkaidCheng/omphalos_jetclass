@@ -181,7 +181,7 @@ def _compare_run_card(spec: ProcessSpec) -> list[Difference]:
     for name, value in spec.run_card.items():
         if name not in reference:
             differences.append(
-                Difference(f"run_card.{name}", "absent", format_value(value))
+                Difference(f"run_card.{name}", None, format_value(value))
             )
         elif not values_equal(value, reference[name]):
             differences.append(
@@ -198,7 +198,7 @@ def _compare_run_card(spec: ProcessSpec) -> list[Difference]:
         ):
             continue
         differences.append(
-            Difference(f"run_card.{name}", format_value(reference[name]), "absent")
+            Difference(f"run_card.{name}", format_value(reference[name]), None)
         )
     return differences
 

@@ -58,3 +58,22 @@ def test_a_changed_value_changes_the_fingerprint() -> None:
     card = SLHACard.from_text(CARD)
     other = SLHACard.from_text(CARD.replace("1.725000e+02 # MT", "1.730000e+02 # MT"))
     assert other.fingerprint() != card.fingerprint()
+
+
+def test_cards_that_differ_only_in_layout_have_no_differences() -> None:
+    card = SLHACard.from_text(CARD)
+    rewritten = SLHACard.from_text(
+        "decay 6 1.4915\n 1.0 2 5 24\n"
+        "BLOCK yukawa\n 6 172.5\n"
+        "BLOCK mass\n 25 125.0\n 6 172.5\n"
+    )
+    assert rewritten.differences(card) == []
+
+
+def test_a_changed_value_is_reported_as_one_entry_of_each_card() -> None:
+    reference = SLHACard.from_text(CARD)
+    card = SLHACard.from_text(CARD.replace("1.725000e+02 # MT", "1.730000e+02 # MT"))
+    assert [str(difference) for difference in card.differences(reference)] == [
+        "missing entry: block mass 6 172.5",
+        "unexpected entry: block mass 6 173.0",
+    ]

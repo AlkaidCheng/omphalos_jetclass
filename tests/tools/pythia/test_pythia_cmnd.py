@@ -173,10 +173,10 @@ def test_compare_reads_values_like_pythia() -> None:
     differences = compare_settings({"JetMatching:merge": "off"}, reference)
     assert [str(d) for d in differences] == [
         "JetMatching:merge: expected on, got off",
-        "JetMatching:qCut: expected 4.5000000000e+01, got absent",
+        "missing JetMatching:qCut: 4.5000000000e+01",
     ]
     extra = compare_settings({**reference, "Random:seed": "1"}, reference)
-    assert [str(d) for d in extra] == ["Random:seed: expected absent, got 1"]
+    assert [str(d) for d in extra] == ["unexpected Random:seed: 1"]
     assert (
         compare_settings(
             {**reference, "Random:seed": "1"}, reference, ignore={"random:"}

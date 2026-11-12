@@ -56,7 +56,7 @@ def test_a_missing_tracked_setting_is_reported(
     altered = ProcessSpec(**{**original.__dict__, "run_card": run_card})
     differences = compare_process(altered)
     assert [d.item for d in differences] == ["run_card.ptl"]
-    assert differences[0].actual == "absent"
+    assert differences[0].actual is None
 
 
 def test_proc_card_commands_for_a_matched_process(
@@ -168,6 +168,6 @@ def test_a_changed_decay_is_reported(
     card.write_text(text.replace(hadronic, leptonic), encoding="utf-8")
     altered = ProcessSpec(**{**original.__dict__, "madspin_card": card})
     assert sorted(str(d) for d in compare_process(altered)) == [
-        f"madspin {hadronic}: expected present, got absent",
-        f"madspin {leptonic}: expected absent, got present",
+        f"missing madspin decay: {hadronic.removeprefix('decay ')}",
+        f"unexpected madspin decay: {leptonic.removeprefix('decay ')}",
     ]

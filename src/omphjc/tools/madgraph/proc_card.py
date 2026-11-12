@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import ClassVar
 
+from omphjc.comparison import Difference
 from omphjc.data_files import Card
 
 # The commands that take a path, as
@@ -68,3 +69,14 @@ class ProcCard(Card):
                     line = " ".join([command, PurePosixPath(target).name, *options])
             record.append(line)
         return record
+
+    def differences(self, reference: "ProcCard") -> list[Difference]:
+        """Return one difference when the content records are not equal.
+
+        The order of the commands counts, so the difference holds every
+        command of each record, joined with `` | ``.
+        """
+        record, expected = self.content_record(), reference.content_record()
+        if record == expected:
+            return []
+        return [Difference("commands", " | ".join(expected), " | ".join(record))]

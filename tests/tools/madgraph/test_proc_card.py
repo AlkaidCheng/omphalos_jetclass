@@ -63,6 +63,21 @@ def test_another_process_changes_the_fingerprint() -> None:
     assert other.fingerprint() != card.fingerprint()
 
 
+def test_cards_that_differ_only_in_directories_have_no_differences() -> None:
+    card = ProcCard.from_text(CARD)
+    moved = ProcCard.from_text(CARD.replace("/jobs/1/", "/jobs/2/"))
+    assert moved.differences(card) == []
+
+
+def test_another_process_is_reported_with_every_command() -> None:
+    reference = ProcCard.from_text("import model sm\ngenerate p p > t t~\n")
+    card = ProcCard.from_text("import model sm\ngenerate p p > z j\n")
+    assert [str(difference) for difference in card.differences(reference)] == [
+        "commands: expected import model sm | generate p p > t t~, "
+        "got import model sm | generate p p > z j"
+    ]
+
+
 def test_a_process_card_is_read_from_a_file(tmp_path: Path) -> None:
     path = tmp_path / "proc_card_mg5.dat"
     path.write_text(CARD, encoding="utf-8")

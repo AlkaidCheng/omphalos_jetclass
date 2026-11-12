@@ -36,6 +36,6 @@ def test_changed_decay_and_option_are_reported() -> None:
     items = [str(d) for d in compare_madspin_cards(altered, reference)]
     assert items == [
         "option max_weight_ps_point: expected 400, got 100",
-        "decay t > w+ b, w+ > j j: expected present, got absent",
-        "decay t > w+ b, w+ > l+ vl: expected absent, got present",
+        "missing decay: t > w+ b, w+ > j j",
+        "unexpected decay: t > w+ b, w+ > l+ vl",
     ]
