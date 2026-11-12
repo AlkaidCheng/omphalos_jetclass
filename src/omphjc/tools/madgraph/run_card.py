@@ -155,9 +155,8 @@ class RunCard(InputCard):
         """Return one difference for each setting with another value.
 
         The differences come in the order of the setting names. A setting
-        that one card lacks has the value ``None`` there.
-        Values are compared with :func:`values_equal` and written with
-        :func:`format_value`.
+        that one card lacks has the value ``None`` there. Values are compared
+        with :func:`values_equal` and written with :func:`format_value`.
         """
         return Difference.between_mappings(
             self.settings, reference.settings, equal=values_equal, text=format_value

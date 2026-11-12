@@ -22,8 +22,7 @@ INPUT_CARDS: tuple[type[InputCard], ...] = (RunCard, ProcCard, MadSpinCard)
 def compare_process(spec: ProcessSpec) -> list[Difference]:
     """Return every difference between `spec` and its reference cards.
 
-    The differences come card by card, in the order of
-    :data:`INPUT_CARDS`.
+    The differences come card by card, in the order of :data:`INPUT_CARDS`.
 
     Raises
     ------
@@ -42,10 +41,11 @@ def compare_all(
 ) -> dict[str, list[Difference]]:
     """Return the differences of every process that has reference cards.
 
-    The result maps a process name to its differences, in catalogue order;
-    a process that matches its reference cards is absent, so an empty result
-    means every compared process matches. Without `specs`, the processes of
-    the default catalogue are compared.
+    The result maps the name of a process to its differences, in the order
+    of the catalogue. A process that matches its reference cards is absent
+    from the result, so an empty result means that every compared process
+    matches. Without `specs`, the processes of the default catalogue are
+    compared.
     """
     differences = {}
     for spec in default_catalogue().values() if specs is None else specs:
