@@ -71,9 +71,13 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
         result=TaskResult(
             outputs={
                 EVENTS_OUTPUT: EventOutput(
-                    output_path, EventFormat.LHE, n_events=10, fingerprint="lhe-v1:abc"
+                    output_path,
+                    n_bytes=7,
+                    format=EventFormat.LHE,
+                    n_events=10,
+                    fingerprint="lhe-v1:abc",
                 ),
-                "summary": TaskOutput(tmp_path / "x" / "summary.txt"),
+                "summary": TaskOutput(tmp_path / "x" / "summary.txt", n_bytes=3),
             },
             metadata={"cards": {"x/c.dat": "abc"}},
         ),
@@ -88,11 +92,12 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
         "outputs": {
             "events": {
                 "path": "x/out",
+                "n_bytes": 7,
                 "format": "lhe",
                 "n_events": 10,
                 "fingerprint": "lhe-v1:abc",
             },
-            "summary": {"path": "x/summary.txt"},
+            "summary": {"path": "x/summary.txt", "n_bytes": 3},
         },
         "metadata": {"cards": {"x/c.dat": "abc"}},
     }
@@ -106,6 +111,11 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
     del events["fingerprint"]
     path.write_text(json.dumps(written))
     with pytest.raises(ValueError, match="not a manifest: 'fingerprint'"):
+        Manifest.read(path)
+    events["fingerprint"] = "lhe-v1:abc"
+    del written["stages"]["x"]["result"]["outputs"]["summary"]["n_bytes"]
+    path.write_text(json.dumps(written))
+    with pytest.raises(ValueError, match="not a manifest: 'n_bytes'"):
         Manifest.read(path)
     path.write_text('{"schema": 99}')
     with pytest.raises(ValueError, match="schema 99; .* reads schema 1"):
@@ -124,7 +134,9 @@ def test_a_manifest_refuses_a_path_outside_its_directory(tmp_path: Path) -> None
     record = TaskRecord(
         status="done",
         started="t",
-        result=TaskResult(outputs={"out": TaskOutput(tmp_path / "elsewhere" / "out")}),
+        result=TaskResult(
+            outputs={"out": TaskOutput(tmp_path / "elsewhere" / "out", n_bytes=0)}
+        ),
     )
     with pytest.raises(ValueError, match="elsewhere"):
         Manifest(process="HToBB", job_id=1, stages={"x": record}).write(path)
@@ -137,7 +149,10 @@ def _make_output(job: Job) -> TaskOutcome:
     output = directory / "out.txt"
     output.write_text("made")
     return TaskOutcome(
-        TaskResult(outputs={"out": TaskOutput(output)}, metadata={"n": 1})
+        TaskResult(
+            outputs={"out": TaskOutput(output, n_bytes=len("made"))},
+            metadata={"n": 1},
+        )
     )
 
 
@@ -156,7 +171,8 @@ def test_a_stage_runs_once_and_its_result_is_kept(
     assert record.status == "done" and record.finished is not None
     assert record.parameters == {"events": 10}
     assert record.result == TaskResult(
-        outputs={"out": TaskOutput(job.root_dir / "x" / "out.txt")}, metadata={"n": 1}
+        outputs={"out": TaskOutput(job.root_dir / "x" / "out.txt", n_bytes=4)},
+        metadata={"n": 1},
     )
     assert record.log is None
     assert Manifest.read(job.manifest_path).stages["x"] == record
@@ -236,7 +252,8 @@ def test_require_events_returns_the_events_a_done_stage_made(
 
     events = EventOutput(
         job.task_dir("x") / "out.txt",
-        EventFormat.LHE,
+        n_bytes=len("made"),
+        format=EventFormat.LHE,
         n_events=3,
         fingerprint="lhe-v1:abc",
     )
@@ -304,7 +321,8 @@ def test_generate_records_what_madgraph_made(
     assert record.result.outputs == {
         EVENTS_OUTPUT: EventOutput(
             lhe_path,
-            EventFormat.LHE,
+            n_bytes=lhe_path.stat().st_size,
+            format=EventFormat.LHE,
             n_events=10000,
             fingerprint=LHEFile.read(lhe_path).fingerprint(),
         )
@@ -419,7 +437,8 @@ def test_shower_records_what_it_made_and_keeps_it(
     assert record.result.outputs == {
         EVENTS_OUTPUT: EventOutput(
             root_path,
-            EventFormat.DELPHES_ROOT,
+            n_bytes=root_path.stat().st_size,
+            format=EventFormat.DELPHES_ROOT,
             n_events=1,
             fingerprint=DelphesROOTFile.read(root_path).fingerprint(),
         )
@@ -622,7 +641,8 @@ def test_simulate_records_what_it_made_and_keeps_it(
     assert record.result.outputs == {
         EVENTS_OUTPUT: EventOutput(
             root_path,
-            EventFormat.DELPHES_ROOT,
+            n_bytes=root_path.stat().st_size,
+            format=EventFormat.DELPHES_ROOT,
             n_events=1,
             fingerprint=DelphesROOTFile.read(root_path).fingerprint(),
         )
