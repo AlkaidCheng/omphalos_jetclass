@@ -188,8 +188,9 @@ _PARTICLES_CARD = """\
 # before the modules in ExecutionPath run. With the TreeWriter as the only
 # module, the output holds the Particle branch (every generator particle with
 # its status, mothers, daughters, momentum and production vertex) next to the
-# Event and Weight branches the program writes itself, and no detector module
-# runs. DelphesROOT reads such a file to simulate the detector later.
+# Event, Weight, EventLHEF and WeightLHEF branches the program writes itself,
+# the last two for an LHE input, and no detector module runs. DelphesROOT
+# reads such a file to simulate the detector later.
 
 set ExecutionPath {
   TreeWriter
