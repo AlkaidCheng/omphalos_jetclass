@@ -18,7 +18,7 @@ PACKAGE_DIR = Path(omphjc.__file__).parent
 
 # Modules any layer may import: they run programs, guard paths, stamp outputs,
 # compare values, check numbers, read ROOT files and define the base classes of
-# the file formats, and know no catalogue, event file, tool, stage or command.
+# the file formats, and know no catalogue, event format, tool, stage or command.
 SHARED_MODULES = (
     "omphjc.comparison",
     "omphjc.config_paths",
@@ -26,6 +26,7 @@ SHARED_MODULES = (
     "omphjc.filetree",
     "omphjc.numeric",
     "omphjc.programs",
+    "omphjc.root_files",
     "omphjc.root_io",
     "omphjc.safe_paths",
     "omphjc.stamps",
