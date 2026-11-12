@@ -5,7 +5,8 @@ one directory per task, the work of one stage in the job. The job number fixes
 the seed of every program the job runs; ``docs/reproducibility.md`` lists what
 else a rerun's events depend on.
 :class:`Job` builds the directory, keeps the manifest and applies the rerun
-rules; :mod:`omphjc.jobs.manifest` defines the file; the functions in
+rules; :mod:`omphjc.jobs.manifest` defines the file and
+:mod:`omphjc.jobs.records` the record of a task; the functions in
 :mod:`omphjc.jobs.stages` run the stages: MadGraph generation, the Pythia
 shower, then the Delphes simulation.
 
@@ -28,13 +29,13 @@ from omphjc.jobs.job import (
     job_seed,
     sha256,
 )
-from omphjc.jobs.manifest import (
+from omphjc.jobs.manifest import Manifest
+from omphjc.jobs.records import (
     DONE,
     EVENTS_OUTPUT,
     FAILED,
     RUNNING,
     EventOutput,
-    Manifest,
     TaskOutcome,
     TaskOutput,
     TaskRecord,

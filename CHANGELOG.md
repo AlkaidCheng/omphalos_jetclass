@@ -149,6 +149,8 @@
 - `omphjc generate`, `omphjc shower` and `omphjc simulate` refuse a stage
   with an output that no longer has the size recorded in `manifest.json`,
   until the stage is run again with `--force`. (#59)
+- The record of a task and the types of its result live in
+  `omphjc.jobs.records`. (#60)
 
 ### Fixed
 
