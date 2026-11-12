@@ -108,17 +108,17 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
     events = written["stages"]["x"]["result"]["outputs"]["events"]
     events["format"] = "hepmc"
     path.write_text(json.dumps(written))
-    with pytest.raises(ValueError, match="not a manifest: 'hepmc'"):
+    with pytest.raises(ValueError, match="manifest.json has invalid content: 'hepmc'"):
         Manifest.read(path)
     events["format"] = "lhe"
     del events["fingerprint"]
     path.write_text(json.dumps(written))
-    with pytest.raises(ValueError, match="not a manifest: 'fingerprint'"):
+    with pytest.raises(ValueError, match="has invalid content: 'fingerprint'"):
         Manifest.read(path)
     events["fingerprint"] = "lhe-v1:abc"
     del written["stages"]["x"]["result"]["outputs"]["summary"]["n_bytes"]
     path.write_text(json.dumps(written))
-    with pytest.raises(ValueError, match="not a manifest: 'n_bytes'"):
+    with pytest.raises(ValueError, match="has invalid content: 'n_bytes'"):
         Manifest.read(path)
     path.write_text('{"schema": 99}')
     with pytest.raises(ValueError, match="schema 99; .* reads schema 1"):
@@ -127,7 +127,7 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="no schema"):
         Manifest.read(path)
     path.write_text("not json")
-    with pytest.raises(ValueError, match="not a manifest"):
+    with pytest.raises(ValueError, match="manifest.json is not valid JSON"):
         Manifest.read(path)
 
 

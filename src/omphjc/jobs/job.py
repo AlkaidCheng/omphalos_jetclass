@@ -23,7 +23,7 @@ from pathlib import Path
 from types import FrameType
 from typing import Any
 
-from omphjc.jobs.manifest import MANIFEST_FILE, Manifest
+from omphjc.jobs.manifest import Manifest
 from omphjc.jobs.records import (
     DONE,
     EVENTS_OUTPUT,
@@ -148,7 +148,7 @@ class Job:
 
     @property
     def manifest_path(self) -> Path:
-        return self.root_dir / MANIFEST_FILE
+        return self.root_dir / Manifest.file_name
 
     def task_dir(self, stage: str) -> Path:
         """Return the directory of the `stage` task, ``<root>/<stage>``."""
