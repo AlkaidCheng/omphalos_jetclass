@@ -16,8 +16,8 @@ from omphjc.tools.madgraph.cards import (
     model_import_target,
     proc_card_commands,
 )
-from omphjc.tools.madgraph.reference import compare_all, compare_process
 from omphjc.tools.pythia.cmnd import shower_settings
+from omphjc.validation.cards import compare_all, compare_process
 
 CATALOGUE = """\
 common:

@@ -2,7 +2,7 @@
 
 The reference of a JetClass process is its official gridpack cards: a run card
 and a launch script with ``set`` overrides, a process card and, for the top
-processes, a MadSpin card. Each card class in :data:`REFERENCED_CARDS`
+processes, a MadSpin card. Each card class in :data:`INPUT_CARDS`
 compares the card that the catalogue states for a process with the official
 one. Entries without reference cards are not compared.
 """
@@ -11,12 +11,12 @@ from collections.abc import Iterable
 
 from omphjc.comparison import Difference
 from omphjc.processes.catalogue import ProcessSpec, default_catalogue
+from omphjc.processes.input_card import InputCard
 from omphjc.tools.madgraph.madspin_card import MadSpinCard
 from omphjc.tools.madgraph.proc_card import ProcCard
-from omphjc.tools.madgraph.referenced_card import ReferencedCard
 from omphjc.tools.madgraph.run_card import RunCard
 
-REFERENCED_CARDS: tuple[type[ReferencedCard], ...] = (RunCard, ProcCard, MadSpinCard)
+INPUT_CARDS: tuple[type[InputCard], ...] = (RunCard, ProcCard, MadSpinCard)
 """The card classes that are compared, in the order of a report."""
 
 
@@ -24,7 +24,7 @@ def compare_process(spec: ProcessSpec) -> list[Difference]:
     """Return every difference between `spec` and its reference cards.
 
     The differences come card by card, in the order of
-    :data:`REFERENCED_CARDS`.
+    :data:`INPUT_CARDS`.
 
     Raises
     ------
@@ -33,7 +33,7 @@ def compare_process(spec: ProcessSpec) -> list[Difference]:
     """
     return [
         difference
-        for card_class in REFERENCED_CARDS
+        for card_class in INPUT_CARDS
         for difference in card_class.compare_with_reference(spec)
     ]
 

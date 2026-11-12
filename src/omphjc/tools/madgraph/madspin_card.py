@@ -11,12 +11,12 @@ from typing import Any, ClassVar
 
 from omphjc.comparison import Difference
 from omphjc.processes.catalogue import ProcessSpec, RunCardValue
-from omphjc.tools.madgraph.referenced_card import ReferencedCard
+from omphjc.processes.input_card import InputCard
 from omphjc.tools.madgraph.run_card import format_value, parse_value, values_equal
 
 
 @dataclass(frozen=True)
-class MadSpinCard(ReferencedCard):
+class MadSpinCard(InputCard):
     """The options and the decay chains of a MadSpin card.
 
     Parameters

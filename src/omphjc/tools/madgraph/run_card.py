@@ -16,7 +16,7 @@ from typing import ClassVar
 
 from omphjc.comparison import Difference
 from omphjc.processes.catalogue import ProcessSpec, RunCardValue
-from omphjc.tools.madgraph.referenced_card import ReferencedCard
+from omphjc.processes.input_card import InputCard
 
 TRACKED_PARAMETERS: frozenset[str] = frozenset(
     {
@@ -87,7 +87,7 @@ _INTEGER = re.compile(r"^[+-]?\d+$")
 
 
 @dataclass(frozen=True)
-class RunCard(ReferencedCard):
+class RunCard(InputCard):
     """The settings of a MadGraph run card.
 
     Parameters

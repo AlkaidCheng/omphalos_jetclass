@@ -16,8 +16,8 @@ from typing import ClassVar
 
 from omphjc.comparison import Difference
 from omphjc.processes.catalogue import ProcessSpec
+from omphjc.processes.input_card import InputCard
 from omphjc.tools.madgraph.cards import proc_card_commands
-from omphjc.tools.madgraph.referenced_card import ReferencedCard
 
 # The commands that take a path, as
 # omphjc.tools.madgraph.cards.proc_card_commands writes them.
@@ -46,7 +46,7 @@ _LINE_CONTINUATION_PATTERN = re.compile(r"\\[^\S\n]*\n")
 
 
 @dataclass(frozen=True)
-class ProcCard(ReferencedCard):
+class ProcCard(InputCard):
     """The commands of a MadGraph process card.
 
     Parameters

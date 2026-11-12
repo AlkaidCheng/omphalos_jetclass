@@ -11,14 +11,14 @@ from omphjc.tools.madgraph.cards import (
     model_import_target,
     proc_card_commands,
 )
-from omphjc.tools.madgraph.reference import (
-    compare_all,
-    compare_process,
-)
 from omphjc.tools.madgraph.run_card import (
     DISABLED_DEFAULTS,
     TRACKED_PARAMETERS,
     RunCard,
+)
+from omphjc.validation.cards import (
+    compare_all,
+    compare_process,
 )
 
 

@@ -7,11 +7,11 @@ import pytest
 
 from omphjc.comparison import Difference
 from omphjc.processes import ProcessSpec
-from omphjc.tools.madgraph.referenced_card import ReferencedCard
+from omphjc.processes.input_card import InputCard
 
 
 @dataclass(frozen=True)
-class DefinitionsCard(ReferencedCard):
+class DefinitionsCard(InputCard):
     """A card with one multiparticle definition on each line.
 
     A process without definitions has no such card. The official card is the

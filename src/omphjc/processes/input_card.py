@@ -1,9 +1,10 @@
-"""The MadGraph cards that have a reference among the official cards.
+"""The input cards of a catalogue process.
 
-The catalogue states the cards of a process, and the directory of official
-cards of that process holds the references. A :class:`ReferencedCard` class
-returns both cards of a process and compares them, which is what ``omphjc
-check-cards`` reports for that class.
+An input card is a card that a tool reads at the start of a run. The
+catalogue states the input cards of a process, and the directory of official
+cards of that process holds a reference for each of them. An
+:class:`InputCard` class returns both cards of a process and compares them,
+which is what ``omphjc check-cards`` reports for that class.
 """
 
 from abc import abstractmethod
@@ -14,11 +15,13 @@ from omphjc.comparison import Difference
 from omphjc.data_files import Card
 from omphjc.processes.catalogue import ProcessSpec
 
-_ReferencedCardT = TypeVar("_ReferencedCardT", bound="ReferencedCard")
+_InputCardT = TypeVar("_InputCardT", bound="InputCard")
 
 
-class ReferencedCard(Card):
-    """A MadGraph card of a catalogue process that has an official card.
+class InputCard(Card):
+    """A card that a tool reads at the start of a run of a catalogue process.
+
+    The official cards of the process hold a reference for the card.
 
     Attributes
     ----------
@@ -31,18 +34,14 @@ class ReferencedCard(Card):
 
     @classmethod
     @abstractmethod
-    def from_process(
-        cls: type[_ReferencedCardT], spec: ProcessSpec
-    ) -> _ReferencedCardT | None:
+    def from_process(cls: type[_InputCardT], spec: ProcessSpec) -> _InputCardT | None:
         """Return the card that the catalogue states for `spec`.
 
         The result is ``None`` when the process has no card of this class.
         """
 
     @classmethod
-    def reference(
-        cls: type[_ReferencedCardT], reference_dir: Path
-    ) -> _ReferencedCardT | None:
+    def reference(cls: type[_InputCardT], reference_dir: Path) -> _InputCardT | None:
         """Return the card of this class among the official cards of a process.
 
         The card is read from the file :attr:`reference_file_name`. A class
@@ -55,7 +54,7 @@ class ReferencedCard(Card):
 
         Returns
         -------
-        ReferencedCard or None
+        InputCard or None
             The official card, or ``None`` when the directory holds no card
             of this class.
         """
@@ -63,7 +62,7 @@ class ReferencedCard(Card):
         return cls.read(reference_path) if reference_path.is_file() else None
 
     def checked_differences(
-        self: _ReferencedCardT, reference: _ReferencedCardT
+        self: _InputCardT, reference: _InputCardT
     ) -> list[Difference]:
         """Return the differences from `reference` that a check reports.
 
