@@ -129,6 +129,9 @@
 - `omphjc check-cards` names each difference by its card, as in
   `madspin_card.decay`, and reports a MadSpin card that only one side has as
   a missing or an unexpected card. (#54)
+- A `DataFile` class states `format_name` and `record_version` in place of
+  `record_scheme`, and a fingerprint starts with both, as in `run_card-v1:`.
+  (#54)
 
 ### Fixed
 
