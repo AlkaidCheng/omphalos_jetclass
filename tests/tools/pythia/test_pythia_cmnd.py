@@ -8,13 +8,10 @@ from omphjc.processes import ProcessSpec, get_process
 from omphjc.tools.pythia.cmnd import (
     MADGRAPH_INTERFACE_PREFIXES,
     PYTHIA_SEED_LIMIT,
-    compare_settings,
-    format_cmnd,
+    PythiaCmnd,
     format_setting,
     matching_scale,
     max_matched_jets,
-    parse_cmnd,
-    shower_settings,
 )
 
 DATA = Path(__file__).parents[2] / "data" / "pythia"
@@ -30,24 +27,24 @@ RUN_CONTROL = {
 }
 
 
-def madgraph_card(name: str) -> dict[str, str]:
-    return parse_cmnd((DATA / f"{name}_mg311_effective.cmd").read_text())
+def madgraph_card(name: str) -> PythiaCmnd:
+    return PythiaCmnd.read(DATA / f"{name}_mg311_effective.cmd")
 
 
 @pytest.mark.parametrize("name", ["HToBB", "ZJetsToNuNu"])
 def test_settings_equal_madgraph_effective_card(name: str) -> None:
-    settings = shower_settings(
+    cmnd = PythiaCmnd.from_process(
         get_process(name), lhe_path=LHE, n_events=1000, seed=None
     )
     ignore = RUN_CONTROL | MADGRAPH_INTERFACE_PREFIXES
-    assert compare_settings(settings, madgraph_card(name), ignore=ignore) == []
+    assert cmnd.differences(madgraph_card(name), ignore=ignore) == []
 
 
 def test_only_run_control_and_interface_keys_differ_from_madgraph() -> None:
-    settings = shower_settings(
+    cmnd = PythiaCmnd.from_process(
         get_process("ZJetsToNuNu"), lhe_path=LHE, n_events=1000, seed=None
     )
-    differences = compare_settings(settings, madgraph_card("ZJetsToNuNu"))
+    differences = cmnd.differences(madgraph_card("ZJetsToNuNu"))
     assert {difference.item.lower() for difference in differences} == RUN_CONTROL | {
         "hepmcoutput:file",
         "hepmcoutput:scaling",
@@ -59,7 +56,9 @@ def test_only_run_control_and_interface_keys_differ_from_madgraph() -> None:
 
 def test_matched_process_gets_the_mlm_block(specs: Mapping[str, ProcessSpec]) -> None:
     for spec in specs.values():
-        settings = shower_settings(spec, lhe_path=LHE, n_events=10, seed=None)
+        settings = PythiaCmnd.from_process(
+            spec, lhe_path=LHE, n_events=10, seed=None
+        ).settings
         assert ("JetMatching:merge" in settings) == spec.matching, spec.name
         assert settings["JetMatching:setMad"] == "off"
         assert settings["Check:epTolErr"] == "0.01"
@@ -69,7 +68,9 @@ def test_matching_values_follow_madgraph_rules() -> None:
     qcd = get_process("ZJetsToNuNu")
     assert matching_scale(qcd) == pytest.approx(45.0)
     assert max_matched_jets(qcd) == 2
-    settings = shower_settings(qcd, lhe_path=LHE, n_events=10, seed=None)
+    settings = PythiaCmnd.from_process(
+        qcd, lhe_path=LHE, n_events=10, seed=None
+    ).settings
     assert settings["JetMatching:qCut"] == "45"
     assert settings["JetMatching:nJetMax"] == "2"
     assert settings["JetMatching:nQmatch"] == "5"
@@ -93,13 +94,13 @@ def test_shared_settings_come_from_the_catalogue_and_overrides_win(
         "JetMatching:etaJetMax": 1000.0,
     }
     assert spec.pythia_matching["JetMatching:scheme"] == 1
-    settings = shower_settings(
+    settings = PythiaCmnd.from_process(
         spec,
         lhe_path=LHE,
         n_events=10,
         seed=None,
         overrides={"Check:epTolErr": 0.1, "Main:timesAllowErrors": 100},
-    )
+    ).settings
     assert settings["Check:epTolErr"] == "0.1"
     assert settings["Main:timesAllowErrors"] == "100"
 
@@ -117,22 +118,28 @@ def test_settings_are_written_as_pythia_reads_them() -> None:
 
 def test_seed_policy() -> None:
     spec = get_process("HToBB")
-    unseeded = shower_settings(spec, lhe_path=LHE, n_events=10, seed=None)
+    unseeded = PythiaCmnd.from_process(
+        spec, lhe_path=LHE, n_events=10, seed=None
+    ).settings
     assert (unseeded["Random:setSeed"], unseeded["Random:seed"]) == ("on", "0")
-    seeded = shower_settings(spec, lhe_path=LHE, n_events=10, seed=10000007)
+    seeded = PythiaCmnd.from_process(
+        spec, lhe_path=LHE, n_events=10, seed=10000007
+    ).settings
     assert seeded["Random:seed"] == "10000007"
     for bad in (0, -1, PYTHIA_SEED_LIMIT + 1):
         with pytest.raises(ValueError, match="seed"):
-            shower_settings(spec, lhe_path=LHE, n_events=10, seed=bad)
+            PythiaCmnd.from_process(spec, lhe_path=LHE, n_events=10, seed=bad)
     with pytest.raises(ValueError, match="n_events"):
-        shower_settings(spec, lhe_path=LHE, n_events=0, seed=None)
+        PythiaCmnd.from_process(spec, lhe_path=LHE, n_events=0, seed=None)
 
 
 def test_no_setting_belongs_to_madgraph_interface(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     for spec in specs.values():
-        for key in shower_settings(spec, lhe_path=LHE, n_events=10, seed=1):
+        for key in PythiaCmnd.from_process(
+            spec, lhe_path=LHE, n_events=10, seed=1
+        ).settings:
             assert not key.lower().startswith(tuple(MADGRAPH_INTERFACE_PREFIXES)), key
 
 
@@ -140,10 +147,10 @@ def test_formatted_file_reads_back_identically(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     for spec in specs.values():
-        settings = shower_settings(spec, lhe_path=LHE, n_events=500, seed=3)
-        text = format_cmnd(settings, title=spec.name)
+        cmnd = PythiaCmnd.from_process(spec, lhe_path=LHE, n_events=500, seed=3)
+        text = cmnd.to_text(title=spec.name)
         assert text.startswith("! Pythia 8 settings for DelphesPythia8")
-        assert parse_cmnd(text) == settings
+        assert PythiaCmnd.from_text(text) == cmnd
 
 
 def test_parse_follows_pythia_reading_rules() -> None:
@@ -156,40 +163,47 @@ def test_parse_follows_pythia_reading_rules() -> None:
         "Merging:TMS\n"
         "\n"
     )
-    assert parse_cmnd(text) == {
+    assert PythiaCmnd.from_text(text).settings == {
         "beams:frametype": "5",
         "JetMatching:qCut": "4.5000000000e+01",
     }
 
 
 def test_compare_reads_values_like_pythia() -> None:
-    reference = {"JetMatching:merge": "on", "JetMatching:qCut": "4.5000000000e+01"}
-    assert (
-        compare_settings(
-            {"jetmatching:MERGE": "true", "JetMatching:qCut": "45"}, reference
-        )
-        == []
+    reference = PythiaCmnd(
+        {"JetMatching:merge": "on", "JetMatching:qCut": "4.5000000000e+01"}
     )
-    differences = compare_settings({"JetMatching:merge": "off"}, reference)
+    same = PythiaCmnd({"jetmatching:MERGE": "true", "JetMatching:qCut": "45"})
+    assert same.differences(reference) == []
+    assert same.content_record() == reference.content_record()
+    differences = PythiaCmnd({"JetMatching:merge": "off"}).differences(reference)
     assert [str(d) for d in differences] == [
         "JetMatching:merge: expected on, got off",
         "missing JetMatching:qCut: 4.5000000000e+01",
     ]
-    extra = compare_settings({**reference, "Random:seed": "1"}, reference)
-    assert [str(d) for d in extra] == ["unexpected Random:seed: 1"]
-    assert (
-        compare_settings(
-            {**reference, "Random:seed": "1"}, reference, ignore={"random:"}
-        )
-        == []
-    )
+    seeded = PythiaCmnd({**reference.settings, "Random:seed": "1"})
+    assert [str(d) for d in seeded.differences(reference)] == [
+        "unexpected Random:seed: 1"
+    ]
+    assert seeded.differences(reference, ignore={"random:"}) == []
+
+
+def test_the_content_record_holds_the_values_pythia_reads() -> None:
+    cmnd = PythiaCmnd.from_text("JetMatching:merge = on\nJetMatching:qCut = 45\n")
+    assert cmnd.content_record() == {
+        "jetmatching:merge": True,
+        "jetmatching:qcut": 45.0,
+    }
+    assert cmnd.fingerprint().startswith("pythia_cmnd-v1:")
 
 
 def test_every_setting_is_known_to_pythia(specs: Mapping[str, ProcessSpec]) -> None:
     pythia8 = pytest.importorskip("pythia8")
     pythia = pythia8.Pythia("", False)
     for spec in specs.values():
-        settings = shower_settings(spec, lhe_path=LHE, n_events=10, seed=1)
+        settings = PythiaCmnd.from_process(
+            spec, lhe_path=LHE, n_events=10, seed=1
+        ).settings
         for key, value in settings.items():
             assert pythia.readString(f"{key} = {value}"), (spec.name, key, value)
 
@@ -202,13 +216,15 @@ def test_catalogue_settings_override_the_derived_matching_values(
         spec,
         pythia={**spec.pythia, "JetMatching:qCut": 60.0, "jetmatching:coneradius": 0.4},
     )
-    settings = shower_settings(tuned, lhe_path=LHE, n_events=10, seed=1)
+    settings = PythiaCmnd.from_process(
+        tuned, lhe_path=LHE, n_events=10, seed=1
+    ).settings
     assert settings["JetMatching:qCut"] == "60"
     assert settings["jetmatching:coneradius"] == "0.4"
     assert "JetMatching:coneRadius" not in settings
-    run = shower_settings(
+    run = PythiaCmnd.from_process(
         tuned, lhe_path=LHE, n_events=10, seed=1, overrides={"jetmatching:qcut": 70}
-    )
+    ).settings
     assert run["jetmatching:qcut"] == "70"
     assert "JetMatching:qCut" not in run
 
@@ -216,5 +232,7 @@ def test_catalogue_settings_override_the_derived_matching_values(
 def test_run_controls_override_the_catalogue(specs: Mapping[str, ProcessSpec]) -> None:
     spec = specs["HToBB"]
     tuned = replace(spec, pythia={**spec.pythia, "Main:numberOfEvents": 5})
-    settings = shower_settings(tuned, lhe_path=LHE, n_events=10, seed=None)
+    settings = PythiaCmnd.from_process(
+        tuned, lhe_path=LHE, n_events=10, seed=None
+    ).settings
     assert settings["Main:numberOfEvents"] == "10"

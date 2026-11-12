@@ -33,10 +33,11 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
-from pathlib import Path
+from typing import Any, ClassVar
 
 from omphjc.comparison import Difference
 from omphjc.config_paths import delphes_reference_card_path
+from omphjc.data_files import Card
 
 ParameterValue = tuple[str, ...]
 """A Delphes parameter as the list of Tcl elements it evaluates to.
@@ -70,7 +71,7 @@ class ModuleConfig:
 
 
 @dataclass(frozen=True)
-class DelphesCard:
+class DelphesCard(Card):
     """The evaluated configuration of a Delphes card.
 
     Parameters
@@ -84,80 +85,145 @@ class DelphesCard:
         ``RandomSeed`` or ``MaxEvents``.
     """
 
+    format_name: ClassVar[str] = "delphes_card"
+    record_version: ClassVar[int] = 1
+
     execution_path: tuple[str, ...]
     modules: Mapping[str, ModuleConfig]
     settings: Mapping[str, ParameterValue]
 
+    @classmethod
+    def from_text(cls, text: str) -> "DelphesCard":
+        """Evaluate a card given as Tcl source and return its configuration.
 
-def parse_card(text: str) -> DelphesCard:
-    """Evaluate a Delphes card and return its configuration.
+        Raises
+        ------
+        ValueError
+            If the card is not valid Tcl for the Delphes reader.
+        ModuleNotFoundError
+            If this Python has no ``tkinter``, its interface to Tcl.
+        """
+        try:
+            import tkinter
+        except ModuleNotFoundError as error:
+            raise ModuleNotFoundError(
+                "Reading a Delphes card needs Python's tkinter module, which this "
+                "Python lacks; install a Python with Tcl support, as the README's "
+                "Installation section describes",
+                name="tkinter",
+            ) from error
 
-    Parameters
-    ----------
-    text : str
-        The card as Tcl source.
+        interpreter = tkinter.Tcl()
+        interpreter.eval(_READER_PROCEDURES)
+        globals_before = set(interpreter.eval("info globals").split())
+        try:
+            interpreter.eval(text)
+        except tkinter.TclError as error:
+            raise ValueError(f"Delphes card does not evaluate: {error}") from error
 
-    Raises
-    ------
-    ValueError
-        If the card is not valid Tcl for the Delphes reader.
-    ModuleNotFoundError
-        If this Python has no ``tkinter``, its interface to Tcl.
-    """
-    try:
-        import tkinter
-    except ModuleNotFoundError as error:
-        raise ModuleNotFoundError(
-            "Reading a Delphes card needs Python's tkinter module, which this "
-            "Python lacks; install a Python with Tcl support, as the README's "
-            "Installation section describes",
-            name="tkinter",
-        ) from error
+        def elements(variable: str) -> ParameterValue:
+            # tkinter converts numbers and lists to Python objects; joining inside
+            # Tcl keeps every element, nested lists included, in its canonical
+            # string form.
+            joined = str(interpreter.eval(f'join [set {variable}] "\\x1f"'))
+            return tuple(joined.split("\x1f")) if joined else ()
 
-    interpreter = tkinter.Tcl()
-    interpreter.eval(_READER_PROCEDURES)
-    globals_before = set(interpreter.eval("info globals").split())
-    try:
-        interpreter.eval(text)
-    except tkinter.TclError as error:
-        raise ValueError(f"Delphes card does not evaluate: {error}") from error
+        module_names: ParameterValue = ()
+        if interpreter.eval(f"info exists ::{_INTERNAL_PREFIX}order") == "1":
+            module_names = elements(f"::{_INTERNAL_PREFIX}order")
+        modules: dict[str, ModuleConfig] = {}
+        for name in module_names:
+            parameters = {
+                variable.rsplit("::", 1)[1]: elements(variable)
+                for variable in sorted(
+                    interpreter.eval(f"info vars ::{name}::*").split()
+                )
+            }
+            module_type = str(interpreter.getvar(f"::{_INTERNAL_PREFIX}types({name})"))
+            modules[name] = ModuleConfig(type=module_type, parameters=parameters)
 
-    def elements(variable: str) -> ParameterValue:
-        # tkinter converts numbers and lists to Python objects; joining inside
-        # Tcl keeps every element, nested lists included, in its canonical
-        # string form.
-        joined = str(interpreter.eval(f'join [set {variable}] "\\x1f"'))
-        return tuple(joined.split("\x1f")) if joined else ()
-
-    module_names: ParameterValue = ()
-    if interpreter.eval(f"info exists ::{_INTERNAL_PREFIX}order") == "1":
-        module_names = elements(f"::{_INTERNAL_PREFIX}order")
-    modules: dict[str, ModuleConfig] = {}
-    for name in module_names:
-        parameters = {
-            variable.rsplit("::", 1)[1]: elements(variable)
-            for variable in sorted(interpreter.eval(f"info vars ::{name}::*").split())
+        new_globals = set(interpreter.eval("info globals").split()) - globals_before
+        settings = {
+            variable: elements(f"::{variable}")
+            for variable in sorted(new_globals)
+            if not variable.startswith(_INTERNAL_PREFIX) and variable != "ExecutionPath"
         }
-        module_type = str(interpreter.getvar(f"::{_INTERNAL_PREFIX}types({name})"))
-        modules[name] = ModuleConfig(type=module_type, parameters=parameters)
+        execution_path: ParameterValue = ()
+        if "ExecutionPath" in new_globals:
+            execution_path = elements("::ExecutionPath")
+        return cls(execution_path=execution_path, modules=modules, settings=settings)
 
-    new_globals = set(interpreter.eval("info globals").split()) - globals_before
-    settings = {
-        variable: elements(f"::{variable}")
-        for variable in sorted(new_globals)
-        if not variable.startswith(_INTERNAL_PREFIX) and variable != "ExecutionPath"
-    }
-    execution_path: ParameterValue = ()
-    if "ExecutionPath" in new_globals:
-        execution_path = elements("::ExecutionPath")
-    return DelphesCard(
-        execution_path=execution_path, modules=modules, settings=settings
-    )
+    def content_record(self) -> dict[str, Any]:
+        """Return the execution path, the top-level settings and the modules.
 
+        A module is written as its Delphes class and its parameters, and a
+        value as the list of its Tcl elements. The order in which a card
+        defines its modules and sets its variables does not change the
+        fingerprint.
+        """
+        return {
+            "execution_path": list(self.execution_path),
+            "settings": {key: list(value) for key, value in self.settings.items()},
+            "modules": {
+                name: {
+                    "type": module.type,
+                    "parameters": {
+                        key: list(value) for key, value in module.parameters.items()
+                    },
+                }
+                for name, module in self.modules.items()
+            },
+        }
 
-def read_card(path: Path) -> DelphesCard:
-    """Read and evaluate the Delphes card at `path`."""
-    return parse_card(path.read_text(encoding="utf-8"))
+    def differences(self, reference: "DelphesCard") -> list[Difference]:
+        """Return every configuration difference between this card and `reference`.
+
+        The execution path is compared in order. The top-level settings, the
+        modules and the parameters of a module are compared by name. A
+        top-level setting is named ``settings.<name>``, and a parameter is
+        named ``<module>.<parameter>``. A module that only one card defines
+        is named ``module``, and its name is the value. Numeric values are
+        compared as numbers.
+        """
+        differences: list[Difference] = []
+        if self.execution_path != reference.execution_path:
+            differences.append(
+                Difference(
+                    "ExecutionPath",
+                    " ".join(reference.execution_path),
+                    " ".join(self.execution_path),
+                )
+            )
+        differences.extend(
+            Difference.between_mappings(
+                self.settings,
+                reference.settings,
+                equal=_values_equal,
+                text=_abbreviate,
+                name="settings.{}".format,
+            )
+        )
+        differences.extend(
+            Difference.between_collections(
+                sorted(self.modules), sorted(reference.modules), item="module"
+            )
+        )
+        for module_name in sorted(self.modules.keys() & reference.modules.keys()):
+            module, expected = self.modules[module_name], reference.modules[module_name]
+            if module.type != expected.type:
+                differences.append(
+                    Difference(f"module {module_name}", expected.type, module.type)
+                )
+            differences.extend(
+                Difference.between_mappings(
+                    module.parameters,
+                    expected.parameters,
+                    equal=_values_equal,
+                    text=_abbreviate,
+                    name=f"{module_name}.{{}}".format,
+                )
+            )
+        return differences
 
 
 def reference_card_text() -> str:
@@ -168,7 +234,7 @@ def reference_card_text() -> str:
 @cache
 def reference_card() -> DelphesCard:
     """Return the evaluated configuration of the official JetClass card."""
-    return parse_card(reference_card_text())
+    return DelphesCard.read(delphes_reference_card_path())
 
 
 def with_random_seed(text: str, seed: int) -> str:
@@ -213,62 +279,6 @@ def particles_card_text() -> str:
     runs. ``DelphesROOT`` reads such a file to run a detector card on it later.
     """
     return _PARTICLES_CARD
-
-
-def compare_cards(card: DelphesCard, reference: DelphesCard) -> list[Difference]:
-    """Return every configuration difference between `card` and `reference`.
-
-    The execution path is compared in order; modules and their parameters are
-    compared by name; numeric values are compared as numbers.
-    """
-    differences: list[Difference] = []
-    if card.execution_path != reference.execution_path:
-        differences.append(
-            Difference(
-                "ExecutionPath",
-                " ".join(reference.execution_path),
-                " ".join(card.execution_path),
-            )
-        )
-    differences.extend(_compare_values("settings", card.settings, reference.settings))
-    for name in sorted(reference.modules.keys() - card.modules.keys()):
-        differences.append(Difference("module", name, None))
-    for name in sorted(card.modules.keys() - reference.modules.keys()):
-        differences.append(Difference("module", None, name))
-    for name in sorted(card.modules.keys() & reference.modules.keys()):
-        module, expected = card.modules[name], reference.modules[name]
-        if module.type != expected.type:
-            differences.append(Difference(f"module {name}", expected.type, module.type))
-        differences.extend(
-            _compare_values(name, module.parameters, expected.parameters)
-        )
-    return differences
-
-
-def _compare_values(
-    scope: str,
-    actual: Mapping[str, ParameterValue],
-    expected: Mapping[str, ParameterValue],
-) -> list[Difference]:
-    differences = []
-    for key in sorted(actual.keys() | expected.keys()):
-        if key not in expected:
-            differences.append(
-                Difference(f"{scope}.{key}", None, _abbreviate(actual[key]))
-            )
-        elif key not in actual:
-            differences.append(
-                Difference(f"{scope}.{key}", _abbreviate(expected[key]), None)
-            )
-        elif not _values_equal(actual[key], expected[key]):
-            differences.append(
-                Difference(
-                    f"{scope}.{key}",
-                    _abbreviate(expected[key]),
-                    _abbreviate(actual[key]),
-                )
-            )
-    return differences
 
 
 def _values_equal(left: ParameterValue, right: ParameterValue) -> bool:

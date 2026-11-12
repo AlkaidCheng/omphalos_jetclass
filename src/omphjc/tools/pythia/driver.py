@@ -53,7 +53,7 @@ from omphjc.processes.catalogue import ProcessSpec, SettingValue
 from omphjc.programs import ProgramError
 from omphjc.safe_paths import require_file, require_unoccupied
 from omphjc.tools.delphes.card import particles_card_text
-from omphjc.tools.pythia.cmnd import format_cmnd, shower_settings
+from omphjc.tools.pythia.cmnd import PythiaCmnd
 from omphjc.workspace import ProgramRun, ProgramWorkspace
 
 # Delphes's program combining Pythia 8 and the detector simulation.
@@ -227,7 +227,7 @@ def shower_events(
         require_unoccupied(workspace.output_path, what="Output file")
     # Built before anything is removed, so that an invalid request fails at
     # once and leaves earlier results in place.
-    settings = shower_settings(
+    cmnd = PythiaCmnd.from_process(
         spec,
         lhe_path=Path(_EVENTS_FILE),
         n_events=n_events,
@@ -236,7 +236,7 @@ def shower_events(
     )
 
     with workspace.sealed_run() as set_aside:
-        workspace.write_inputs(lhe_path, settings)
+        workspace.write_inputs(lhe_path, cmnd)
         workspace.run_shower()
 
     log_text = workspace.log_path.read_text(encoding="utf-8", errors="replace")
@@ -333,11 +333,11 @@ class ShowerWorkspace(ProgramWorkspace):
     def artifacts(self) -> list[str]:
         return [_EVENTS_FILE, _CMND_FILE, _CARD_FILE, _OUTPUT_FILE, _LOG_FILE]
 
-    def write_inputs(self, lhe_path: Path, settings: Mapping[str, str]) -> None:
+    def write_inputs(self, lhe_path: Path, cmnd: PythiaCmnd) -> None:
         """Decompress `lhe_path` into the directory and write the command file and the card."""
         _copy_events(lhe_path, self.events_path)
         self.cmnd_path.write_text(
-            format_cmnd(settings, title=self.process_name), encoding="utf-8"
+            cmnd.to_text(title=self.process_name), encoding="utf-8"
         )
         self.card_path.write_text(particles_card_text(), encoding="utf-8")
 

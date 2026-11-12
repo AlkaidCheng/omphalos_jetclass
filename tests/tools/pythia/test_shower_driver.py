@@ -6,7 +6,7 @@ import pytest
 
 from omphjc.processes import ProcessSpec
 from omphjc.stamps import read_stamp
-from omphjc.tools.delphes.card import parse_card, particles_card_text
+from omphjc.tools.delphes.card import DelphesCard, particles_card_text
 from omphjc.tools.pythia.driver import (
     ShowerError,
     ShowerWorkspace,
@@ -87,7 +87,7 @@ def test_a_plain_lhe_file_is_copied_and_no_seed_leaves_pythia_to_the_clock(
 
 
 def test_the_particles_card_runs_only_the_tree_writer() -> None:
-    card = parse_card(particles_card_text())
+    card = DelphesCard.from_text(particles_card_text())
     assert card.execution_path == ("TreeWriter",)
     assert list(card.modules) == ["TreeWriter"]
     assert "RandomSeed" not in particles_card_text()
