@@ -20,6 +20,7 @@ class DefinitionsCard(ReferencedCard):
 
     format_name: ClassVar[str] = "definitions_card"
     record_version: ClassVar[int] = 1
+    reference_file_name: ClassVar[str] = "definitions.dat"
 
     definitions: tuple[str, ...]
 
@@ -38,11 +39,6 @@ class DefinitionsCard(ReferencedCard):
     @classmethod
     def from_process(cls, spec: ProcessSpec) -> "DefinitionsCard | None":
         return cls(definitions=spec.definitions) if spec.definitions else None
-
-    @classmethod
-    def reference(cls, reference_dir: Path) -> "DefinitionsCard | None":
-        path = reference_dir / "definitions.dat"
-        return cls.read(path) if path.is_file() else None
 
 
 @pytest.fixture

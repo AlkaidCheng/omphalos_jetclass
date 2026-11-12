@@ -37,9 +37,6 @@ _PREAMBLE_COMMANDS: tuple[str, ...] = (
 # Official model names that the catalogue provides under a vendored name.
 _OFFICIAL_MODEL_ALIASES: dict[str, str] = {"heft-c_mass": "heft_c_mass_jetclass"}
 
-# The process card among the official cards of a process.
-_REFERENCE_FILE_NAME = "proc_card_mg5.dat"
-
 # A backslash that ends a line, with the spaces and the line break after it.
 # MadGraph removes them to join the line with the next one (ProcCard.write
 # and ProcCard.read,
@@ -62,6 +59,7 @@ class ProcCard(ReferencedCard):
 
     format_name: ClassVar[str] = "proc_card"
     record_version: ClassVar[int] = 1
+    reference_file_name: ClassVar[str] = "proc_card_mg5.dat"
 
     commands: tuple[str, ...]
 
@@ -93,16 +91,19 @@ class ProcCard(ReferencedCard):
         )
 
     @classmethod
-    def reference(cls, reference_dir: Path) -> "ProcCard":
+    def reference(cls, reference_dir: Path) -> "ProcCard | None":
         """Return the commands of the official card that define the process.
 
         The ``set`` and ``output`` commands are left out, and so are the
         commands that MadGraph writes at the top of every process card. A
         card that loads no model after those commands uses the Standard
         Model, so it gets the command ``import model sm``. Each model has the
-        name the catalogue gives it.
+        name the catalogue gives it. The result is ``None`` when
+        `reference_dir` holds no process card.
         """
-        card = cls.read(reference_dir / _REFERENCE_FILE_NAME)
+        card = super().reference(reference_dir)
+        if card is None:
+            return None
         commands = [
             command
             for command in card.commands

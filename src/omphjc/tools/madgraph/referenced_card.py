@@ -8,7 +8,7 @@ check-cards`` reports for that class.
 
 from abc import abstractmethod
 from pathlib import Path
-from typing import TypeVar
+from typing import ClassVar, TypeVar
 
 from omphjc.comparison import Difference
 from omphjc.data_files import Card
@@ -18,7 +18,16 @@ _ReferencedCardT = TypeVar("_ReferencedCardT", bound="ReferencedCard")
 
 
 class ReferencedCard(Card):
-    """A MadGraph card of a catalogue process that has an official card."""
+    """A MadGraph card of a catalogue process that has an official card.
+
+    Attributes
+    ----------
+    reference_file_name : str
+        The name of the file of the card among the official cards of a
+        process, such as ``"run_card.dat"``.
+    """
+
+    reference_file_name: ClassVar[str]
 
     @classmethod
     @abstractmethod
@@ -31,11 +40,13 @@ class ReferencedCard(Card):
         """
 
     @classmethod
-    @abstractmethod
     def reference(
         cls: type[_ReferencedCardT], reference_dir: Path
     ) -> _ReferencedCardT | None:
         """Return the card of this class among the official cards of a process.
+
+        The card is read from the file :attr:`reference_file_name`. A class
+        whose official card needs more than that overrides this method.
 
         Parameters
         ----------
@@ -48,6 +59,8 @@ class ReferencedCard(Card):
             The official card, or ``None`` when the directory holds no card
             of this class.
         """
+        reference_path = reference_dir / cls.reference_file_name
+        return cls.read(reference_path) if reference_path.is_file() else None
 
     def checked_differences(
         self: _ReferencedCardT, reference: _ReferencedCardT

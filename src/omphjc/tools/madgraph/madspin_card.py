@@ -7,16 +7,12 @@ decay chains give the same decays.
 """
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, ClassVar
 
 from omphjc.comparison import Difference
 from omphjc.processes.catalogue import ProcessSpec, RunCardValue
 from omphjc.tools.madgraph.referenced_card import ReferencedCard
 from omphjc.tools.madgraph.run_card import format_value, parse_value, values_equal
-
-# The MadSpin card among the official cards of a process.
-_REFERENCE_FILE_NAME = "madspin_card.dat"
 
 
 @dataclass(frozen=True)
@@ -35,6 +31,7 @@ class MadSpinCard(ReferencedCard):
 
     format_name: ClassVar[str] = "madspin_card"
     record_version: ClassVar[int] = 1
+    reference_file_name: ClassVar[str] = "madspin_card.dat"
 
     options: dict[str, RunCardValue]
     decays: frozenset[str]
@@ -59,15 +56,6 @@ class MadSpinCard(ReferencedCard):
         The result is ``None`` for a process without MadSpin.
         """
         return None if spec.madspin_card is None else cls.read(spec.madspin_card)
-
-    @classmethod
-    def reference(cls, reference_dir: Path) -> "MadSpinCard | None":
-        """Return the official MadSpin card of a process.
-
-        The result is ``None`` when `reference_dir` holds no MadSpin card.
-        """
-        reference_path = reference_dir / _REFERENCE_FILE_NAME
-        return cls.read(reference_path) if reference_path.is_file() else None
 
     def content_record(self) -> dict[str, Any]:
         """Return the options, and the decay chains in sorted order."""

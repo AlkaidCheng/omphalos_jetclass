@@ -75,9 +75,8 @@ The catalogue only lists active physics, so a tracked parameter that the
 reference card leaves at one of these values needs no catalogue entry.
 """
 
-# The run card among the official cards of a process, and the pattern of the
-# names of its launch scripts.
-_REFERENCE_FILE_NAME = "run_card.dat"
+# The pattern of the names of the launch scripts among the official cards of a
+# process.
 _REFERENCE_LAUNCH_SCRIPT_GLOB = "run_*.mg5"
 
 _CARD_LINE = re.compile(r"^\s*(?P<value>.+?)\s*=\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)")
@@ -100,6 +99,7 @@ class RunCard(ReferencedCard):
 
     format_name: ClassVar[str] = "run_card"
     record_version: ClassVar[int] = 1
+    reference_file_name: ClassVar[str] = "run_card.dat"
 
     settings: dict[str, RunCardValue]
 
@@ -119,13 +119,16 @@ class RunCard(ReferencedCard):
         return cls(settings=dict(spec.run_card))
 
     @classmethod
-    def reference(cls, reference_dir: Path) -> "RunCard":
+    def reference(cls, reference_dir: Path) -> "RunCard | None":
         """Return the official run card as its launch scripts leave it.
 
         The launch scripts are the ``run_*.mg5`` files of `reference_dir`.
-        Their ``set`` commands change settings of the run card.
+        Their ``set`` commands change settings of the run card. The result is
+        ``None`` when `reference_dir` holds no run card.
         """
-        card = cls.read(reference_dir / _REFERENCE_FILE_NAME)
+        card = super().reference(reference_dir)
+        if card is None:
+            return None
         for launcher_path in sorted(reference_dir.glob(_REFERENCE_LAUNCH_SCRIPT_GLOB)):
             card = card.with_set_commands(launcher_path.read_text("utf-8"))
         return card
