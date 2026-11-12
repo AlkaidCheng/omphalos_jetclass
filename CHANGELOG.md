@@ -75,6 +75,9 @@
   content of one file format each, the first three being `ProcCard`,
   `SLHACard` and `LHEFile` for MadGraph's process card, parameter card and
   event file. (#51)
+- `Card.differences` lists the differences between two cards of one class,
+  built with the `Difference.between_mappings` and
+  `Difference.between_collections` constructors. (#53)
 
 ### Changed
 
