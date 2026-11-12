@@ -96,3 +96,23 @@ holds the path of the job directory, a ROOT file holds its creation time and a
 unique identifier, and Delphes writes the wall-clock times `Event.ReadTime` and
 `Event.ProcTime` into every event. Compare the events, not checksums of the
 files.
+
+omphjc records a fingerprint of each stage's event file in `manifest.json`, and
+the fingerprint leaves those differences out. The shower and the simulation
+record the fingerprint of the events they read as the parameter
+`input_fingerprint`. A stage run again with the same events therefore keeps the
+stages after it, and a stage whose input events changed is refused unless
+forced.
+
+The fingerprint of an LHE file covers the cards as MadGraph recorded them in
+the header, without their comments and layout, and every byte from the
+`<init>` line to the end of the file. The fingerprint of a ROOT file covers the
+number of events, the name and type of every leaf, and the values of a sample
+of the events. A leaf with the same number of values in every event, such as
+the number of particles, is hashed in every event. A leaf with a list in every
+event, such as the particle momenta, is hashed in four ranges of 1% of the
+events each: the first events, the last events and two ranges between them. A
+change that lies in the lists and reaches no sampled event is missed.
+
+A fingerprint is taken when the stage writes its file. A change made to the
+file afterwards is not seen.

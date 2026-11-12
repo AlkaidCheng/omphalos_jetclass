@@ -33,10 +33,12 @@ def shower(
     Runs :func:`omphjc.tools.pythia.driver.shower_events` in the job's ``shower/``
     directory on the event file the generate stage made, with the job's seed
     and as many events as that stage recorded. The stage's parameters are the
-    event count, the seed, the Pythia overrides and the cards the events were
-    generated with, so a sample regenerated with the same seed keeps its
-    shower. Its events are the ROOT file with the count Pythia accepted, and
-    its metadata the Pythia version, the events read, the fraction kept by
+    event count, the seed, the Pythia overrides and the fingerprint of the
+    event file read, so a sample generated again with the same events keeps
+    its shower. Its events are the ROOT file with the count Pythia accepted
+    and the fingerprint of its content
+    (:class:`omphjc.events.delphes_root.DelphesROOTFile`), and its metadata
+    the Pythia version, the events read, the fraction kept by
     matching for a matched process, and the SHA-256 of the command file and
     the record-only card as run.
 
@@ -63,12 +65,15 @@ def shower(
     ValueError
         If the generate stage of `job` has not run to completion.
     """
-    generated = job.require_done(GENERATE)
     events = job.require_events(GENERATE)
     task_dir = job.task_dir(SHOWER)
     pythia_overrides = dict(overrides or {})
 
     def body(overwrite: bool) -> TaskOutcome:
+        # This module loads the array libraries, so it is imported here and
+        # not when a command starts.
+        from omphjc.events.delphes_root import DelphesROOTFile
+
         run = shower_events(
             job.spec,
             lhe_path=events.path,
@@ -100,6 +105,7 @@ def shower(
                         run.output_path,
                         EventFormat.DELPHES_ROOT,
                         n_events=statistics.events_accepted,
+                        fingerprint=DelphesROOTFile.read(run.output_path).fingerprint(),
                     )
                 },
                 metadata=metadata,
@@ -113,6 +119,6 @@ def shower(
         "events": events.n_events,
         "seed": job.seed,
         "pythia": pythia_overrides,
-        "generated_with": generated.result.metadata.get("cards", {}),
+        "input_fingerprint": events.fingerprint,
     }
     return job.run_task(SHOWER, parameters, body, force=force)

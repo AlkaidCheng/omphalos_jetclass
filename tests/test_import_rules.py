@@ -46,10 +46,12 @@ CROSS_TOOL_IMPORTS = {
 }
 
 # The tool modules the jobs layer imports: each stage function calls its tool's
-# driver, and a job's seed is checked against Pythia's limit.
+# driver, the generate stage fingerprints the LHE file it made, and a job's
+# seed is checked against Pythia's limit.
 JOBS_TOOL_IMPORTS = {
     ("omphjc.jobs.job", "omphjc.tools.pythia.cmnd"),
     ("omphjc.jobs.stages.generate", "omphjc.tools.madgraph.driver"),
+    ("omphjc.jobs.stages.generate", "omphjc.tools.madgraph.lhe_file"),
     ("omphjc.jobs.stages.shower", "omphjc.tools.pythia.driver"),
     ("omphjc.jobs.stages.simulate", "omphjc.tools.delphes.driver"),
 }

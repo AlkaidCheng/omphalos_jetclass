@@ -32,11 +32,12 @@ def simulate(
     Runs :func:`omphjc.tools.delphes.driver.simulate_events` in the job's ``simulate/``
     directory on the file the shower stage made, with the job's seed. The
     stage's parameters are the seed, the SHA-256 of the detector card chosen
-    and the settings the events were showered with, so a shower rerun with
-    the same settings keeps its simulation, and another card is refused
-    unless `force` is set. Its events are the ROOT file with the number of
-    entries counted in its tree, and its metadata the SHA-256 of the card as
-    run.
+    and the fingerprint of the event file read, so a shower run again with
+    the same events keeps its simulation, and another card is refused unless
+    `force` is set. Its events are the ROOT file with the number of entries
+    in its tree and the fingerprint of its content
+    (:class:`omphjc.events.delphes_root.DelphesROOTFile`), and its metadata
+    the SHA-256 of the card as run.
 
     Parameters
     ----------
@@ -63,17 +64,15 @@ def simulate(
     FileNotFoundError
         If `card_path` is given and is not a file.
     """
-    shower_record = job.require_done(SHOWER)
     events = job.require_events(SHOWER)
     task_dir = job.task_dir(SIMULATE)
     card_text = detector_card_text(job.spec, card_path)
     card_hash = hashlib.sha256(card_text.encode("utf-8")).hexdigest()
 
     def body(overwrite: bool) -> TaskOutcome:
-        # These modules load the array libraries, so they are imported here
-        # and not when a command starts.
-        from omphjc.events.delphes_root import TREE_NAME
-        from omphjc.root_io import count_entries
+        # This module loads the array libraries, so it is imported here and
+        # not when a command starts.
+        from omphjc.events.delphes_root import DelphesROOTFile
 
         run = simulate_events(
             job.spec,
@@ -85,13 +84,15 @@ def simulate(
             overwrite=overwrite,
             delphes_root_path=delphes_root_path,
         )
+        delphes_file = DelphesROOTFile.read(run.output_path)
         return TaskOutcome(
             TaskResult(
                 outputs={
                     EVENTS_OUTPUT: EventOutput(
                         run.output_path,
                         EventFormat.DELPHES_ROOT,
-                        n_events=count_entries(run.output_path, TREE_NAME),
+                        n_events=delphes_file.n_entries,
+                        fingerprint=delphes_file.fingerprint(),
                     )
                 },
                 metadata={
@@ -106,6 +107,6 @@ def simulate(
     parameters = {
         "seed": job.seed,
         "card": card_hash,
-        "showered_with": shower_record.result.metadata.get("settings", {}),
+        "input_fingerprint": events.fingerprint,
     }
     return job.run_task(SIMULATE, parameters, body, force=force)

@@ -139,6 +139,9 @@
   which replaces `omphjc.tools.madgraph.reference`. (#54)
 - `omphjc simulate` records the number of events counted in `delphes.root`
   in place of the shower's count. (#56)
+- `omphjc shower` and `omphjc simulate` compare the fingerprint of the events
+  they read, recorded in `manifest.json` with each stage's event file, in
+  place of the cards and settings of the stage before. (#57)
 
 ### Fixed
 

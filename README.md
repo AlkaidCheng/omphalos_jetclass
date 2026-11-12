@@ -404,17 +404,22 @@ records the process, the job number, the omphjc version, and for each stage its
 status, its start and end times, the parameters it was asked for, its result,
 its log, and what it took: the wall time of the stage and the CPU time and peak
 memory of the program's processes. The result names the stage's outputs, giving
-an event file's format and number of events, and holds the metadata of what it
-made. For generation the parameters are the event count and
-the seed, and the metadata the MadGraph version, the cross section with its
-error, the cores MadGraph ran on and the SHA-256 of each card. For the shower
-the parameters are the event count, the seed, the Pythia overrides and the cards
-the events were generated with, and the metadata the Pythia version, the events
-read, the fraction kept by matching for a matched process, and the SHA-256 of
-the command file and the record-only card as run. For the simulation the
-parameters are the seed, the SHA-256 of the detector card chosen and the
-settings the events were showered with, and the metadata the SHA-256 of the
-card as run; its number of events is counted in `delphes.root`.
+an event file's format, number of events and fingerprint, and holds the
+metadata of what it made. Two event files with the same events have the same
+fingerprint
+([Same events, different files](docs/reproducibility.md#same-events-different-files)).
+For generation the parameters are the event count and the seed, and the
+metadata the MadGraph version, the cross section with its error, the cores
+MadGraph ran on and the SHA-256 of each card. For the shower the parameters are
+the event count, the seed, the Pythia overrides and the fingerprint of the
+generated events, and the metadata the Pythia version, the events read, the
+fraction kept by matching for a matched process, and the SHA-256 of the command
+file and the record-only card as run. For the simulation the parameters are the
+seed, the SHA-256 of the detector card chosen and the fingerprint of the
+showered events, and the metadata the SHA-256 of the card as run; its number of
+events is counted in `delphes.root`. A stage run again with the same events
+therefore keeps the stages after it, and a stage whose input events changed is
+refused unless `--force` is given.
 
 Running a stage again keeps a result recorded as done whose outputs are
 present and whose parameters match, runs again a stage that failed or was
