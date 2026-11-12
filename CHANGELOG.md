@@ -120,6 +120,9 @@
 - A stage's record in `manifest.json` holds what the stage made under
   `result`: its outputs by name, an event file with its format and event
   count, and its metadata (`omphjc.jobs.TaskResult`). (#49)
+- `omphjc check-cards` and `omphjc delphes compare` report an item that only
+  one side holds as `missing <item>: <value>` or `unexpected <item>: <value>`,
+  and `Difference` holds `None` as the value of the side that lacks it. (#53)
 
 ### Fixed
 
