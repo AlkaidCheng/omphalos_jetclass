@@ -15,6 +15,7 @@ from omphjc.comparison import Difference
 from omphjc.processes.catalogue import ProcessSpec, RunCardValue, default_catalogue
 from omphjc.tools.madgraph.cards import madspin_card_text, proc_card_commands
 from omphjc.tools.madgraph.madspin_card import MadSpinCard
+from omphjc.tools.madgraph.proc_card import ProcCard
 from omphjc.tools.madgraph.run_card import RunCard, values_equal
 
 TRACKED_PARAMETERS: frozenset[str] = frozenset(
@@ -74,7 +75,7 @@ The catalogue only lists active physics, so a tracked parameter that the
 reference card leaves at one of these values needs no catalogue entry.
 """
 
-# Lines MadGraph writes at the top of every process card before user input.
+# Commands MadGraph writes at the top of every process card before user input.
 _PROC_CARD_PREAMBLE: tuple[str, ...] = (
     "import model sm",
     "define p = g u c d s u~ c~ d~ s~",
@@ -107,28 +108,31 @@ def reference_run_card(spec: ProcessSpec) -> RunCard:
     return card
 
 
-def reference_proc_lines(spec: ProcessSpec) -> list[str]:
-    """Return the reference process definition without MadGraph's preamble.
+def reference_proc_card(spec: ProcessSpec) -> ProcCard:
+    """Return the commands of the reference process card that define the process.
 
-    The ``set`` option lines, comments and the ``output`` line are dropped;
-    a card that never imports a model after the preamble is standard-model.
+    The ``set`` and ``output`` commands are left out, and so are the commands
+    that MadGraph writes at the top of every process card. A card that loads
+    no model after those commands uses the Standard Model, so it gets the
+    command ``import model sm``. Each model has the name the catalogue gives
+    it.
 
     Raises
     ------
     ValueError
         If `spec` has no reference cards.
     """
-    text = (_reference_dir(spec) / "proc_card_mg5.dat").read_text("utf-8")
-    lines = [
-        line.strip()
-        for line in text.splitlines()
-        if line.strip() and not line.lstrip().startswith(("#", "set ", "output"))
+    card = ProcCard.read(_reference_dir(spec) / "proc_card_mg5.dat")
+    commands = [
+        command
+        for command in card.commands
+        if not command.startswith(("set ", "output"))
     ]
-    if tuple(lines[: len(_PROC_CARD_PREAMBLE)]) == _PROC_CARD_PREAMBLE:
-        lines = lines[len(_PROC_CARD_PREAMBLE) :]
-    if not lines[0].startswith("import model"):
-        lines.insert(0, "import model sm")
-    return [_canonical_import(line) for line in lines]
+    if tuple(commands[: len(_PROC_CARD_PREAMBLE)]) == _PROC_CARD_PREAMBLE:
+        commands = commands[len(_PROC_CARD_PREAMBLE) :]
+    if not commands[0].startswith("import model"):
+        commands.insert(0, "import model sm")
+    return ProcCard(commands=tuple(_canonical_import(command) for command in commands))
 
 
 def compare_process(spec: ProcessSpec) -> list[Difference]:
@@ -192,15 +196,20 @@ def _compare_run_card(spec: ProcessSpec) -> list[Difference]:
 
 
 def _compare_proc_card(spec: ProcessSpec) -> list[Difference]:
-    expected = reference_proc_lines(spec)
-    actual = [
-        _canonical_import(line)
-        for line in proc_card_commands(spec, output_dir=Path(spec.name))
-        if not line.startswith("output ")
+    written = ProcCard.from_text(
+        "\n".join(proc_card_commands(spec, output_dir=Path(spec.name)))
+    )
+    card = ProcCard(
+        commands=tuple(
+            _canonical_import(command)
+            for command in written.commands
+            if not command.startswith("output ")
+        )
+    )
+    return [
+        Difference("proc_card", d.expected, d.actual)
+        for d in card.differences(reference_proc_card(spec))
     ]
-    if expected == actual:
-        return []
-    return [Difference("proc_card", " | ".join(expected), " | ".join(actual))]
 
 
 def _compare_madspin(spec: ProcessSpec) -> list[Difference]:
