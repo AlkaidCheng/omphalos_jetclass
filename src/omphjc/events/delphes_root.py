@@ -1,4 +1,4 @@
-"""Reader of the generator record in a Delphes ROOT file.
+"""The ROOT file that Delphes writes, and a reader of its generator record.
 
 Delphes writes the generator's particles to branch ``Particle``
 (``GenParticle``) and the event's header to branch ``Event`` (``HepMCEvent``)
@@ -8,13 +8,14 @@ https://github.com/delphes/delphes/blob/3.5.1/classes/DelphesClasses.h).
 """
 
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, ClassVar
 
 import awkward as ak
 import numpy as np
 
 from omphjc.events.formats import EventReader
 from omphjc.events.particles import build_record
+from omphjc.root_files import ROOTFile
 from omphjc.root_io import count_entries, iterate_branches, read_branches
 
 TREE_NAME = "Delphes"
@@ -65,6 +66,26 @@ PARTICLE_BRANCHES = {
 }
 
 BRANCHES = (*EVENT_BRANCHES.values(), *PARTICLE_BRANCHES.values())
+
+
+class DelphesROOTFile(ROOTFile):
+    """The content of a ROOT file written by Delphes.
+
+    The fields ``ReadTime`` and ``ProcTime`` are left out of the content. They
+    hold the time Delphes took to read and to process an event, and that time
+    differs between two runs that give the same events.
+    """
+
+    format_name: ClassVar[str] = "delphes_root"
+    tree_name: ClassVar[str] = TREE_NAME
+    # ReadTime and ProcTime are members of Event, the base class of the event
+    # header on the branches Event and EventLHEF (Delphes 3.5.1,
+    # https://github.com/delphes/delphes/blob/3.5.1/classes/DelphesClasses.h#L46-L55).
+    # DelphesPythia8 fills them from its stopwatches
+    # (https://github.com/delphes/delphes/blob/3.5.1/readers/DelphesPythia8.cpp#L90-L91
+    # and classes/DelphesLHEFReader.cc#L249-L250), and DelphesROOT copies them
+    # (readers/DelphesROOT.cpp#L195-L196).
+    excluded_fields: ClassVar[frozenset[str]] = frozenset({"ReadTime", "ProcTime"})
 
 
 class DelphesRootReader(EventReader):

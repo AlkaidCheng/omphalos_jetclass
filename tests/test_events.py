@@ -9,7 +9,11 @@ import uproot
 from delphes_records import EVENT_DTYPES, PARTICLE_DTYPES, write_delphes_file
 
 from omphjc.events import EventFile, EventFormat
-from omphjc.events.delphes_root import SPEED_OF_LIGHT_MM_PER_S, DelphesRootReader
+from omphjc.events.delphes_root import (
+    SPEED_OF_LIGHT_MM_PER_S,
+    DelphesROOTFile,
+    DelphesRootReader,
+)
 from omphjc.events.particles import FIELDS, build_record
 from omphjc.events.readers import reader_for
 from omphjc.events.stable_particles import StableParticleDefinition
@@ -271,6 +275,20 @@ def test_the_definition_applies_to_the_record_a_reader_gives(
             [],
             [False] * 2,
         ]
+
+
+def test_a_delphes_file_has_the_same_fingerprint_whatever_time_its_events_took(
+    tmp_path: Path, record_file: EventFile
+) -> None:
+    n_events = len(EVENTS["Number"])
+    times = {"ReadTime": np.full(n_events, 7.25), "ProcTime": np.full(n_events, 0.5)}
+    write_delphes_file(tmp_path / "slower.root", PARTICLES, {**EVENTS, **times})
+    content = DelphesROOTFile.read(record_file.path)
+    slower = DelphesROOTFile.read(tmp_path / "slower.root")
+    assert content.fingerprint() == slower.fingerprint()
+    assert content.fingerprint().startswith("delphes_root-v1:")
+    assert "Event.Number" in content.leaves
+    assert not {"Event.ReadTime", "Event.ProcTime"} & set(content.leaves)
 
 
 def test_a_missing_branch_is_named(write_file: Callable[..., EventFile]) -> None:

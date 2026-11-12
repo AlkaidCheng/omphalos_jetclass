@@ -78,6 +78,9 @@
 - `Card.differences` lists the differences between two cards of one class,
   built with the `Difference.between_mappings` and
   `Difference.between_collections` constructors. (#53)
+- `omphjc.events.delphes_root.DelphesROOTFile.fingerprint` returns a
+  fingerprint of a Delphes ROOT file from the structure of its tree and a
+  sample of its entries, the same for two files with the same events. (#55)
 
 ### Changed
 

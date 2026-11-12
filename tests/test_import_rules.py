@@ -18,7 +18,7 @@ PACKAGE_DIR = Path(omphjc.__file__).parent
 
 # Modules any layer may import: they run programs, guard paths, stamp outputs,
 # compare values, check numbers, read ROOT files and define the base classes of
-# the file formats, and know no catalogue, event file, tool, stage or command.
+# the file formats, and know no catalogue, event format, tool, stage or command.
 SHARED_MODULES = (
     "omphjc.comparison",
     "omphjc.config_paths",
@@ -26,6 +26,7 @@ SHARED_MODULES = (
     "omphjc.filetree",
     "omphjc.numeric",
     "omphjc.programs",
+    "omphjc.root_files",
     "omphjc.root_io",
     "omphjc.safe_paths",
     "omphjc.stamps",
@@ -34,7 +35,7 @@ SHARED_MODULES = (
 
 # The modules omphjc.events may import besides its own: the event-file
 # contracts know no tool, stage or command.
-EVENTS_IMPORTS = ("omphjc.numeric", "omphjc.root_io")
+EVENTS_IMPORTS = ("omphjc.numeric", "omphjc.root_files", "omphjc.root_io")
 
 ARRAY_LIBRARIES = ("awkward", "numpy", "uproot")
 
@@ -159,7 +160,7 @@ def test_shared_modules_import_no_catalogue_and_no_event_file() -> None:
     assert reaches == set()
 
 
-def test_the_event_files_import_only_their_own_and_two_shared_modules() -> None:
+def test_the_event_files_import_only_their_own_and_three_shared_modules() -> None:
     reaches = {
         (name, target)
         for name, targets in IMPORTS.items()
