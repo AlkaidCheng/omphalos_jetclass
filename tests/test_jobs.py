@@ -11,6 +11,7 @@ import pytest
 from delphes_records import write_delphes_file
 
 from omphjc.events import EventFormat
+from omphjc.events.delphes_root import DelphesROOTFile
 from omphjc.jobs import (
     EVENTS_OUTPUT,
     EventOutput,
@@ -30,6 +31,7 @@ from omphjc.jobs import (
 from omphjc.processes import ProcessSpec, get_process
 from omphjc.programs import available_cores
 from omphjc.tools.madgraph.driver import MadGraphError
+from omphjc.tools.madgraph.lhe_file import LHEFile
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
 
 
@@ -68,7 +70,9 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
         parameters={"events": 10},
         result=TaskResult(
             outputs={
-                EVENTS_OUTPUT: EventOutput(output_path, EventFormat.LHE, n_events=10),
+                EVENTS_OUTPUT: EventOutput(
+                    output_path, EventFormat.LHE, n_events=10, fingerprint="lhe-v1:abc"
+                ),
                 "summary": TaskOutput(tmp_path / "x" / "summary.txt"),
             },
             metadata={"cards": {"x/c.dat": "abc"}},
@@ -82,15 +86,26 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
     assert written["schema"] == 1
     assert written["stages"]["x"]["result"] == {
         "outputs": {
-            "events": {"path": "x/out", "format": "lhe", "n_events": 10},
+            "events": {
+                "path": "x/out",
+                "format": "lhe",
+                "n_events": 10,
+                "fingerprint": "lhe-v1:abc",
+            },
             "summary": {"path": "x/summary.txt"},
         },
         "metadata": {"cards": {"x/c.dat": "abc"}},
     }
     assert Manifest.read(path) == manifest
-    written["stages"]["x"]["result"]["outputs"]["events"]["format"] = "hepmc"
+    events = written["stages"]["x"]["result"]["outputs"]["events"]
+    events["format"] = "hepmc"
     path.write_text(json.dumps(written))
     with pytest.raises(ValueError, match="not a manifest: 'hepmc'"):
+        Manifest.read(path)
+    events["format"] = "lhe"
+    del events["fingerprint"]
+    path.write_text(json.dumps(written))
+    with pytest.raises(ValueError, match="not a manifest: 'fingerprint'"):
         Manifest.read(path)
     path.write_text('{"schema": 99}')
     with pytest.raises(ValueError, match="schema 99; .* reads schema 1"):
@@ -219,7 +234,12 @@ def test_require_events_returns_the_events_a_done_stage_made(
     with pytest.raises(ValueError, match="The x stage of .* made no event file"):
         job.require_events("x")
 
-    events = EventOutput(job.task_dir("x") / "out.txt", EventFormat.LHE, n_events=3)
+    events = EventOutput(
+        job.task_dir("x") / "out.txt",
+        EventFormat.LHE,
+        n_events=3,
+        fingerprint="lhe-v1:abc",
+    )
     job.run_task(
         "x",
         {},
@@ -282,7 +302,12 @@ def test_generate_records_what_madgraph_made(
     )
     assert lhe_path.is_file()
     assert record.result.outputs == {
-        EVENTS_OUTPUT: EventOutput(lhe_path, EventFormat.LHE, n_events=10000)
+        EVENTS_OUTPUT: EventOutput(
+            lhe_path,
+            EventFormat.LHE,
+            n_events=10000,
+            fingerprint=LHEFile.read(lhe_path).fingerprint(),
+        )
     }
     assert record.log == "generate/madgraph.log"
     card = job.root_dir / "generate" / "cards" / "proc_card_mg5.dat"
@@ -392,7 +417,12 @@ def test_shower_records_what_it_made_and_keeps_it(
     root_path = job.root_dir / "shower" / "particles.root"
     assert root_path.is_file()
     assert record.result.outputs == {
-        EVENTS_OUTPUT: EventOutput(root_path, EventFormat.DELPHES_ROOT, n_events=1)
+        EVENTS_OUTPUT: EventOutput(
+            root_path,
+            EventFormat.DELPHES_ROOT,
+            n_events=1,
+            fingerprint=DelphesROOTFile.read(root_path).fingerprint(),
+        )
     }
     assert record.log == "shower/shower.log"
     cmnd = (job.root_dir / "shower" / "pythia.cmnd").read_text()
@@ -524,7 +554,12 @@ def test_simulate_records_what_it_made_and_keeps_it(
     root_path = job.root_dir / "simulate" / "delphes.root"
     assert root_path.is_file()
     assert record.result.outputs == {
-        EVENTS_OUTPUT: EventOutput(root_path, EventFormat.DELPHES_ROOT, n_events=1)
+        EVENTS_OUTPUT: EventOutput(
+            root_path,
+            EventFormat.DELPHES_ROOT,
+            n_events=1,
+            fingerprint=DelphesROOTFile.read(root_path).fingerprint(),
+        )
     }
     assert record.log == "simulate/simulate.log"
     card = (job.root_dir / "simulate" / "delphes_card.tcl").read_text()

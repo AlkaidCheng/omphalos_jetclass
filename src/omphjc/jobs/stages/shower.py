@@ -35,8 +35,10 @@ def shower(
     and as many events as that stage recorded. The stage's parameters are the
     event count, the seed, the Pythia overrides and the cards the events were
     generated with, so a sample regenerated with the same seed keeps its
-    shower. Its events are the ROOT file with the count Pythia accepted, and
-    its metadata the Pythia version, the events read, the fraction kept by
+    shower. Its events are the ROOT file with the count Pythia accepted
+    and the fingerprint of its content
+    (:class:`omphjc.events.delphes_root.DelphesROOTFile`), and its metadata
+    the Pythia version, the events read, the fraction kept by
     matching for a matched process, and the SHA-256 of the command file and
     the record-only card as run.
 
@@ -69,6 +71,10 @@ def shower(
     pythia_overrides = dict(overrides or {})
 
     def body(overwrite: bool) -> TaskOutcome:
+        # This module loads the array libraries, so it is imported here and
+        # not when a command starts.
+        from omphjc.events.delphes_root import DelphesROOTFile
+
         run = shower_events(
             job.spec,
             lhe_path=events.path,
@@ -100,6 +106,7 @@ def shower(
                         run.output_path,
                         EventFormat.DELPHES_ROOT,
                         n_events=statistics.events_accepted,
+                        fingerprint=DelphesROOTFile.read(run.output_path).fingerprint(),
                     )
                 },
                 metadata=metadata,

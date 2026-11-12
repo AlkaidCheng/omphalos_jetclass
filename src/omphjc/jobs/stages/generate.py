@@ -13,6 +13,7 @@ from omphjc.jobs.manifest import (
     TaskResult,
 )
 from omphjc.tools.madgraph.driver import generate_events
+from omphjc.tools.madgraph.lhe_file import LHEFile
 
 GENERATE = "generate"
 """The stage's name and directory, ``<job>/generate/``."""
@@ -42,9 +43,10 @@ def generate(
     directory and copies the cards MadGraph ran with into ``generate/cards/``.
     The stage's parameters are the event count and the job's seed, so a
     changed seed is refused like any other change unless `force` is set. Its
-    events are the LHE file with the count in its banner, and its metadata the
-    MadGraph version, the cross section with its error in pb, the cores
-    MadGraph ran on, and the SHA-256 of each card by path.
+    events are the LHE file with the count in its banner and the fingerprint
+    of its content (:class:`omphjc.tools.madgraph.lhe_file.LHEFile`), and its
+    metadata the MadGraph version, the cross section with its error in pb,
+    the cores MadGraph ran on, and the SHA-256 of each card by path.
 
     Parameters
     ----------
@@ -88,6 +90,7 @@ def generate(
                         run.output_path,
                         EventFormat.LHE,
                         n_events=run.banner.n_events,
+                        fingerprint=LHEFile.read(run.output_path).fingerprint(),
                     )
                 },
                 metadata={

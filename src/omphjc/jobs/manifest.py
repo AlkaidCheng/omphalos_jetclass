@@ -20,7 +20,8 @@ job, under the stage's name::
               "events": {
                 "path": "generate/HToBB/Events/run_01/unweighted_events.lhe.gz",
                 "format": "lhe",
-                "n_events": 1000
+                "n_events": 1000,
+                "fingerprint": "lhe-v1:<sha256>"
               }
             },
             "metadata": {
@@ -43,9 +44,9 @@ job, under the stage's name::
 what the task was asked for, the seed included where its stage uses one, and
 decides whether a later run may keep its result. ``result`` is what the task
 made (:class:`TaskResult`). ``outputs`` holds its files under the names the
-stage gives them: each has its ``path``, and an event file also its ``format``
-and the number of events it holds; the next task reads the one named
-``events``. ``metadata`` is what is known about the task and the sample it
+stage gives them: each has its ``path``, and an event file also its
+``format``, the number of events it holds and the ``fingerprint`` of its
+content; the next task reads the one named ``events``. ``metadata`` is what is known about the task and the sample it
 made; its keys are the stage's own. Every path is relative to the job
 directory; ``set_aside`` names the folder into which the run moved what an
 earlier run left and it could not confirm as that run's
@@ -93,10 +94,25 @@ class TaskOutput:
 
 @dataclass(frozen=True)
 class EventOutput(TaskOutput):
-    """An event file a task made, with its format and the number of events it holds."""
+    """An event file a task made.
+
+    Parameters
+    ----------
+    path : Path
+        The file, inside the job directory.
+    format : EventFormat
+        The format of the file.
+    n_events : int
+        The number of events the file holds.
+    fingerprint : str
+        The fingerprint of the file's content
+        (:meth:`omphjc.data_files.DataFile.fingerprint`). Two files with the
+        same events have the same fingerprint.
+    """
 
     format: EventFormat
     n_events: int
+    fingerprint: str
 
 
 @dataclass(frozen=True)
@@ -128,7 +144,10 @@ class TaskResult:
             path = root_dir / output["path"]
             if "n_events" in output:
                 outputs[name] = EventOutput(
-                    path, EventFormat(output["format"]), output["n_events"]
+                    path,
+                    EventFormat(output["format"]),
+                    output["n_events"],
+                    output["fingerprint"],
                 )
             else:
                 outputs[name] = TaskOutput(path)
