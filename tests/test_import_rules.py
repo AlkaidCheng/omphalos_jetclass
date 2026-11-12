@@ -35,7 +35,7 @@ SHARED_MODULES = (
 
 # The modules omphjc.events may import besides its own: the event-file
 # contracts know no tool, stage or command.
-EVENTS_IMPORTS = ("omphjc.numeric", "omphjc.root_io")
+EVENTS_IMPORTS = ("omphjc.numeric", "omphjc.root_files", "omphjc.root_io")
 
 ARRAY_LIBRARIES = ("awkward", "numpy", "uproot")
 
@@ -160,7 +160,7 @@ def test_shared_modules_import_no_catalogue_and_no_event_file() -> None:
     assert reaches == set()
 
 
-def test_the_event_files_import_only_their_own_and_two_shared_modules() -> None:
+def test_the_event_files_import_only_their_own_and_three_shared_modules() -> None:
     reaches = {
         (name, target)
         for name, targets in IMPORTS.items()
