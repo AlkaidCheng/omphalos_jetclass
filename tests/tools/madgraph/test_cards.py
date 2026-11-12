@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -186,6 +187,19 @@ def test_a_changed_decay_is_reported(
     card.write_text(text.replace(hadronic, leptonic), encoding="utf-8")
     altered = ProcessSpec(**{**original.__dict__, "madspin_card": card})
     assert sorted(str(d) for d in compare_process(altered)) == [
-        f"missing madspin decay: {hadronic.removeprefix('decay ')}",
-        f"unexpected madspin decay: {leptonic.removeprefix('decay ')}",
+        f"missing madspin_card.decay: {hadronic.removeprefix('decay ')}",
+        f"unexpected madspin_card.decay: {leptonic.removeprefix('decay ')}",
+    ]
+
+
+def test_a_madspin_card_that_only_one_side_has_is_reported(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    without_card = replace(specs["TTBar"], madspin_card=None)
+    assert [str(d) for d in compare_process(without_card)] == [
+        "missing card: madspin_card"
+    ]
+    with_card = replace(specs["HToBB"], madspin_card=specs["TTBar"].madspin_card)
+    assert [str(d) for d in compare_process(with_card)] == [
+        "unexpected card: madspin_card"
     ]

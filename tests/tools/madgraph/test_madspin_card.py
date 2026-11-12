@@ -1,8 +1,11 @@
 from collections.abc import Mapping
 
+from omphjc.config_paths import config_dir
 from omphjc.processes import ProcessSpec
 from omphjc.tools.madgraph.cards import madspin_card_text
 from omphjc.tools.madgraph.madspin_card import MadSpinCard
+
+REFERENCES_DIR = config_dir() / "references" / "jetclass"
 
 
 def test_ttbar_card_decays_both_tops_hadronically(
@@ -52,3 +55,26 @@ def test_changed_decay_and_option_are_reported() -> None:
         "missing decay: t > w+ b, w+ > j j",
         "unexpected decay: t > w+ b, w+ > l+ vl",
     ]
+
+
+def test_the_card_of_a_process_is_the_card_its_entry_names(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    card = MadSpinCard.from_process(specs["TTBar"])
+    assert card == MadSpinCard.from_text(madspin_card_text(specs["TTBar"]))
+
+
+def test_a_process_without_madspin_has_no_card(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    assert MadSpinCard.from_process(specs["HToBB"]) is None
+
+
+def test_the_official_card_is_read_from_the_reference_directory() -> None:
+    card = MadSpinCard.reference(REFERENCES_DIR / "TTBar")
+    assert card is not None
+    assert "t > w+ b, w+ > j j" in card.decays
+
+
+def test_a_reference_directory_without_a_madspin_card_has_no_card() -> None:
+    assert MadSpinCard.reference(REFERENCES_DIR / "HToBB") is None

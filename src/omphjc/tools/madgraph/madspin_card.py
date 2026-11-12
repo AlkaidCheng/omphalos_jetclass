@@ -7,16 +7,20 @@ decay chains give the same decays.
 """
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, ClassVar
 
 from omphjc.comparison import Difference
-from omphjc.data_files import Card
-from omphjc.processes.catalogue import RunCardValue
+from omphjc.processes.catalogue import ProcessSpec, RunCardValue
+from omphjc.tools.madgraph.referenced_card import ReferencedCard
 from omphjc.tools.madgraph.run_card import format_value, parse_value, values_equal
+
+# The MadSpin card among the official cards of a process.
+_REFERENCE_FILE_NAME = "madspin_card.dat"
 
 
 @dataclass(frozen=True)
-class MadSpinCard(Card):
+class MadSpinCard(ReferencedCard):
     """The options and the decay chains of a MadSpin card.
 
     Parameters
@@ -30,6 +34,7 @@ class MadSpinCard(Card):
     """
 
     record_scheme: ClassVar[str] = "madspin-card-v1"
+    card_name: ClassVar[str] = "madspin_card"
 
     options: dict[str, RunCardValue]
     decays: frozenset[str]
@@ -46,6 +51,23 @@ class MadSpinCard(Card):
             elif words and words[0] == "decay":
                 decays.add(" ".join(words[1:]))
         return cls(options=options, decays=frozenset(decays))
+
+    @classmethod
+    def from_process(cls, spec: ProcessSpec) -> "MadSpinCard | None":
+        """Return the MadSpin card of `spec`.
+
+        The result is ``None`` for a process without MadSpin.
+        """
+        return None if spec.madspin_card is None else cls.read(spec.madspin_card)
+
+    @classmethod
+    def reference(cls, reference_dir: Path) -> "MadSpinCard | None":
+        """Return the official MadSpin card of a process.
+
+        The result is ``None`` when `reference_dir` holds no MadSpin card.
+        """
+        reference_path = reference_dir / _REFERENCE_FILE_NAME
+        return cls.read(reference_path) if reference_path.is_file() else None
 
     def content_record(self) -> dict[str, Any]:
         """Return the options, and the decay chains in sorted order."""
