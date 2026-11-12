@@ -16,7 +16,7 @@ from omphjc.tools.madgraph.cards import (
     model_import_target,
     proc_card_commands,
 )
-from omphjc.tools.pythia.cmnd import shower_settings
+from omphjc.tools.pythia.cmnd import PythiaCmnd
 from omphjc.validation.cards import compare_all, compare_process
 
 CATALOGUE = """\
@@ -126,7 +126,9 @@ def test_new_process_needs_only_a_catalogue_entry(
         spec, process_dir=Path("x"), n_events=10, seed=None
     )
     assert "decay t > w+ b, w+ > j j" in madspin_card_text(spec)
-    settings = shower_settings(spec, lhe_path=Path("e.lhe"), n_events=10, seed=None)
+    settings = PythiaCmnd.from_process(
+        spec, lhe_path=Path("e.lhe"), n_events=10, seed=None
+    ).settings
     assert settings["JetMatching:qCut"] == "60"
     assert settings["JetMatching:nJetMax"] == "1"
     assert settings["JetMatching:scheme"] == "1"

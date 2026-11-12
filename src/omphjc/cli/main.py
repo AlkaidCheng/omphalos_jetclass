@@ -30,7 +30,7 @@ from omphjc.tools.delphes.card import (
 )
 from omphjc.tools.madgraph.cards import launch_commands, proc_card_commands
 from omphjc.tools.madgraph.run_card import format_value
-from omphjc.tools.pythia.cmnd import format_cmnd, shower_settings
+from omphjc.tools.pythia.cmnd import PythiaCmnd
 from omphjc.validation.cards import compare_all
 
 
@@ -225,10 +225,10 @@ def pythia_show(
     """Print the Pythia command file written for one process."""
     spec = lookup_process(specs, name)
     overrides = dict(parse_assignment(item) for item in assignments)
-    settings = shower_settings(
+    cmnd = PythiaCmnd.from_process(
         spec, lhe_path=lhe_path, n_events=n_events, seed=seed, overrides=overrides
     )
-    click.echo(format_cmnd(settings, title=spec.name), nl=False)
+    click.echo(cmnd.to_text(title=spec.name), nl=False)
 
 
 @cli.group()

@@ -1,9 +1,9 @@
-"""Pythia 8 settings for showering MadGraph events in ``DelphesPythia8``.
+"""The Pythia 8 command file for showering MadGraph events in ``DelphesPythia8``.
 
 The official production showered through MadGraph's Pythia interface, which
 writes a command file from the run card. ``DelphesPythia8`` reads a command
-file of its own, so this module writes the equivalent one, in layers where a
-later layer overrides an earlier one:
+file of its own, so :meth:`PythiaCmnd.from_process` writes the equivalent one,
+in layers where a later layer overrides an earlier one:
 
 1. for an MLM-matched process, the values MadGraph derives from the run card:
    ``JetMatching:qCut = 1.5 × xqcut``, ``JetMatching:nQmatch = maxjetflavor``
@@ -25,9 +25,12 @@ comparisons against a card MadGraph wrote.
 
 import math
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from omphjc.comparison import Difference
+from omphjc.data_files import Card
 from omphjc.processes.catalogue import ProcessSpec, SettingValue
 
 MATCHING_SCALE_FACTOR = 1.5
@@ -66,65 +69,163 @@ _BOOLEAN_WORDS = {
 }
 
 
-def shower_settings(
-    spec: ProcessSpec,
-    *,
-    lhe_path: Path,
-    n_events: int,
-    seed: int | None,
-    overrides: Mapping[str, SettingValue] | None = None,
-) -> dict[str, str]:
-    """Return the Pythia settings for showering `spec` with ``DelphesPythia8``.
+@dataclass(frozen=True)
+class PythiaCmnd(Card):
+    """The settings of a Pythia command file.
+
+    A command file holds one setting on each line, written as ``key = value``.
+    Pythia reads a key without regard to its case.
 
     Parameters
     ----------
-    spec : ProcessSpec
-        The process whose events are showered; its ``pythia`` and
-        ``pythia_matching`` settings come from the catalogue.
-    lhe_path : Path
-        Uncompressed LHE file. ``DelphesPythia8`` also reads it as text for
-        its ``EventLHEF`` branch, so a gzipped file cannot be used.
-    n_events : int
-        Upper bound on the number of showered events; the event loop also
-        stops at the end of the LHE file.
-    seed : int or None
-        ``Random:seed`` between 1 and :data:`PYTHIA_SEED_LIMIT`. ``None``
-        draws the seed from the clock (Pythia's built-in default is one fixed
-        seed).
-    overrides : Mapping[str, SettingValue] or None
-        Settings applied last, over every other layer.
-
-    Returns
-    -------
-    dict[str, str]
-        One entry per setting, keys matched case-insensitively as Pythia
-        reads them, in the order of the layer that first sets them; values as
-        Pythia reads them.
-
-    Raises
-    ------
-    ValueError
-        If `n_events` is not positive or `seed` is outside Pythia's range.
+    settings : dict[str, str]
+        The value of each setting by its key. A key is spelled as the file
+        spells it, and no two keys differ only in case. A value is the text
+        that Pythia reads.
     """
-    if n_events <= 0:
-        raise ValueError(f"n_events must be positive, got {n_events}")
-    if seed is not None and not 1 <= seed <= PYTHIA_SEED_LIMIT:
-        raise ValueError(f"seed must be between 1 and {PYTHIA_SEED_LIMIT}, got {seed}")
-    layers: list[Mapping[str, SettingValue]] = []
-    if spec.matching:
-        layers.append(_derived_matching_settings(spec))
-        layers.append(spec.pythia_matching)
-    layers.append(spec.pythia)
-    layers.append(
-        {
-            "Beams:LHEF": str(lhe_path),
-            "Main:numberOfEvents": n_events,
-            "Random:setSeed": True,
-            "Random:seed": 0 if seed is None else seed,
-        }
-    )
-    layers.append(overrides or {})
-    return _merge(layers)
+
+    format_name: ClassVar[str] = "pythia_cmnd"
+    record_version: ClassVar[int] = 1
+
+    settings: dict[str, str]
+
+    @classmethod
+    def from_text(cls, text: str) -> "PythiaCmnd":
+        """Return the settings of a command file given as text.
+
+        Pythia's reading rules apply. A line is a setting when its first
+        character that is not blank is a letter or a digit. The value is the
+        first word after ``=``. When several lines give one key, the last
+        line counts, and the key keeps the spelling of that line.
+        """
+        settings: dict[str, tuple[str, str]] = {}
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or not line[0].isalnum() or "=" not in line:
+                continue
+            key, _, rest = line.partition("=")
+            words = rest.split()
+            if not words:
+                continue
+            settings[key.strip().lower()] = (key.strip(), words[0])
+        return cls(settings=dict(settings.values()))
+
+    @classmethod
+    def from_process(
+        cls,
+        spec: ProcessSpec,
+        *,
+        lhe_path: Path,
+        n_events: int,
+        seed: int | None,
+        overrides: Mapping[str, SettingValue] | None = None,
+    ) -> "PythiaCmnd":
+        """Return the command file for showering `spec` with ``DelphesPythia8``.
+
+        Parameters
+        ----------
+        spec : ProcessSpec
+            The process whose events are showered; its ``pythia`` and
+            ``pythia_matching`` settings come from the catalogue.
+        lhe_path : Path
+            Uncompressed LHE file. ``DelphesPythia8`` also reads it as text
+            for its ``EventLHEF`` branch, so a gzipped file cannot be used.
+        n_events : int
+            Upper bound on the number of showered events; the event loop also
+            stops at the end of the LHE file.
+        seed : int or None
+            ``Random:seed`` between 1 and :data:`PYTHIA_SEED_LIMIT`. ``None``
+            draws the seed from the clock (Pythia's built-in default is one
+            fixed seed).
+        overrides : Mapping[str, SettingValue] or None
+            Settings applied last, over every other layer.
+
+        Returns
+        -------
+        PythiaCmnd
+            The settings in the order of the layer that first sets them, each
+            value written with :func:`format_setting`.
+
+        Raises
+        ------
+        ValueError
+            If `n_events` is not positive or `seed` is outside Pythia's range.
+        """
+        if n_events <= 0:
+            raise ValueError(f"n_events must be positive, got {n_events}")
+        if seed is not None and not 1 <= seed <= PYTHIA_SEED_LIMIT:
+            raise ValueError(
+                f"seed must be between 1 and {PYTHIA_SEED_LIMIT}, got {seed}"
+            )
+        layers: list[Mapping[str, SettingValue]] = []
+        if spec.matching:
+            layers.append(_derived_matching_settings(spec))
+            layers.append(spec.pythia_matching)
+        layers.append(spec.pythia)
+        layers.append(
+            {
+                "Beams:LHEF": str(lhe_path),
+                "Main:numberOfEvents": n_events,
+                "Random:setSeed": True,
+                "Random:seed": 0 if seed is None else seed,
+            }
+        )
+        layers.append(overrides or {})
+        return cls(settings=_merge(layers))
+
+    def to_text(self, *, title: str) -> str:
+        """Return the settings as the text of a command file.
+
+        `title` ends the comment on the first line of the text.
+        """
+        lines = [f"! Pythia 8 settings for DelphesPythia8: {title}", "!"]
+        lines.extend(f"{key} = {value}" for key, value in self.settings.items())
+        return "\n".join(lines) + "\n"
+
+    def content_record(self) -> dict[str, bool | float | str]:
+        """Return the settings as Pythia reads them.
+
+        Each key is in lower case. A value is a boolean for one of the words
+        ``on``, ``off``, ``true``, ``false``, ``yes`` and ``no``, a number
+        for a number, and the text for anything else.
+        """
+        return {key.lower(): _normalise(value) for key, value in self.settings.items()}
+
+    def differences(
+        self, reference: "PythiaCmnd", *, ignore: Iterable[str] = ()
+    ) -> list[Difference]:
+        """Return one difference for each setting with another value.
+
+        Keys are compared without regard to case, and values as Pythia reads
+        them: the words for ``on`` and ``off`` as booleans, numbers as
+        numbers, and anything else as text. The differences come in the order
+        of the keys in lower case. A difference names its setting by the key
+        as `reference` spells it, or as this card spells it when `reference`
+        lacks the setting.
+
+        Parameters
+        ----------
+        reference : PythiaCmnd
+            The command file to compare with.
+        ignore : Iterable[str], optional
+            Settings left out of the comparison. An entry is a key in lower
+            case, or the start of keys in lower case when it ends in ``:``.
+        """
+        ignored_keys = {entry for entry in ignore if not entry.endswith(":")}
+        ignored_prefixes = tuple(entry for entry in ignore if entry.endswith(":"))
+        written = {key.lower(): key for key in (*self.settings, *reference.settings)}
+        actual, expected = (
+            {
+                key.lower(): value
+                for key, value in card.settings.items()
+                if key.lower() not in ignored_keys
+                and not key.lower().startswith(ignored_prefixes)
+            }
+            for card in (self, reference)
+        )
+        return Difference.between_mappings(
+            actual, expected, equal=_values_equal, name=written.__getitem__
+        )
 
 
 def format_setting(value: SettingValue) -> str:
@@ -164,71 +265,6 @@ def max_matched_jets(spec: ProcessSpec) -> int:
     instead of ``j``.
     """
     return max(_jet_count(process) for process in spec.processes)
-
-
-def format_cmnd(settings: Mapping[str, str], *, title: str) -> str:
-    """Return `settings` as the text of a Pythia command file."""
-    lines = [f"! Pythia 8 settings for DelphesPythia8: {title}", "!"]
-    lines.extend(f"{key} = {value}" for key, value in settings.items())
-    return "\n".join(lines) + "\n"
-
-
-def parse_cmnd(text: str) -> dict[str, str]:
-    """Return the settings of a Pythia command file.
-
-    Pythia's reading rules apply: a line is a setting when its first
-    non-blank character is a letter or digit, the value is the first word
-    after ``=``, keys are case-insensitive and the last occurrence of a key
-    wins. The spelling of the last occurrence is kept.
-    """
-    settings: dict[str, tuple[str, str]] = {}
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or not line[0].isalnum() or "=" not in line:
-            continue
-        key, _, rest = line.partition("=")
-        words = rest.split()
-        if not words:
-            continue
-        settings[key.strip().lower()] = (key.strip(), words[0])
-    return dict(settings.values())
-
-
-def compare_settings(
-    settings: Mapping[str, str],
-    reference: Mapping[str, str],
-    *,
-    ignore: Iterable[str] = (),
-) -> list[Difference]:
-    """Return every difference between `settings` and `reference`.
-
-    Keys are compared case-insensitively and values as Pythia reads them:
-    ``on``/``off``/``true``/``false``/``yes``/``no`` as booleans, numbers as
-    numbers, anything else as text. Entries of `ignore` are lower-case keys,
-    or key prefixes ending in ``:``, that are left out of the comparison.
-    """
-    ignored_keys = {item for item in ignore if not item.endswith(":")}
-    ignored_prefixes = tuple(item for item in ignore if item.endswith(":"))
-
-    def is_ignored(lowered: str) -> bool:
-        return lowered in ignored_keys or lowered.startswith(ignored_prefixes)
-
-    actual = {key.lower(): (key, value) for key, value in settings.items()}
-    expected = {key.lower(): (key, value) for key, value in reference.items()}
-    differences = []
-    for lowered in sorted(actual.keys() | expected.keys()):
-        if is_ignored(lowered):
-            continue
-        if lowered not in expected:
-            key, value = actual[lowered]
-            differences.append(Difference(key, None, value))
-        elif lowered not in actual:
-            key, value = expected[lowered]
-            differences.append(Difference(key, value, None))
-        elif not _values_equal(actual[lowered][1], expected[lowered][1]):
-            key, value = expected[lowered]
-            differences.append(Difference(key, value, actual[lowered][1]))
-    return differences
 
 
 def _derived_matching_settings(spec: ProcessSpec) -> dict[str, SettingValue]:
