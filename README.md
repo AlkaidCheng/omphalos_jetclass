@@ -404,9 +404,9 @@ records the process, the job number, the omphjc version, and for each stage its
 status, its start and end times, the parameters it was asked for, its result,
 its log, and what it took: the wall time of the stage and the CPU time and peak
 memory of the program's processes. The result names the stage's outputs, giving
-an event file's format, number of events and fingerprint, and holds the
-metadata of what it made. Two event files with the same events have the same
-fingerprint
+each file's size and an event file's format, number of events and fingerprint,
+and holds the metadata of what it made. Two event files with the same events
+have the same fingerprint
 ([Same events, different files](docs/reproducibility.md#same-events-different-files)).
 For generation the parameters are the event count and the seed, and the
 metadata the MadGraph version, the cross section with its error, the cores
@@ -424,9 +424,11 @@ refused unless `--force` is given.
 Running a stage again keeps a result recorded as done whose outputs are
 present and whose parameters match, runs again a stage that failed or was
 interrupted, replacing what it left, and refuses other parameters, a changed
-seed included, unless `--force` is given. A job that receives `SIGTERM`, as
-from a batch system's time limit, stops its running program and records the
-failure before it exits. A rerun deletes only what it can recognise as the
+seed included, unless `--force` is given. A stage with an output that no
+longer has the size the manifest records, as after a truncated copy, is
+refused, and so is the stage that reads it, until it is run again with
+`--force`. A job that receives `SIGTERM`, as from a batch system's time limit,
+stops its running program and records the failure before it exits. A rerun deletes only what it can recognise as the
 earlier run's: anything else in the earlier run's place, as after a hard kill
 or a change made to the files since, is moved into `<stage>/omphjc-set-aside/`
 instead and stays there. A file a system tool writes into one of the run's

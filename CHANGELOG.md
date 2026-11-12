@@ -146,6 +146,9 @@
   Delphes card, and their methods replace the functions of
   `omphjc.tools.pythia.cmnd` and `omphjc.tools.delphes.card` that parsed,
   wrote and compared them. (#58)
+- `omphjc generate`, `omphjc shower` and `omphjc simulate` refuse a stage
+  with an output that no longer has the size recorded in `manifest.json`,
+  until the stage is run again with `--force`. (#59)
 
 ### Fixed
 

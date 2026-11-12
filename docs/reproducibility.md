@@ -115,4 +115,6 @@ events each: the first events, the last events and two ranges between them. A
 change that lies in the lists and reaches no sampled event is missed.
 
 A fingerprint is taken when the stage writes its file. A change made to the
-file afterwards is not seen.
+file afterwards is seen only when it changes the size of the file: the stage
+is then refused, as is the stage that reads the file, until it is run again
+with `--force`.
