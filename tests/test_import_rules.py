@@ -228,6 +228,7 @@ def test_a_tool_module_loads_no_driver_and_no_other_tool() -> None:
     assert tools == {
         "omphjc.tools",
         "omphjc.tools.madgraph",
+        "omphjc.tools.madgraph.referenced_card",
         "omphjc.tools.madgraph.run_card",
     }
 

@@ -11,12 +11,14 @@ from omphjc.tools.madgraph.cards import (
     proc_card_commands,
 )
 from omphjc.tools.madgraph.reference import (
-    DISABLED_DEFAULTS,
-    TRACKED_PARAMETERS,
     compare_all,
     compare_process,
     reference_proc_card,
-    reference_run_card,
+)
+from omphjc.tools.madgraph.run_card import (
+    DISABLED_DEFAULTS,
+    TRACKED_PARAMETERS,
+    RunCard,
 )
 
 
@@ -28,7 +30,8 @@ def test_every_tracked_official_setting_is_pinned(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     for name, spec in specs.items():
-        reference = reference_run_card(spec).settings
+        assert spec.reference_cards is not None
+        reference = RunCard.reference(spec.reference_cards).settings
         expected = {
             key
             for key in TRACKED_PARAMETERS & reference.keys()
@@ -179,7 +182,9 @@ def test_madspin_card_text_is_the_named_card(specs: Mapping[str, ProcessSpec]) -
 def test_a_tracked_cut_at_its_disabled_default_needs_no_entry(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
-    reference = reference_run_card(specs["WToQQ"])
+    reference_dir = specs["WToQQ"].reference_cards
+    assert reference_dir is not None
+    reference = RunCard.reference(reference_dir)
     assert reference.settings["pt_min_pdg"] == {}
     assert "pt_min_pdg" not in specs["WToQQ"].run_card
     assert compare_process(specs["WToQQ"]) == []

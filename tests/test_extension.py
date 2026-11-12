@@ -16,7 +16,7 @@ from omphjc.tools.madgraph.cards import (
     model_import_target,
     proc_card_commands,
 )
-from omphjc.tools.madgraph.reference import compare_all, reference_run_card
+from omphjc.tools.madgraph.reference import compare_all, compare_process
 from omphjc.tools.pythia.cmnd import shower_settings
 
 CATALOGUE = """\
@@ -150,7 +150,7 @@ def test_processes_without_reference_cards_are_not_checked(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
     with pytest.raises(ValueError, match="no reference cards"):
-        reference_run_card(specs["ZPrimeToTT"])
+        compare_process(specs["ZPrimeToTT"])
     differences = compare_all(specs.values())
     assert {name: [d.item for d in found] for name, found in differences.items()} == {
         "HToBBStudy": ["run_card.misset"]

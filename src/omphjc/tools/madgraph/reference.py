@@ -12,68 +12,11 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from omphjc.comparison import Difference
-from omphjc.processes.catalogue import ProcessSpec, RunCardValue, default_catalogue
+from omphjc.processes.catalogue import ProcessSpec, default_catalogue
 from omphjc.tools.madgraph.cards import madspin_card_text, proc_card_commands
 from omphjc.tools.madgraph.madspin_card import MadSpinCard
 from omphjc.tools.madgraph.proc_card import ProcCard
-from omphjc.tools.madgraph.run_card import RunCard, values_equal
-
-TRACKED_PARAMETERS: frozenset[str] = frozenset(
-    {
-        # beams and PDF
-        "lpp1",
-        "lpp2",
-        "ebeam1",
-        "ebeam2",
-        "pdlabel",
-        "lhaid",
-        # scales
-        "fixed_ren_scale",
-        "fixed_fac_scale",
-        "dynamical_scale_choice",
-        "scalefact",
-        # flavour scheme, widths, systematics
-        "maxjetflavor",
-        "bwcutoff",
-        "use_syst",
-        "cut_decays",
-        # generator-level cuts
-        "ptj",
-        "ptl",
-        "etaj",
-        "etal",
-        "drjj",
-        "drjl",
-        "drll",
-        "misset",
-        "pt_min_pdg",
-        "eta_max_pdg",
-        "ptheavy",
-        # MLM matching
-        "ickkw",
-        "xqcut",
-        "auto_ptj_mjj",
-        "alpsfact",
-        "asrwgtflavor",
-    }
-)
-"""Run-card parameters that carry physics and are compared with the reference cards.
-
-Parameters left out are MadGraph internals (run tag, event count, seed,
-integration strategy, event normalisation, bias modules, systematics program
-arguments) or cut maxima left at their disabled default in every official card.
-"""
-
-DISABLED_DEFAULTS: dict[str, RunCardValue] = {
-    "pt_min_pdg": {},
-    "eta_max_pdg": {},
-    "ptheavy": 0.0,
-}
-"""Values at which a tracked cut is switched off.
-
-The catalogue only lists active physics, so a tracked parameter that the
-reference card leaves at one of these values needs no catalogue entry.
-"""
+from omphjc.tools.madgraph.run_card import RunCard
 
 # Commands MadGraph writes at the top of every process card before user input.
 _PROC_CARD_PREAMBLE: tuple[str, ...] = (
@@ -88,24 +31,6 @@ _PROC_CARD_PREAMBLE: tuple[str, ...] = (
 
 # Official model names that the catalogue provides under a vendored name.
 _OFFICIAL_MODEL_ALIASES: dict[str, str] = {"heft-c_mass": "heft_c_mass_jetclass"}
-
-
-def reference_run_card(spec: ProcessSpec) -> RunCard:
-    """Return the reference run card as its launch scripts leave it.
-
-    The launch scripts are the ``run_*.mg5`` files of the reference directory.
-    Their ``set`` commands change settings of the run card.
-
-    Raises
-    ------
-    ValueError
-        If `spec` has no reference cards.
-    """
-    reference_dir = _reference_dir(spec)
-    card = RunCard.read(reference_dir / "run_card.dat")
-    for launcher_path in sorted(reference_dir.glob("run_*.mg5")):
-        card = card.with_set_commands(launcher_path.read_text("utf-8"))
-    return card
 
 
 def reference_proc_card(spec: ProcessSpec) -> ProcCard:
@@ -143,7 +68,7 @@ def compare_process(spec: ProcessSpec) -> list[Difference]:
     ValueError
         If `spec` has no reference cards.
     """
-    differences = _compare_run_card(spec)
+    differences = RunCard.compare_with_reference(spec)
     differences.extend(_compare_proc_card(spec))
     differences.extend(_compare_madspin(spec))
     return differences
@@ -172,27 +97,6 @@ def _reference_dir(spec: ProcessSpec) -> Path:
     if spec.reference_cards is None:
         raise ValueError(f"Process {spec.name!r} has no reference cards")
     return spec.reference_cards
-
-
-def _compare_run_card(spec: ProcessSpec) -> list[Difference]:
-    card = RunCard(settings=dict(spec.run_card))
-    reference = reference_run_card(spec)
-    differences = []
-    for difference in card.differences(reference):
-        name = difference.item
-        if difference.actual is None:
-            # A setting of the reference alone counts when it is tracked and
-            # the reference does not leave it switched off.
-            if name not in TRACKED_PARAMETERS:
-                continue
-            if name in DISABLED_DEFAULTS and values_equal(
-                reference.settings[name], DISABLED_DEFAULTS[name]
-            ):
-                continue
-        differences.append(
-            Difference(f"run_card.{name}", difference.expected, difference.actual)
-        )
-    return differences
 
 
 def _compare_proc_card(spec: ProcessSpec) -> list[Difference]:

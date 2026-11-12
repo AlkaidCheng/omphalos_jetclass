@@ -11,11 +11,74 @@ import ast
 import math
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import ClassVar
 
 from omphjc.comparison import Difference
-from omphjc.data_files import Card
-from omphjc.processes.catalogue import RunCardValue
+from omphjc.processes.catalogue import ProcessSpec, RunCardValue
+from omphjc.tools.madgraph.referenced_card import ReferencedCard
+
+TRACKED_PARAMETERS: frozenset[str] = frozenset(
+    {
+        # beams and PDF
+        "lpp1",
+        "lpp2",
+        "ebeam1",
+        "ebeam2",
+        "pdlabel",
+        "lhaid",
+        # scales
+        "fixed_ren_scale",
+        "fixed_fac_scale",
+        "dynamical_scale_choice",
+        "scalefact",
+        # flavour scheme, widths, systematics
+        "maxjetflavor",
+        "bwcutoff",
+        "use_syst",
+        "cut_decays",
+        # generator-level cuts
+        "ptj",
+        "ptl",
+        "etaj",
+        "etal",
+        "drjj",
+        "drjl",
+        "drll",
+        "misset",
+        "pt_min_pdg",
+        "eta_max_pdg",
+        "ptheavy",
+        # MLM matching
+        "ickkw",
+        "xqcut",
+        "auto_ptj_mjj",
+        "alpsfact",
+        "asrwgtflavor",
+    }
+)
+"""Run-card parameters that carry physics and are compared with the reference cards.
+
+Parameters left out are MadGraph internals (run tag, event count, seed,
+integration strategy, event normalisation, bias modules, systematics program
+arguments) or cut maxima left at their disabled default in every official card.
+"""
+
+DISABLED_DEFAULTS: dict[str, RunCardValue] = {
+    "pt_min_pdg": {},
+    "eta_max_pdg": {},
+    "ptheavy": 0.0,
+}
+"""Values at which a tracked cut is switched off.
+
+The catalogue only lists active physics, so a tracked parameter that the
+reference card leaves at one of these values needs no catalogue entry.
+"""
+
+# The run card among the official cards of a process, and the pattern of the
+# names of its launch scripts.
+_REFERENCE_FILE_NAME = "run_card.dat"
+_REFERENCE_LAUNCH_SCRIPT_GLOB = "run_*.mg5"
 
 _CARD_LINE = re.compile(r"^\s*(?P<value>.+?)\s*=\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)")
 _SET_LINE = re.compile(
@@ -25,7 +88,7 @@ _INTEGER = re.compile(r"^[+-]?\d+$")
 
 
 @dataclass(frozen=True)
-class RunCard(Card):
+class RunCard(ReferencedCard):
     """The settings of a MadGraph run card.
 
     Parameters
@@ -36,6 +99,7 @@ class RunCard(Card):
     """
 
     record_scheme: ClassVar[str] = "run-card-v1"
+    card_name: ClassVar[str] = "run_card"
 
     settings: dict[str, RunCardValue]
 
@@ -48,6 +112,23 @@ class RunCard(Card):
             if match is not None:
                 settings[match["name"]] = parse_value(match["value"])
         return cls(settings=settings)
+
+    @classmethod
+    def from_process(cls, spec: ProcessSpec) -> "RunCard":
+        """Return the settings that the catalogue gives the run card of `spec`."""
+        return cls(settings=dict(spec.run_card))
+
+    @classmethod
+    def reference(cls, reference_dir: Path) -> "RunCard":
+        """Return the official run card as its launch scripts leave it.
+
+        The launch scripts are the ``run_*.mg5`` files of `reference_dir`.
+        Their ``set`` commands change settings of the run card.
+        """
+        card = cls.read(reference_dir / _REFERENCE_FILE_NAME)
+        for launcher_path in sorted(reference_dir.glob(_REFERENCE_LAUNCH_SCRIPT_GLOB)):
+            card = card.with_set_commands(launcher_path.read_text("utf-8"))
+        return card
 
     def with_set_commands(self, text: str) -> "RunCard":
         """Return the card after the ``set name value`` commands in `text`.
@@ -78,6 +159,27 @@ class RunCard(Card):
         return Difference.between_mappings(
             self.settings, reference.settings, equal=values_equal, text=format_value
         )
+
+    def checked_differences(self, reference: "RunCard") -> list[Difference]:
+        """Return the differences from `reference` that a check reports.
+
+        The catalogue lists only the settings that carry physics. A setting
+        that only `reference` holds is therefore reported when it is one of
+        :data:`TRACKED_PARAMETERS` and `reference` does not leave it at its
+        value in :data:`DISABLED_DEFAULTS`.
+        """
+        differences = []
+        for difference in self.differences(reference):
+            name = difference.item
+            if difference.actual is None:
+                if name not in TRACKED_PARAMETERS:
+                    continue
+                if name in DISABLED_DEFAULTS and values_equal(
+                    reference.settings[name], DISABLED_DEFAULTS[name]
+                ):
+                    continue
+            differences.append(difference)
+        return differences
 
 
 def parse_value(text: str) -> RunCardValue:
