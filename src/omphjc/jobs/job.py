@@ -17,6 +17,8 @@ import signal
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from types import FrameType
 from typing import Any
@@ -45,6 +47,38 @@ class TerminationError(RuntimeError):
 
 TaskBody = Callable[[bool], TaskOutcome]
 """Runs a task; the argument says whether to replace what an earlier run left."""
+
+
+class StageStatus(Enum):
+    """How a stage of a job stands, by the manifest and the output files."""
+
+    NOT_DONE = "not done"
+    """The manifest does not record the stage as done."""
+    OUTPUT_MISSING = "output missing"
+    """The stage is recorded as done and one of its outputs is not on disk."""
+    OUTPUT_SIZE_MISMATCH = "output size mismatch"
+    """The stage is recorded as done and one of its outputs has another size
+    than the manifest records."""
+    DONE = "done"
+    """The stage is recorded as done and each output has its recorded size."""
+
+
+@dataclass(frozen=True)
+class StageCheck:
+    """What :meth:`Job.check_stage` found.
+
+    Parameters
+    ----------
+    status : StageStatus
+        How the stage stands.
+    detail : str
+        A clause that names the output that is missing, or the output of
+        another size with the size found and the size recorded. It is empty
+        for the other statuses.
+    """
+
+    status: StageStatus
+    detail: str = ""
 
 
 def sha256(path: Path) -> str:
@@ -125,23 +159,51 @@ class Job:
         """Return `path` as a POSIX path relative to the job directory."""
         return path.relative_to(self.root_dir).as_posix()
 
-    def is_done(self, stage: str) -> bool:
-        """Return whether `stage` is recorded as done with its outputs present."""
+    def check_stage(self, stage: str) -> StageCheck:
+        """Return how `stage` stands, by the manifest and its output files.
+
+        The size of each output of a stage recorded as done is compared with
+        the size in the manifest. An output of another size is reported
+        before a missing one.
+        """
         record = self.manifest.stages.get(stage)
         if record is None or record.status != DONE:
-            return False
-        return all(output.path.exists() for output in record.result.outputs.values())
+            return StageCheck(StageStatus.NOT_DONE)
+        check = StageCheck(StageStatus.DONE)
+        for output in record.result.outputs.values():
+            try:
+                n_bytes = output.path.stat().st_size
+            except FileNotFoundError:
+                check = StageCheck(
+                    StageStatus.OUTPUT_MISSING, f"{output.path} is missing"
+                )
+                continue
+            if n_bytes != output.n_bytes:
+                return StageCheck(
+                    StageStatus.OUTPUT_SIZE_MISMATCH,
+                    f"{output.path} holds {n_bytes} bytes, not the "
+                    f"{output.n_bytes} the {stage} stage recorded",
+                )
+        return check
 
     def require_done(self, stage: str) -> TaskRecord:
-        """Return the record of `stage`, which must be done with its outputs present.
+        """Return the record of `stage`, which must be done with its outputs as recorded.
 
         Raises
         ------
         ValueError
             If `stage` is not done or an output is missing; the message names
-            the command to run first.
+            the command to run first. If an output has another size than the
+            manifest records; the message names the file, both sizes and
+            ``--force``.
         """
-        if not self.is_done(stage):
+        check = self.check_stage(stage)
+        if check.status is StageStatus.OUTPUT_SIZE_MISMATCH:
+            raise ValueError(
+                f"{check.detail}; run omphjc {stage} with --force to regenerate "
+                "the file"
+            )
+        if check.status is not StageStatus.DONE:
             raise ValueError(
                 f"The {stage} stage of {self.root_dir} has not run to completion; "
                 f"run omphjc {stage} first"
@@ -149,7 +211,7 @@ class Job:
         return self.manifest.stages[stage]
 
     def require_events(self, stage: str) -> EventOutput:
-        """Return the events `stage` made, which must be done with its outputs present.
+        """Return the events `stage` made, which must be done with its outputs as recorded.
 
         Raises
         ------
@@ -172,8 +234,9 @@ class Job:
         """Run `stage` through `body` unless its result can be kept; record it.
 
         A task recorded as done, with its outputs present and the same
-        `parameters`, is kept. One recorded as done with other parameters is
-        refused unless `force` is set. One recorded as failed or interrupted,
+        `parameters`, is kept. One recorded as done with other parameters, or
+        with an output of another size than the manifest records, is refused
+        unless `force` is set. One recorded as failed or interrupted,
         or run under `force`, runs again, and `body` is told to replace what
         the earlier run left. The manifest is written before `body` runs and
         after it returns or raises, so a failed or interrupted job records
@@ -198,8 +261,9 @@ class Job:
         Raises
         ------
         ValueError
-            If the task is recorded as done with other parameters and `force`
-            is not set.
+            If the task is recorded as done with other parameters, or with an
+            output of another size than the manifest records, and `force` is
+            not set.
         Exception
             Whatever `body` raised, after the failure is recorded.
         """
@@ -210,8 +274,14 @@ class Job:
                     f"{stage} in {self.root_dir} ran with {earlier.parameters}; "
                     f"pass force to run it with {parameters}"
                 )
-            if self.is_done(stage):
+            check = self.check_stage(stage)
+            if check.status is StageStatus.DONE:
                 return earlier
+            if check.status is StageStatus.OUTPUT_SIZE_MISMATCH:
+                raise ValueError(
+                    f"{check.detail}; run omphjc {stage} with --force to "
+                    "regenerate the file"
+                )
         overwrite = force or earlier is not None
         started = timestamp()
         clock = time.monotonic()
