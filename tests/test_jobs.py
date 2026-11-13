@@ -28,6 +28,7 @@ from omphjc.jobs import (
     TaskRecord,
     TaskResult,
     TaskStatus,
+    TaskSummary,
     TerminationError,
     exception_on_termination,
     generate,
@@ -37,6 +38,7 @@ from omphjc.jobs import (
 )
 from omphjc.processes import ProcessSpec, get_process
 from omphjc.programs import available_cores
+from omphjc.stamps import read_stamp
 from omphjc.tools.madgraph.driver import MadGraphError
 from omphjc.tools.madgraph.lhe_file import LHEFile
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
@@ -63,7 +65,9 @@ def test_a_job_has_a_directory_per_process_and_number(
     assert job.seed == 10000007
     assert job.identity_path == job.root_dir / "job.json"
     assert job.identity == JobIdentity(process="HToBB", job_id=7, seed=10000007)
-    assert job.manifest == Manifest(process="HToBB", job_id=7)
+    assert job.task_record_path("generate") == job.root_dir / "generate" / "task.json"
+    assert job.task_record("generate") is None
+    assert job.task_names() == []
     assert not job.root_dir.exists()
     with pytest.raises(ValueError, match="job_id"):
         Job(specs["HToBB"], tmp_path, 0)
@@ -71,7 +75,7 @@ def test_a_job_has_a_directory_per_process_and_number(
         Job(specs["HToBB"], Path("/"), 1)
 
 
-def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
+def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
     output_path = tmp_path / "x" / "out"
     record = TaskRecord(
         status="done",
@@ -91,13 +95,13 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
             metadata={"cards": {"x/c.dat": "abc"}},
         ),
     )
-    running = TaskRecord(status="running", started="t")
-    manifest = Manifest(process="HToBB", job_id=1, stages={"x": record, "y": running})
-    path = tmp_path / "manifest.json"
-    manifest.write(path)
+    path = tmp_path / "x" / "task.json"
+    path.parent.mkdir()
+    record.write(path, root_dir=tmp_path)
     written = json.loads(path.read_text())
     assert written["schema"] == 1
-    assert written["stages"]["x"]["result"] == {
+    assert written["status"] == "done" and written["parameters"] == {"events": 10}
+    assert written["result"] == {
         "outputs": {
             "events": {
                 "path": "x/out",
@@ -110,36 +114,38 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
         },
         "metadata": {"cards": {"x/c.dat": "abc"}},
     }
-    assert Manifest.read(path) == manifest
-    events = written["stages"]["x"]["result"]["outputs"]["events"]
+    assert TaskRecord.read(path, root_dir=tmp_path) == record
+    events = written["result"]["outputs"]["events"]
     events["format"] = "hepmc"
     path.write_text(json.dumps(written))
-    with pytest.raises(ValueError, match="manifest.json has invalid content: 'hepmc'"):
-        Manifest.read(path)
+    with pytest.raises(ValueError, match="task.json has invalid content: 'hepmc'"):
+        TaskRecord.read(path, root_dir=tmp_path)
     events["format"] = "lhe"
     del events["fingerprint"]
     path.write_text(json.dumps(written))
     with pytest.raises(ValueError, match="has invalid content: 'fingerprint'"):
-        Manifest.read(path)
+        TaskRecord.read(path, root_dir=tmp_path)
     events["fingerprint"] = "lhe-v1:abc"
-    del written["stages"]["x"]["result"]["outputs"]["summary"]["n_bytes"]
+    del written["result"]["outputs"]["summary"]["n_bytes"]
     path.write_text(json.dumps(written))
     with pytest.raises(ValueError, match="has invalid content: 'n_bytes'"):
-        Manifest.read(path)
+        TaskRecord.read(path, root_dir=tmp_path)
     path.write_text('{"schema": 99}')
     with pytest.raises(ValueError, match="schema 99; .* reads schema 1"):
-        Manifest.read(path)
-    path.write_text('{"process": "HToBB"}')
+        TaskRecord.read(path, root_dir=tmp_path)
+    path.write_text('{"status": "done"}')
     with pytest.raises(ValueError, match="no schema"):
-        Manifest.read(path)
+        TaskRecord.read(path, root_dir=tmp_path)
     path.write_text("not json")
-    with pytest.raises(ValueError, match="manifest.json is not valid JSON"):
-        Manifest.read(path)
+    with pytest.raises(ValueError, match="task.json is not valid JSON"):
+        TaskRecord.read(path, root_dir=tmp_path)
 
 
-def test_a_manifest_refuses_a_path_outside_its_directory(tmp_path: Path) -> None:
-    path = tmp_path / "job" / "manifest.json"
-    path.parent.mkdir()
+def test_a_task_record_refuses_a_path_outside_its_root_directory(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "job" / "x" / "task.json"
+    path.parent.mkdir(parents=True)
     record = TaskRecord(
         status="done",
         started="t",
@@ -148,8 +154,32 @@ def test_a_manifest_refuses_a_path_outside_its_directory(tmp_path: Path) -> None
         ),
     )
     with pytest.raises(ValueError, match="elsewhere"):
-        Manifest(process="HToBB", job_id=1, stages={"x": record}).write(path)
+        record.write(path, root_dir=tmp_path / "job")
     assert list(path.parent.iterdir()) == []
+
+
+def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
+    manifest = Manifest(
+        JobIdentity(process="HToBB", job_id=1, seed=10000001),
+        {
+            "x": TaskSummary("done", "t", tmp_path / "x" / "task.json"),
+            "y": TaskSummary("running", "u", tmp_path / "y" / "task.json"),
+        },
+    )
+    path = tmp_path / "manifest.json"
+    manifest.write(path)
+    assert json.loads(path.read_text()) == {
+        "schema": 1,
+        "process": "HToBB",
+        "job_id": 1,
+        "seed": 10000001,
+        "omphjc_version": __version__,
+        "tasks": {
+            "x": {"status": "done", "started": "t", "record_path": "x/task.json"},
+            "y": {"status": "running", "started": "u", "record_path": "y/task.json"},
+        },
+    }
+    assert Manifest.read(path) == manifest
 
 
 def _make_output(job: Job) -> TaskOutcome:
@@ -184,10 +214,10 @@ def test_a_stage_runs_once_and_its_result_is_kept(
         metadata={"n": 1},
     )
     assert record.log is None
-    assert Manifest.read(job.manifest_path).stages["x"] == record
+    assert job.task_record("x") == record
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.task("x") == Task("x", TaskStatus.DONE)
+    assert job.task("x") == Task("x", TaskStatus.DONE, record=record)
     assert job.run_task("x", {"events": 10}, body) == record
     assert calls == [False]
 
@@ -222,19 +252,20 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
 
     job = Job(specs["HToBB"], tmp_path, 1)
     assert job.task("x") == Task("x", TaskStatus.NOT_DONE)
-    job.run_task("x", {}, body)
+    record = job.run_task("x", {}, body)
     output_path = job.root_dir / "x" / "out.txt"
     output_path.unlink()
     job = Job(specs["HToBB"], tmp_path, 1)
     assert job.task("x") == Task(
-        "x", TaskStatus.MISSING_OUTPUT, f"{output_path} is missing"
+        "x", TaskStatus.MISSING_OUTPUT, f"{output_path} is missing", record
     )
     job.run_task("x", {}, body)
     assert calls == [False, True]
 
-    job.manifest.stages["x"] = TaskRecord(status="running", started="t")
-    job.manifest.write(job.manifest_path)
+    running = TaskRecord(status="running", started="t")
+    running.write(job.task_record_path("x"), root_dir=job.root_dir)
     job = Job(specs["HToBB"], tmp_path, 1)
+    assert job.task("x") == Task("x", TaskStatus.NOT_DONE, record=running)
     assert job.run_task("x", {}, body).status == "done"
     assert calls == [False, True, True]
 
@@ -263,12 +294,12 @@ def test_a_stage_whose_output_has_another_size_is_refused_unless_forced(
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.run_task("x", {}, body)
+    record = job.run_task("x", {}, body)
     output_path = job.root_dir / "x" / "out.txt"
     output_path.write_text("made and changed")
     job = Job(specs["HToBB"], tmp_path, 1)
     detail = f"{output_path} holds 16 bytes, not the 4 the x stage recorded"
-    assert job.task("x") == Task("x", TaskStatus.CHANGED, detail)
+    assert job.task("x") == Task("x", TaskStatus.CHANGED, detail, record)
     refused = re.escape(f"{detail}; run omphjc x with --force to regenerate the file")
     with pytest.raises(ValueError, match=refused):
         job.require_done("x")
@@ -295,13 +326,14 @@ def test_an_output_of_another_size_is_reported_before_a_missing_one(
             outputs[name] = TaskOutput(path, n_bytes=len("made"))
         return TaskOutcome(TaskResult(outputs=outputs))
 
-    job.run_task("x", {}, body)
+    record = job.run_task("x", {}, body)
     first_path.unlink()
     second_path.write_text("made and changed")
     assert job.task("x") == Task(
         "x",
         TaskStatus.CHANGED,
         f"{second_path} holds 16 bytes, not the 4 the x stage recorded",
+        record,
     )
     with pytest.raises(ValueError, match="with --force to regenerate the file"):
         job.run_task("x", {}, body)
@@ -342,7 +374,8 @@ def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(RuntimeError, match="boom"):
         job.run_task("x", {"events": 10}, failing)
-    record = Manifest.read(job.manifest_path).stages["x"]
+    record = job.task_record("x")
+    assert record is not None
     assert record.status == "failed" and record.finished is not None
     assert record.parameters == {"events": 10} and record.error == "boom"
 
@@ -357,14 +390,87 @@ def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
     assert calls == [True]
 
 
-def test_a_manifest_of_another_job_is_refused(
+def test_two_jobs_opened_on_one_directory_keep_the_records_of_both_tasks(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    first = Job(specs["HToBB"], tmp_path, 1)
+    second = Job(specs["HToBB"], tmp_path, 1)
+    x_record = first.run_task("x", {}, lambda overwrite: _make_output(first))
+    y_record = second.run_task("y", {}, lambda overwrite: TaskOutcome(TaskResult()))
+    job = Job(specs["HToBB"], tmp_path, 1)
+    assert job.task_names() == ["x", "y"]
+    assert job.task_record("x") == x_record
+    assert job.task_record("y") == y_record
+    assert set(Manifest.read(job.manifest_path).tasks) == {"x", "y"}
+
+
+def test_the_manifest_lists_every_task_and_is_written_again_when_deleted(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    def failing(overwrite: bool) -> TaskOutcome:
+        raise RuntimeError("boom")
+
+    job = Job(specs["HToBB"], tmp_path, 1)
+    x_record = job.run_task("x", {}, lambda overwrite: _make_output(job))
+    with pytest.raises(RuntimeError, match="boom"):
+        job.run_task("y", {}, failing)
+    y_record = job.task_record("y")
+    assert y_record is not None
+    manifest = Manifest(
+        job.identity,
+        {
+            "x": TaskSummary("done", x_record.started, job.task_record_path("x")),
+            "y": TaskSummary("failed", y_record.started, job.task_record_path("y")),
+        },
+    )
+    assert Manifest.read(job.manifest_path) == manifest
+
+    job.manifest_path.unlink()
+    assert job.run_task("x", {}, lambda overwrite: _make_output(job)) == x_record
+    assert not job.manifest_path.exists()
+    z_record = job.run_task("z", {}, lambda overwrite: TaskOutcome(TaskResult()))
+    entry = TaskSummary("done", z_record.started, job.task_record_path("z"))
+    assert Manifest.read(job.manifest_path) == Manifest(
+        job.identity, {**manifest.tasks, "z": entry}
+    )
+
+
+def test_a_task_is_found_by_the_record_in_its_own_directory(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.root_dir.mkdir(parents=True)
-    Manifest(process="HToGG", job_id=1).write(job.manifest_path)
-    with pytest.raises(ValueError, match="belongs to HToGG job 1"):
-        Job(specs["HToBB"], tmp_path, 1)
+    job.run_task("x", {}, lambda overwrite: _make_output(job))
+    record_path = job.task_record_path("x")
+    deeper_dir = job.task_dir("x") / "deeper"
+    deeper_dir.mkdir()
+    shutil.copy(record_path, deeper_dir / "task.json")
+    shutil.copy(record_path, job.root_dir / "task.json")
+    (job.root_dir / "empty").mkdir()
+    assert job.task_names() == ["x"]
+
+
+def test_a_task_record_that_cannot_be_read_stops_every_task_of_the_job(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    calls: list[bool] = []
+
+    def body(overwrite: bool) -> TaskOutcome:
+        calls.append(overwrite)
+        return _make_output(job)
+
+    job = Job(specs["HToBB"], tmp_path, 1)
+    job.run_task("x", {}, body)
+    record_path = job.task_record_path("x")
+    record_path.write_text("{")
+    unreadable = re.escape(f"{record_path} is not valid JSON")
+    with pytest.raises(ValueError, match=unreadable):
+        job.task("x")
+    with pytest.raises(ValueError, match=unreadable):
+        job.run_task("x", {}, body, force=True)
+    with pytest.raises(ValueError, match=unreadable):
+        job.run_task("y", {}, body)
+    assert calls == [False]
+    assert job.set_aside_folders() == []
 
 
 def test_the_first_task_writes_the_identity_of_the_job(
@@ -446,7 +552,9 @@ def test_a_job_directory_removed_during_a_task_is_not_recreated(
         shutil.rmtree(job.root_dir)
         return _make_output(job)
 
-    with pytest.raises(FileNotFoundError, match="job.json was removed while a task"):
+    with pytest.raises(
+        FileNotFoundError, match="job.json was removed while the x task ran"
+    ):
         job.run_task("x", {}, remove_then_finish)
     assert not job.identity_path.exists()
     assert not job.manifest_path.exists()
@@ -482,7 +590,7 @@ def test_generate_records_what_madgraph_made(
 ) -> None:
     job = Job(specs["TTBar"], tmp_path, 3)
     record = generate(job, n_events=10, mg5_path=mg5_path)
-    assert Manifest.read(job.manifest_path).stages["generate"] == record
+    assert job.task_record("generate") == record
     assert record.status == "done"
     assert record.parameters == {"events": 10, "seed": 3}
     metadata = record.result.metadata
@@ -563,8 +671,8 @@ def test_a_failed_madgraph_run_is_recorded_and_retried(
     monkeypatch.setenv("FAKE_MG5_FAIL", "launch")
     with pytest.raises(MadGraphError):
         generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
-    manifest = Manifest.read(tmp_path / "HToBB" / "job_1" / "manifest.json")
-    record = manifest.stages["generate"]
+    record = Job(specs["HToBB"], tmp_path, 1).task_record("generate")
+    assert record is not None
     assert record.status == "failed" and record.finished is not None
     assert record.error is not None and "launch.mg5" in record.error
     monkeypatch.delenv("FAKE_MG5_FAIL")
@@ -593,7 +701,7 @@ def test_shower_records_what_it_made_and_keeps_it(
     )
     job = Job(specs["HToBB"], tmp_path, 1)
     record = shower(job, delphes_pythia8_path=delphes_pythia8_path)
-    assert Manifest.read(job.manifest_path).stages["shower"] == record
+    assert job.task_record("shower") == record
     assert record.status == "done"
     assert record.parameters == {
         "events": 10000,
@@ -685,7 +793,7 @@ def test_a_stage_records_the_folder_its_run_set_aside(
 
     record = job.run_task("x", {"events": 10}, body)
     assert record.set_aside == "x/omphjc-set-aside/20260101T000000Z-abc"
-    assert Manifest.read(job.manifest_path).stages["x"].set_aside == record.set_aside
+    assert job.task_record("x") == record
 
 
 def test_a_job_lists_and_clears_what_its_stages_set_aside(
@@ -904,9 +1012,40 @@ def test_simulate_counts_the_events_of_its_output(
     pids = ak.Array([[2212, 211], [2212], [211, 211, 22]])
     write_delphes_file(showered.path, {"PID": pids}, omit=omit)
     # The shower stage is recorded with the size of the file put in its place.
-    job.manifest.stages["shower"].result.outputs[EVENTS_OUTPUT] = replace(
+    record = job.task_record("shower")
+    assert record is not None
+    record.result.outputs[EVENTS_OUTPUT] = replace(
         showered, n_bytes=showered.path.stat().st_size
     )
+    record.write(job.task_record_path("shower"), root_dir=job.root_dir)
     simulate(job, delphes_root_path=delphes_root_path)
     assert showered.n_events == 1
     assert job.require_events("simulate").n_events == 3
+
+
+def test_a_forced_rerun_of_each_program_leaves_the_record_of_its_task(
+    specs: Mapping[str, ProcessSpec],
+    mg5_path: Path,
+    delphes_pythia8_path: Path,
+    delphes_root_path: Path,
+    tmp_path: Path,
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    runs = {
+        "generate": lambda force: generate(
+            job, n_events=10, force=force, mg5_path=mg5_path
+        ),
+        "shower": lambda force: shower(
+            job, force=force, delphes_pythia8_path=delphes_pythia8_path
+        ),
+        "simulate": lambda force: simulate(
+            job, force=force, delphes_root_path=delphes_root_path
+        ),
+    }
+    for stage, run in runs.items():
+        run(False)
+        record = run(True)
+        assert record.set_aside is None
+        assert job.task_record(stage) == record
+        stamp = read_stamp(job.task_dir(stage))
+        assert stamp is not None and "task.json" not in stamp.artifacts

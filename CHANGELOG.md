@@ -157,6 +157,10 @@
 - `Job.check_stage`, `StageCheck` and `StageStatus` are renamed `Job.task`,
   `Task` and `TaskStatus`, in `omphjc.jobs.task`, the former
   `omphjc.jobs.records`. (#64)
+- Each stage keeps its record in `<stage>/task.json`, read through
+  `Job.task_record`, and `manifest.json` is an index of the stages;
+  `Job.manifest` is removed and a job of an earlier version is run again
+  from `omphjc generate --force`. (#65)
 
 ### Fixed
 

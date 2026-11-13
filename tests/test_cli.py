@@ -148,15 +148,15 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
     assert lines[8] == "  cards             generate/cards/"
     assert lines[9].startswith("  took              ") and "s wall" in lines[9]
     assert "s CPU" in lines[9] and "MiB peak" in lines[9]
-    manifest = tmp_path / "HToBB" / "job_1" / "manifest.json"
-    assert manifest.is_file()
-    written = manifest.read_text()
+    job_dir = tmp_path / "HToBB" / "job_1"
+    record_paths = [job_dir / "generate" / "task.json", job_dir / "manifest.json"]
+    written = [path.read_text() for path in record_paths]
     again = CliRunner().invoke(
         cli, [*arguments, "--events", "10", "--mg5", str(mg5_path)]
     )
     assert again.exit_code == 0, again.output
     assert "MadGraph generation: done, kept from an earlier run" in again.output
-    assert manifest.read_text() == written
+    assert [path.read_text() for path in record_paths] == written
 
     other_count = CliRunner().invoke(cli, [*arguments, "--events", "20"])
     assert other_count.exit_code != 0

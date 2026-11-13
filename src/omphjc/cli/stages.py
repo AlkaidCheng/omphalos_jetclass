@@ -273,12 +273,12 @@ def _run_stage_command(
     """
     try:
         job = Job(spec, outdir, job_id)
-        earlier = job.manifest.stages.get(stage)
+        earlier = job.task_record(stage)
         with exception_on_termination():
             record = run(job)
     except _STAGE_ERRORS as error:
         raise click.ClickException(str(error)) from error
-    outcome = "done, kept from an earlier run" if record is earlier else "done"
+    outcome = "done, kept from an earlier run" if record == earlier else "done"
     click.echo(format_job_line(job.spec.name, job.job_id, job.root_dir))
     click.echo(f"{title}: {outcome}")
     for line in lines(job, record):
