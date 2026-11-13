@@ -1,6 +1,7 @@
 """The JetClass process catalogue."""
 
 from omphjc.processes.catalogue import (
+    CatalogueError,
     ProcessSpec,
     RunCardValue,
     SettingValue,
@@ -11,6 +12,7 @@ from omphjc.processes.catalogue import (
 )
 
 __all__ = [
+    "CatalogueError",
     "ProcessSpec",
     "RunCardValue",
     "SettingValue",

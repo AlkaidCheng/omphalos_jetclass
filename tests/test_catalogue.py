@@ -1,11 +1,19 @@
+import re
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import yaml
 
 from omphjc.config_paths import catalogue_path
-from omphjc.processes import ProcessSpec, get_process, process_names, read_catalogue
+from omphjc.processes import (
+    CatalogueError,
+    ProcessSpec,
+    get_process,
+    process_names,
+    read_catalogue,
+)
 
 JETCLASS_CLASSES = {
     "HToBB": "Hbb",
@@ -19,6 +27,10 @@ JETCLASS_CLASSES = {
     "ZToQQ": "Zqq",
     "ZJetsToNuNu": "QCD",
 }
+
+# One catalogue entry, without and with its process lines.
+ENTRY_HEAD = "  X:\n    label: X\n    description: d\n    model: sm\n"
+ENTRY = ENTRY_HEAD + "    processes: ['p p > z']\n"
 
 
 def test_catalogue_covers_the_ten_jetclass_classes(
@@ -148,6 +160,72 @@ def test_load_catalogue_rejects_duplicate_labels(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match=r"more than one process: \['Same'\]"):
+        read_catalogue(path)
+
+
+def test_a_file_that_is_not_yaml_is_refused_with_its_name(tmp_path: Path) -> None:
+    path = tmp_path / "unclosed.yaml"
+    path.write_text("processes: [unclosed\n", encoding="utf-8")
+    with pytest.raises(CatalogueError) as caught:
+        read_catalogue(path)
+    assert str(caught.value).startswith(f"Catalogue {path}: while parsing")
+    assert "expected ',' or ']', but got '<stream end>'" in str(caught.value)
+    assert isinstance(caught.value.__cause__, yaml.YAMLError)
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("", "The file holds no 'processes' mapping"),
+        ("- X\n", "The file holds no 'processes' mapping"),
+        ("common: {}\n", "The file holds no 'processes' mapping"),
+        ("processes: [X]\n", "The file holds no 'processes' mapping"),
+        ("common: [a]\nprocesses:\n" + ENTRY, "The common block must be a mapping"),
+        ("processes:\n  X: x\n", "Process 'X' must be a mapping, got 'x'"),
+        (
+            "common:\n  run_card: [a]\nprocesses:\n" + ENTRY,
+            "common: run_card must be a mapping, got ['a']",
+        ),
+        (
+            "processes:\n" + ENTRY + "    pythia: x\n",
+            "Process 'X': pythia must be a mapping, got 'x'",
+        ),
+    ],
+)
+def test_a_file_of_the_wrong_shape_is_refused_with_its_name(
+    tmp_path: Path, text: str, message: str
+) -> None:
+    path = tmp_path / "catalogue.yaml"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(CatalogueError, match=re.escape(f"Catalogue {path}: {message}")):
+        read_catalogue(path)
+
+
+@pytest.mark.parametrize("value", ["'p = g u d'", "[p = g u d, 1]", "{p: g}", "null"])
+@pytest.mark.parametrize(
+    ("template", "where"),
+    [
+        ("common:\n  definitions: {value}\nprocesses:\n" + ENTRY, "common"),
+        ("processes:\n" + ENTRY + "    definitions: {value}\n", "Process 'X'"),
+    ],
+)
+def test_definitions_must_be_a_list_of_strings(
+    tmp_path: Path, value: str, template: str, where: str
+) -> None:
+    path = tmp_path / "catalogue.yaml"
+    path.write_text(template.format(value=value), encoding="utf-8")
+    message = f"Catalogue {path}: {where}: definitions must be a list of strings"
+    with pytest.raises(CatalogueError, match=re.escape(message)):
+        read_catalogue(path)
+
+
+def test_process_lines_must_be_a_list_of_strings(tmp_path: Path) -> None:
+    path = tmp_path / "catalogue.yaml"
+    path.write_text(
+        "processes:\n" + ENTRY_HEAD + "    processes: p p > z\n", encoding="utf-8"
+    )
+    message = "Process 'X': processes must be a list of strings, got 'p p > z'"
+    with pytest.raises(CatalogueError, match=re.escape(message)):
         read_catalogue(path)
 
 

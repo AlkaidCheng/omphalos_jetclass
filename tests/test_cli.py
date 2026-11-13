@@ -65,6 +65,28 @@ def test_the_catalogue_can_come_from_the_environment(tmp_path: Path) -> None:
     assert "Only" in result.output
 
 
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("processes: [unclosed\n", "expected ',' or ']', but got '<stream end>'"),
+        (
+            "common:\n  definitions: p = g u d\nprocesses: {}\n",
+            "common: definitions must be a list of strings, got 'p = g u d'",
+        ),
+    ],
+)
+def test_a_malformed_catalogue_is_reported_as_an_error(
+    tmp_path: Path, text: str, message: str
+) -> None:
+    path = tmp_path / "broken.yaml"
+    path.write_text(text, encoding="utf-8")
+    result = CliRunner().invoke(cli, ["--catalogue", str(path), "processes"])
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit), result.exception
+    assert result.output.startswith(f"Error: Catalogue {path}: ")
+    assert message in result.output
+
+
 def test_config_path_and_export(tmp_path: Path) -> None:
     shown = CliRunner().invoke(cli, ["config", "path"])
     assert shown.exit_code == 0
