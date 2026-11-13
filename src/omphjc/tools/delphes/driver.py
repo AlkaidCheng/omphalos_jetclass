@@ -101,6 +101,7 @@ def simulate_events(
     card_path: Path | None = None,
     timeout: float | None = None,
     overwrite: bool = False,
+    log_dir: Path | None = None,
     delphes_root_path: Path | None = None,
 ) -> SimulationRun:
     """Simulate the detector on the events in `events_path` with ``DelphesROOT``.
@@ -130,6 +131,10 @@ def simulate_events(
         results by accident. It is replaced only after every other check has
         passed: deleted when the earlier run sealed it and nothing in it
         changed since, otherwise moved aside (see `SimulationRun.set_aside`).
+    log_dir : Path or None, optional
+        An existing directory to write the log in. By default the log is in
+        `workdir` and a later run replaces it; one in another directory stays
+        there.
     delphes_root_path : Path or None, optional
         Delphes's ``DelphesROOT``; by default the one on PATH.
 
@@ -159,7 +164,11 @@ def simulate_events(
     """
     require_file(events_path, what="Showered events")
     workspace = SimulationWorkspace(
-        spec, workdir, delphes_root_path=delphes_root_path, timeout=timeout
+        spec,
+        workdir,
+        delphes_root_path=delphes_root_path,
+        timeout=timeout,
+        log_dir=log_dir,
     )
     if not overwrite:
         require_unoccupied(workspace.output_path, what="Output file")
@@ -204,6 +213,8 @@ class SimulationWorkspace(ProgramWorkspace):
         Delphes's ``DelphesROOT``; by default the one on PATH.
     timeout : float or None, optional
         Seconds the run may take from now; ``None`` sets no limit.
+    log_dir : Path or None, optional
+        As :class:`~omphjc.workspace.ProgramWorkspace`.
 
     Raises
     ------
@@ -227,9 +238,14 @@ class SimulationWorkspace(ProgramWorkspace):
         *,
         delphes_root_path: Path | None = None,
         timeout: float | None = None,
+        log_dir: Path | None = None,
     ) -> None:
         super().__init__(
-            spec.name, workdir, program_path=delphes_root_path, timeout=timeout
+            spec.name,
+            workdir,
+            program_path=delphes_root_path,
+            timeout=timeout,
+            log_dir=log_dir,
         )
 
     @property
@@ -244,7 +260,7 @@ class SimulationWorkspace(ProgramWorkspace):
 
     @property
     def artifacts(self) -> list[str]:
-        return [_CARD_FILE, _OUTPUT_FILE, _LOG_FILE]
+        return [_CARD_FILE, _OUTPUT_FILE, *super().artifacts]
 
     def write_card(self, card_text: str) -> None:
         """Write the detector card the run uses."""

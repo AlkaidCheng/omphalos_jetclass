@@ -162,6 +162,7 @@ def shower_events(
     overrides: Mapping[str, SettingValue] | None = None,
     timeout: float | None = None,
     overwrite: bool = False,
+    log_dir: Path | None = None,
     delphes_pythia8_path: Path | None = None,
 ) -> ShowerRun:
     """Shower the events in `lhe_path` with Pythia 8 through ``DelphesPythia8``, simulating nothing.
@@ -192,6 +193,10 @@ def shower_events(
         results by accident. It is replaced only after every other check has
         passed: deleted when the earlier run sealed it and nothing in it
         changed since, otherwise moved aside (see `ShowerRun.set_aside`).
+    log_dir : Path or None, optional
+        An existing directory to write the log in. By default the log is in
+        `workdir` and a later run replaces it; one in another directory stays
+        there.
     delphes_pythia8_path : Path or None, optional
         Delphes's ``DelphesPythia8``; by default the one on PATH.
 
@@ -221,7 +226,11 @@ def shower_events(
     """
     require_file(lhe_path, what="Event file")
     workspace = ShowerWorkspace(
-        spec, workdir, delphes_pythia8_path=delphes_pythia8_path, timeout=timeout
+        spec,
+        workdir,
+        delphes_pythia8_path=delphes_pythia8_path,
+        timeout=timeout,
+        log_dir=log_dir,
     )
     if not overwrite:
         require_unoccupied(workspace.output_path, what="Output file")
@@ -281,6 +290,8 @@ class ShowerWorkspace(ProgramWorkspace):
         Delphes's ``DelphesPythia8``; by default the one on PATH.
     timeout : float or None, optional
         Seconds the run may take from now; ``None`` sets no limit.
+    log_dir : Path or None, optional
+        As :class:`~omphjc.workspace.ProgramWorkspace`.
 
     Raises
     ------
@@ -304,9 +315,14 @@ class ShowerWorkspace(ProgramWorkspace):
         *,
         delphes_pythia8_path: Path | None = None,
         timeout: float | None = None,
+        log_dir: Path | None = None,
     ) -> None:
         super().__init__(
-            spec.name, workdir, program_path=delphes_pythia8_path, timeout=timeout
+            spec.name,
+            workdir,
+            program_path=delphes_pythia8_path,
+            timeout=timeout,
+            log_dir=log_dir,
         )
 
     @property
@@ -331,7 +347,7 @@ class ShowerWorkspace(ProgramWorkspace):
 
     @property
     def artifacts(self) -> list[str]:
-        return [_EVENTS_FILE, _CMND_FILE, _CARD_FILE, _OUTPUT_FILE, _LOG_FILE]
+        return [_EVENTS_FILE, _CMND_FILE, _CARD_FILE, _OUTPUT_FILE, *super().artifacts]
 
     def write_inputs(self, lhe_path: Path, cmnd: PythiaCmnd) -> None:
         """Decompress `lhe_path` into the directory and write the command file and the card."""

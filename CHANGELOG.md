@@ -168,6 +168,9 @@
 - `task.json` keeps every run of a task, with its status, times, log and
   usage, and the reports of `omphjc generate`, `omphjc shower` and
   `omphjc simulate` count the runs of a task run more than once. (#67)
+- Each run of a task writes its log in `<stage>/runs/<run_id>/`, named by
+  the run ID that `task.json` records and the stage reports print first, and
+  later runs leave it in place. (#68)
 
 ### Fixed
 

@@ -267,10 +267,11 @@ def _run_stage_command(
 ) -> None:
     """Run `stage` of one job of `spec` through `run` and print its report.
 
-    `title` names the stage in the report and `lines` gives the rows between
-    the title and what the latest run took. A task run more than once also
-    gets a row with its number of runs and the status of each. An error in
-    :data:`_STAGE_ERRORS` becomes a :class:`click.ClickException`.
+    The report starts with `title`, which names the stage, and the ID of the
+    task's latest run; `lines` gives the rows between the ID and what that run
+    took. A task run more than once also gets a row with its number of runs
+    and the status of each. An error in :data:`_STAGE_ERRORS` becomes a
+    :class:`click.ClickException`.
     """
     try:
         job = Job(spec, outdir, job_id)
@@ -283,6 +284,7 @@ def _run_stage_command(
     outcome = "done, kept from an earlier run" if kept else "done"
     click.echo(format_job_line(job.spec.name, job.job_id, job.root_dir))
     click.echo(f"{title}: {outcome}")
+    click.echo(format_row("run ID", record.latest_run.run_id))
     for line in lines(job, record):
         click.echo(line)
     if len(record.runs) > 1:

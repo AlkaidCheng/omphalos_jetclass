@@ -46,6 +46,30 @@ def test_a_simulation_runs_in_its_own_working_directory(
     assert set(stamp.artifacts) == ARTIFACTS
 
 
+def test_a_log_directory_keeps_the_log_out_of_the_runs_artifacts(
+    specs: Mapping[str, ProcessSpec], delphes_root_path: Path, tmp_path: Path
+) -> None:
+    events_path = _write_events_path(tmp_path / "particles.root")
+    workdir = tmp_path / "simulate"
+    log_dirs = [tmp_path / "runs" / "first", tmp_path / "runs" / "second"]
+    for log_dir, overwrite in zip(log_dirs, (False, True), strict=True):
+        log_dir.mkdir(parents=True)
+        run = simulate_events(
+            specs["HToBB"],
+            events_path=events_path,
+            workdir=workdir,
+            seed=7,
+            overwrite=overwrite,
+            log_dir=log_dir,
+            delphes_root_path=delphes_root_path,
+        )
+        assert run.log_path == log_dir / "simulate.log"
+    assert not (workdir / "simulate.log").exists()
+    assert all((log_dir / "simulate.log").is_file() for log_dir in log_dirs)
+    stamp = read_stamp(workdir)
+    assert stamp is not None and set(stamp.artifacts) == ARTIFACTS - {"simulate.log"}
+
+
 def test_another_card_can_be_run_and_no_seed_leaves_it_alone(
     specs: Mapping[str, ProcessSpec], delphes_root_path: Path, tmp_path: Path
 ) -> None:

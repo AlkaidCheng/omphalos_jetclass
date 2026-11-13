@@ -14,7 +14,7 @@ from omphjc.jobs.task import (
     TaskResult,
 )
 from omphjc.processes.catalogue import SettingValue
-from omphjc.tools.pythia.driver import shower_events
+from omphjc.tools.pythia.driver import ShowerWorkspace, shower_events
 
 SHOWER = "shower"
 """The stage's name and directory, ``<job>/shower/``."""
@@ -69,7 +69,7 @@ def shower(
     task_dir = job.task_dir(SHOWER)
     pythia_overrides = dict(overrides or {})
 
-    def body(overwrite: bool) -> TaskOutcome:
+    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
         # This module loads the array libraries, so it is imported here and
         # not when a command starts.
         from omphjc.events.delphes_root import DelphesROOTFile
@@ -83,6 +83,7 @@ def shower(
             overrides=pythia_overrides,
             timeout=timeout,
             overwrite=overwrite,
+            log_dir=run_dir,
             delphes_pythia8_path=delphes_pythia8_path,
         )
         statistics = run.statistics
@@ -111,7 +112,6 @@ def shower(
                 },
                 metadata=metadata,
             ),
-            log_path=run.log_path,
             usage=run.usage.as_record(),
             set_aside_dir=run.set_aside,
         )
@@ -122,4 +122,6 @@ def shower(
         "pythia": pythia_overrides,
         "input_fingerprint": events.fingerprint,
     }
-    return job.run_task(SHOWER, parameters, body, force=force)
+    return job.run_task(
+        SHOWER, parameters, body, log_name=ShowerWorkspace.log_name, force=force
+    )

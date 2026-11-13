@@ -7,6 +7,7 @@
       manifest.json      an index of the tasks and their records (omphjc.jobs.manifest)
       <stage>/           one directory per task, named and laid out by its stage
         task.json        what the task ran with and what came out (omphjc.jobs.task)
+        runs/<run_id>/   one directory per run of the task, with that run's log
 
 The job number fixes the seed of every program the job runs
 (:func:`job_seed`); ``docs/reproducibility.md`` lists what else a rerun's
@@ -32,7 +33,6 @@ from omphjc.jobs.task import (
     TaskOutcome,
     TaskRecord,
     TaskStatus,
-    timestamp,
 )
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.safe_paths import inside, working_directory
@@ -40,14 +40,17 @@ from omphjc.stamps import SetAsideFolder, clear_set_aside_folders, set_aside_fol
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
 
 JOB_DIR_PREFIX = "job_"
+RUNS_DIR = "runs"
+"""The directory, in a task's directory, that holds one directory per run."""
 
 
 class TerminationError(RuntimeError):
     """The process received a termination signal."""
 
 
-TaskBody = Callable[[bool], TaskOutcome]
-"""Runs a task; the argument says whether to replace what an earlier run left."""
+TaskBody = Callable[[bool, Path], TaskOutcome]
+"""Runs a task; the arguments say whether to replace what an earlier run left,
+and give the directory of this run, where the program writes its log."""
 
 
 def sha256(path: Path) -> str:
@@ -130,6 +133,13 @@ class Job:
     def task_dir(self, name: str) -> Path:
         """Return the directory of the task `name`, ``<root>/<name>``."""
         return inside(self.root_dir, name)
+
+    def run_dir(self, name: str, run_id: str) -> Path:
+        """Return the directory of run `run_id` of task `name`.
+
+        It is ``<root>/<name>/runs/<run_id>``.
+        """
+        return inside(self.task_dir(name), RUNS_DIR, run_id)
 
     def relative_path(self, path: Path) -> str:
         """Return `path` as a POSIX path relative to the job directory."""
@@ -229,6 +239,7 @@ class Job:
         parameters: dict[str, Any],
         body: TaskBody,
         *,
+        log_name: str | None = None,
         force: bool = False,
     ) -> TaskRecord:
         """Run task `name` through `body` unless its result can be kept; record it.
@@ -241,9 +252,12 @@ class Job:
         the same; with other parameters, or under `force`, it runs as a new
         task with a new record. Either way `body` is told to replace what the
         earlier run left. The first task that runs creates the job directory
-        with its ``job.json``. The record of the task, ``task.json`` in its
+        with its ``job.json``. Each run gets a run ID and a directory,
+        ``<root>/<name>/runs/<run_id>``, that `body` receives for the
+        program's log. The record of the task, ``task.json`` in its
         directory, is written before `body` runs and after it returns or
-        raises, so a failed or interrupted run records how far it got.
+        raises, so a failed or interrupted run records how far it got and
+        where its log is.
         The manifest is written again after each of these writes.
 
         Parameters
@@ -254,7 +268,11 @@ class Job:
         parameters : dict
             What the task is asked for, as JSON values.
         body : TaskBody
-            Runs the task; receives whether to replace an earlier run's files.
+            Runs the task; receives whether to replace an earlier run's files
+            and the directory of this run.
+        log_name : str or None, optional
+            The name of the file the task's program writes its log to in the
+            directory of the run; ``None`` for a task without a log.
         force : bool, optional
             Run the task even when its result could be kept.
 
@@ -270,7 +288,8 @@ class Job:
             output of another size than recorded, and `force` is not set; the
             message names each parameter that differs. If the ``job.json`` of
             the directory identifies another job. If the ``task.json`` of a
-            task of the job cannot be read as a record.
+            task of the job cannot be read as a record. If `log_name` is not
+            a plain file name.
         FileNotFoundError
             If the ``job.json`` of the directory was removed while the task
             ran. The task is then not recorded.
@@ -289,16 +308,19 @@ class Job:
                     "regenerate the file"
                 )
         overwrite = force or previous_record is not None
-        started = timestamp()
         clock = time.monotonic()
         self._record_identity()
         if previous_record is None or force or previous_record.parameters != parameters:
-            record = TaskRecord.running(parameters, started=started)
+            record = TaskRecord.running(parameters)
         else:
-            record = previous_record.rerun(started=started)
+            record = previous_record.rerun()
+        run_dir = self.run_dir(name, record.latest_run.run_id)
+        if log_name is not None:
+            record = record.with_log(self.relative_path(inside(run_dir, log_name)))
         self._write_record(name, record)
         try:
-            outcome = body(overwrite)
+            run_dir.mkdir(parents=True)
+            outcome = body(overwrite, run_dir)
         except BaseException as error:
             self._write_record(name, record.failed(error=str(error)))
             raise
@@ -401,7 +423,7 @@ class Job:
             task_record = TaskRecord.read(path, root_dir=self.root_dir)
             tasks[task_name] = TaskSummary(
                 task_record.latest_run.status,
-                task_record.latest_run.started,
+                task_record.latest_run.run_id,
                 len(task_record.runs),
                 path,
             )
