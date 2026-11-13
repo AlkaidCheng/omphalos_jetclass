@@ -175,4 +175,4 @@
 - `read_catalogue` raises a `CatalogueError` that names the file for a
   malformed catalogue, including `definitions` or `processes` that are not
   lists of strings, and `omphjc --catalogue` reports it without a traceback.
-  (#63)
+  (#62)
