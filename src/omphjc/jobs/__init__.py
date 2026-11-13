@@ -11,8 +11,9 @@ The modules, by what they hold::
     job.py          Job: the job directory, its seed, and the rules that decide
                     whether a task runs again (Job.run_task)
     task.py         Task and TaskStatus, a task as found on disk; TaskRecord, the
-                    content of task.json, and what a task makes: TaskResult,
-                    TaskOutput, EventOutput, TaskOutcome
+                    content of task.json, with a TaskRun for each run, and
+                    what a task makes: TaskResult, TaskOutput, EventOutput,
+                    TaskOutcome
     identity.py     JobIdentity, the content of job.json
     manifest.py     Manifest, the content of manifest.json, which lists a
                     TaskSummary of each task's record
@@ -24,8 +25,9 @@ which returns a run record with absolute paths. The stage function builds a
 :class:`TaskOutcome` from it: the :class:`TaskResult`, which holds the task's
 outputs by name (a :class:`TaskOutput` each, an :class:`EventOutput` for an
 event file) and its metadata, with the log and usage of the run.
-:meth:`Job.run_task` adds the status, the start and finish times and the
-parameters and writes them as a :class:`TaskRecord` to ``task.json``, with
+:meth:`Job.run_task` records the run as a :class:`TaskRun`, with its
+status, start and finish times, log and usage, and writes it with the
+parameters and the result as a :class:`TaskRecord` to ``task.json``, with
 every path relative to the job directory.
 """
 
@@ -43,6 +45,7 @@ from omphjc.jobs.task import (
     DONE,
     EVENTS_OUTPUT,
     FAILED,
+    INTERRUPTED,
     RUNNING,
     EventOutput,
     Task,
@@ -50,6 +53,7 @@ from omphjc.jobs.task import (
     TaskOutput,
     TaskRecord,
     TaskResult,
+    TaskRun,
     TaskStatus,
 )
 
@@ -58,9 +62,11 @@ __all__ = [
     "EVENTS_OUTPUT",
     "FAILED",
     "GENERATE",
+    "INTERRUPTED",
     "RUNNING",
     "SHOWER",
     "SIMULATE",
+    "TaskRun",
     "EventOutput",
     "Job",
     "JobIdentity",

@@ -165,6 +165,9 @@
   ran with other parameters by naming each parameter that differs, a nested
   one by its dotted path, with the value it ran with and the current one.
   (#66)
+- `task.json` keeps every run of a task, with its status, times, log and
+  usage, and the reports of `omphjc generate`, `omphjc shower` and
+  `omphjc simulate` count the runs of a task run more than once. (#67)
 
 ### Fixed
 

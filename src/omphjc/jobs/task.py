@@ -5,9 +5,6 @@ A task is the work of one stage in a job. Its record is the file
 
     {
       "schema": 1,
-      "status": "done",
-      "started": "2026-10-23T01:00:00+00:00",
-      "finished": "2026-10-23T01:20:00+00:00",
       "parameters": {"events": 1000, "seed": 10000001},
       "result": {
         "outputs": {
@@ -26,41 +23,69 @@ A task is the work of one stage in a job. Its record is the file
           "cards": {"generate/cards/run_card.dat": "<sha256>"}
         }
       },
-      "log": "generate/madgraph.log",
-      "usage": {"wall_seconds": 1203.4, "cpu_seconds": 9012.7, "peak_memory_mib": 812.5},
-      "set_aside": null,
-      "error": null
+      "runs": [
+        {
+          "status": "failed",
+          "started": "2026-10-23T01:00:00+00:00",
+          "finished": "2026-10-23T01:05:00+00:00",
+          "usage": {"wall_seconds": 301.2},
+          "log": "generate/madgraph.log",
+          "set_aside": null,
+          "error": "MadGraph exited with status 1"
+        },
+        {
+          "status": "done",
+          "started": "2026-10-23T02:00:00+00:00",
+          "finished": "2026-10-23T02:20:00+00:00",
+          "usage": {
+            "wall_seconds": 1203.4, "cpu_seconds": 9012.7, "peak_memory_mib": 812.5
+          },
+          "log": "generate/madgraph.log",
+          "set_aside": null,
+          "error": null
+        }
+      ]
     }
 
-:mod:`omphjc.jobs.record_file` describes ``schema``.
-``status`` is ``"running"``, ``"done"`` or ``"failed"``. ``parameters`` is
-what the task was asked for, the seed included where its stage uses one, and
+:mod:`omphjc.jobs.record_file` describes ``schema``. ``parameters`` is what
+the task was asked for, the seed included where its stage uses one, and
 decides whether a later run may keep its result. ``result`` is what the task
-made (:class:`TaskResult`). ``outputs`` holds its files under the names the
-stage gives them: each has its ``path`` and its size in bytes, ``n_bytes``,
-and an event file also its ``format``, the number of events it holds and the
-``fingerprint`` of its content; the next task reads the one named ``events``.
-``metadata`` is what is known about the task and the sample it made; its keys
-are the stage's own. Every path is relative to the job directory;
-``set_aside`` names the folder into which the run moved what an
-earlier run left and it could not confirm as that run's
-(:mod:`omphjc.stamps`), ``null`` when it moved nothing. ``usage`` is what the
-task took: its wall time, and the CPU time and peak memory (MiB) of the
-external program's processes where the platform reports them.
+made (:class:`TaskResult`), ``null`` unless its latest run is done.
+``outputs`` holds its files under the names the stage gives them: each has
+its ``path`` and its size in bytes, ``n_bytes``, and an event file also its
+``format``, the number of events it holds and the ``fingerprint`` of its
+content; the next task reads the one named ``events``. ``metadata`` is what is
+known about the task and the sample it made; its keys are the stage's own.
 
-:class:`TaskRecord` has one constructor per status. :meth:`TaskRecord.running`
-records a task that has started, :meth:`TaskRecord.failed` one that raised,
-and :meth:`TaskRecord.done` one that returned a :class:`TaskOutcome`, whose
-result it holds unchanged.
+``runs`` lists the runs of the task, oldest first. Running a task again with
+the same parameters, after a failure, an interruption or the loss of an
+output, adds a run; a run with other parameters, or under ``force``, starts a
+new task with one run. The ``status`` of a run says how it ended:
+``"running"``, ``"done"``, ``"failed"`` or ``"interrupted"``. A run that a
+killed process left ``"running"`` is marked ``"interrupted"`` when the next
+one starts. What a rerun follows is the status of the run before it: a
+failure, an interruption, or, after a ``"done"`` run, a missing output. Every
+path is relative to the job directory; ``set_aside`` names the folder into
+which the run moved what an earlier run left and it could not confirm as that
+run's (:mod:`omphjc.stamps`), ``null`` when it moved nothing. ``usage`` is
+what the run took: its wall time, and the CPU time and peak memory (MiB) of
+the external program's processes where the platform reports them.
 
-A record says how the last run of the task ended. Whether its result can be
-used also depends on its output files, which may have been deleted or changed
-since: :class:`Task` holds a task as found on disk, and its
-:class:`TaskStatus` takes both into account.
+:meth:`TaskRecord.running` starts the record of a task, and
+:meth:`TaskRecord.rerun` adds a run to it. :meth:`TaskRecord.failed`
+and :meth:`TaskRecord.done` record how the latest run ended, the second
+with the result of the :class:`TaskOutcome` it returned, unchanged.
+
+A record says how each run of the task ended, nothing more. Whether the task
+is done now also depends on its output files, which may have been deleted or
+changed since: :class:`Task` holds a task as found on disk, and its
+:class:`TaskStatus` takes the record and the files into account. A task whose
+latest run is done has :attr:`TaskStatus.DONE` only while its outputs are
+intact.
 """
 
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -69,9 +94,13 @@ from typing import Any, ClassVar
 from omphjc.events.formats import EventFormat
 from omphjc.jobs.record_file import RecordFile
 
-DONE = "done"
+# How a run ended, or that it is still running.
 RUNNING = "running"
+DONE = "done"
 FAILED = "failed"
+INTERRUPTED = "interrupted"
+
+_STATUSES = (RUNNING, DONE, FAILED, INTERRUPTED)
 
 EVENTS_OUTPUT = "events"
 """The name of the output that holds the events the next task reads."""
@@ -183,64 +212,162 @@ class TaskOutcome:
     set_aside_dir: Path | None = None
 
 
-@dataclass
-class TaskRecord(RecordFile):
-    """What one task did; the module docstring describes the fields."""
+@dataclass(frozen=True)
+class TaskRun:
+    """One run of a task; the module docstring describes the fields.
 
-    file_name: ClassVar[str] = "task.json"
+    Raises
+    ------
+    ValueError
+        If `status` is not one the module docstring lists.
+    """
 
     status: str
     started: str
     finished: str | None = None
-    parameters: dict[str, Any] = field(default_factory=dict)
-    result: TaskResult = field(default_factory=TaskResult)
-    log: str | None = None
     usage: dict[str, float] = field(default_factory=dict)
+    log: str | None = None
     set_aside: str | None = None
     error: str | None = None
 
+    def __post_init__(self) -> None:
+        if self.status not in _STATUSES:
+            raise ValueError(f"unknown run status {self.status!r}")
+
+
+@dataclass(frozen=True)
+class TaskRecord(RecordFile):
+    """What one task did; the module docstring describes the fields.
+
+    Raises
+    ------
+    ValueError
+        If the record has no run, or holds a result while its latest
+        run is not done, or none while it is.
+    """
+
+    file_name: ClassVar[str] = "task.json"
+
+    parameters: dict[str, Any]
+    runs: tuple[TaskRun, ...]
+    result: TaskResult | None = None
+
+    def __post_init__(self) -> None:
+        if not self.runs:
+            raise ValueError("the record has no runs")
+        status = self.latest_run.status
+        if self.is_done and self.result is None:
+            raise ValueError(
+                f"the latest run has status {status!r} but the record has no result"
+            )
+        if not self.is_done and self.result is not None:
+            raise ValueError(
+                f"the latest run has status {status!r} but the record has a result"
+            )
+
+    @property
+    def latest_run(self) -> TaskRun:
+        """The latest run of the task."""
+        return self.runs[-1]
+
+    @property
+    def is_done(self) -> bool:
+        """Whether the latest run of the task is done."""
+        return self.latest_run.status == DONE
+
+    @property
+    def outputs(self) -> dict[str, TaskOutput]:
+        """The outputs of the task, under the names its stage gives them.
+
+        Raises
+        ------
+        ValueError
+            If the latest run is not done.
+        """
+        return self._done_result().outputs
+
+    @property
+    def events(self) -> EventOutput | None:
+        """The event file the task made, which the next task reads.
+
+        It is ``None`` when the task made no event file.
+
+        Raises
+        ------
+        ValueError
+            If the latest run is not done.
+        """
+        events = self.outputs.get(EVENTS_OUTPUT)
+        return events if isinstance(events, EventOutput) else None
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """What is known about the task and the sample it made.
+
+        Raises
+        ------
+        ValueError
+            If the latest run is not done.
+        """
+        return self._done_result().metadata
+
     def as_record(self) -> dict[str, Any]:
-        """Return the fields by name."""
-        return asdict(self)
+        """Return the parameters, the result and the runs by name."""
+        return {
+            "parameters": self.parameters,
+            "result": None if self.result is None else asdict(self.result),
+            "runs": [asdict(run) for run in self.runs],
+        }
 
     @classmethod
     def from_record(cls, record: dict[str, Any], root_dir: Path) -> "TaskRecord":
         """Return the task record that `record` describes.
 
-        A path in the result becomes an absolute path under `root_dir`.
+        A path in the result becomes an absolute path under `root_dir`. A
+        record without runs is refused.
         """
-        result = TaskResult.from_record(record.pop("result"), root_dir)
-        return cls(**record, result=result)
-
-    @classmethod
-    def running(cls, *, started: str, parameters: dict[str, Any]) -> "TaskRecord":
-        """Return the record of a task that has started."""
-        return cls(status=RUNNING, started=started, parameters=parameters)
-
-    @classmethod
-    def failed(
-        cls, *, started: str, parameters: dict[str, Any], error: str
-    ) -> "TaskRecord":
-        """Return the record of a task that has just raised `error`."""
+        if "runs" not in record:
+            raise ValueError("the record has no runs")
+        fields = dict(record)
+        runs = tuple(TaskRun(**run) for run in fields.pop("runs"))
+        result = fields.pop("result")
         return cls(
-            status=FAILED,
-            started=started,
-            finished=timestamp(),
-            parameters=parameters,
-            error=error,
+            **fields,
+            runs=runs,
+            result=None if result is None else TaskResult.from_record(result, root_dir),
         )
 
     @classmethod
+    def running(cls, parameters: dict[str, Any], *, started: str) -> "TaskRecord":
+        """Return the record of a new task whose first run has started."""
+        return cls(parameters, (TaskRun(RUNNING, started),))
+
+    def rerun(self, *, started: str) -> "TaskRecord":
+        """Return the record with a further run that has started.
+
+        A run still ``running``, left by a killed process, becomes
+        ``interrupted``. The record holds no result until the new run is
+        done.
+        """
+        latest = self.latest_run
+        previous_runs = self.runs
+        if latest.status == RUNNING:
+            interrupted = replace(latest, status=INTERRUPTED)
+            previous_runs = (*previous_runs[:-1], interrupted)
+        run = TaskRun(RUNNING, started)
+        return replace(self, runs=(*previous_runs, run), result=None)
+
+    def failed(self, *, error: str) -> "TaskRecord":
+        """Return the record with its latest run failed with `error`."""
+        latest = replace(
+            self.latest_run, status=FAILED, finished=timestamp(), error=error
+        )
+        return replace(self, runs=(*self.runs[:-1], latest))
+
     def done(
-        cls,
-        outcome: TaskOutcome,
-        *,
-        started: str,
-        parameters: dict[str, Any],
-        wall_seconds: float,
-        root_dir: Path,
+        self, outcome: TaskOutcome, *, wall_seconds: float, root_dir: Path
     ) -> "TaskRecord":
-        """Return the record of a task that has just returned `outcome`.
+        """Return the record with its latest run done and the result of `outcome`.
 
         The log and the set-aside folder of `outcome` are made relative to
         `root_dir`, the job directory, and `wall_seconds` is added to its usage.
@@ -249,20 +376,28 @@ class TaskRecord(RecordFile):
         def relative(path: Path) -> str:
             return path.relative_to(root_dir).as_posix()
 
-        return cls(
+        latest = replace(
+            self.latest_run,
             status=DONE,
-            started=started,
             finished=timestamp(),
-            parameters=parameters,
-            result=outcome.result,
-            log=None if outcome.log_path is None else relative(outcome.log_path),
             usage={"wall_seconds": round(wall_seconds, 3), **outcome.usage},
+            log=None if outcome.log_path is None else relative(outcome.log_path),
             set_aside=(
                 None
                 if outcome.set_aside_dir is None
                 else relative(outcome.set_aside_dir)
             ),
         )
+        return replace(self, runs=(*self.runs[:-1], latest), result=outcome.result)
+
+    def _done_result(self) -> TaskResult:
+        """Return the result, which only a record whose latest run is done holds."""
+        if self.result is None:
+            raise ValueError(
+                "The task record has no result: its latest run has status "
+                f"{self.latest_run.status!r}"
+            )
+        return self.result
 
 
 class TaskStatus(Enum):

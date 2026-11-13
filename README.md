@@ -406,10 +406,13 @@ same events; [What a rerun reproduces](docs/reproducibility.md) lists what else
 they depend on, such as the core count for a process with MadSpin. The first
 stage that runs writes the process, the job number and the seed to `job.json`,
 and no stage runs in a directory whose `job.json` gives another process, job
-number or seed. Each stage keeps a record, `task.json`, in its directory: its
-status, its start and end times, the parameters it was asked for, its result,
-its log, and what it took: the wall time of the stage and the CPU time and
-peak memory of the program's processes.
+number or seed. Each stage keeps a record, `task.json`, in its directory: the
+parameters it was asked for, its result, and one entry per run of the stage
+with the run's status, its start and end times, its log, and what it took: the
+wall time of the run and the CPU time and peak memory of the program's
+processes. The status of the stage is that of its latest run, and what a
+rerun followed is the status of the run before it: a failure, an interruption,
+or, after a run that was done, a missing output.
 The result names the stage's outputs, giving
 each file's size and an event file's format, number of events and fingerprint,
 and holds the metadata of what it made. Two event files with the same events
@@ -429,16 +432,20 @@ therefore keeps the stages after it, and a stage whose input events changed is
 refused unless `--force` is given.
 
 `manifest.json` is an index of the job: the process, the job number, the seed
-and the omphjc version, and for each stage that has a record its status, its
-start time and the path of its `task.json`. A stage writes it again from the
+and the omphjc version, and for each stage that has a record its status, the
+start time of its latest run, its number of runs and the path of its
+`task.json`. A stage writes it again from the
 records whenever it writes its own. The commands read the records and never
 the manifest, so a deleted manifest is written again by the next stage that
 runs.
 
 Running a stage again keeps a result recorded as done whose outputs are
-present and whose parameters match, runs again a stage that failed or was
-interrupted, replacing what it left, and refuses other parameters unless
-`--force` is given. A changed seed, as after an edit of the process's
+present and whose parameters match, runs again a stage that failed, was
+interrupted or lost an output, replacing what it left, and refuses other
+parameters unless `--force` is given. Such a run with the same parameters is
+added to the stage's record, which marks a run left behind by a killed
+process as interrupted, and the report then counts the runs; a run with other
+parameters or with `--force` starts a new record. A changed seed, as after an edit of the process's
 `seed_offset`, is refused with `--force` too, since the job keeps the seed in
 its `job.json`. A stage with an output that no
 longer has the size in the stage's record, as after a truncated copy, is

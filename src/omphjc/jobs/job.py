@@ -27,8 +27,6 @@ from omphjc.comparison import Difference
 from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.task import (
-    DONE,
-    EVENTS_OUTPUT,
     EventOutput,
     Task,
     TaskOutcome,
@@ -171,10 +169,10 @@ class Job:
         a missing one.
         """
         record = self.task_record(name)
-        if record is None or record.status != DONE:
+        if record is None or not record.is_done:
             return Task(name, TaskStatus.NOT_DONE, record=record)
         status, detail = TaskStatus.DONE, ""
-        for output in record.result.outputs.values():
+        for output in record.outputs.values():
             try:
                 n_bytes = output.path.stat().st_size
             except FileNotFoundError:
@@ -220,8 +218,8 @@ class Job:
         ValueError
             As :meth:`require_done` does, or if the task made no event file.
         """
-        events = self.require_done(name).result.outputs.get(EVENTS_OUTPUT)
-        if not isinstance(events, EventOutput):
+        events = self.require_done(name).events
+        if events is None:
             raise ValueError(f"The {name} stage of {self.root_dir} made no event file")
         return events
 
@@ -238,13 +236,15 @@ class Job:
         A task recorded as done, with its outputs present and the same
         `parameters`, is kept. One recorded as done with other parameters, or
         with an output of another size than recorded, is refused unless
-        `force` is set. One recorded as failed or interrupted, or run under
-        `force`, runs again, and `body` is told to replace what the earlier
-        run left. The first task that runs creates the job directory with its
-        ``job.json``. The record of the task, ``task.json`` in its directory,
-        is written before `body` runs and after it returns or raises, so a
-        failed or interrupted task records how far it got. The manifest is
-        written again after each of these writes.
+        `force` is set. One that failed, was interrupted or lost an output
+        runs again, and the run is added to its record when `parameters` are
+        the same; with other parameters, or under `force`, it runs as a new
+        task with a new record. Either way `body` is told to replace what the
+        earlier run left. The first task that runs creates the job directory
+        with its ``job.json``. The record of the task, ``task.json`` in its
+        directory, is written before `body` runs and after it returns or
+        raises, so a failed or interrupted run records how far it got.
+        The manifest is written again after each of these writes.
 
         Parameters
         ----------
@@ -278,39 +278,32 @@ class Job:
             Whatever `body` raised, after the failure is recorded.
         """
         task = self.task(name)
-        earlier = task.record
-        if earlier is not None and earlier.status == DONE and not force:
-            self._check_parameters(name, earlier.parameters, parameters)
+        previous_record = task.record
+        if previous_record is not None and previous_record.is_done and not force:
+            self._check_parameters(name, previous_record.parameters, parameters)
             if task.status is TaskStatus.DONE:
-                return earlier
+                return previous_record
             if task.status is TaskStatus.CHANGED:
                 raise ValueError(
                     f"{task.detail}; run omphjc {name} with --force to "
                     "regenerate the file"
                 )
-        overwrite = force or earlier is not None
+        overwrite = force or previous_record is not None
         started = timestamp()
         clock = time.monotonic()
         self._record_identity()
-        self._write_record(
-            name, TaskRecord.running(started=started, parameters=parameters)
-        )
+        if previous_record is None or force or previous_record.parameters != parameters:
+            record = TaskRecord.running(parameters, started=started)
+        else:
+            record = previous_record.rerun(started=started)
+        self._write_record(name, record)
         try:
             outcome = body(overwrite)
         except BaseException as error:
-            self._write_record(
-                name,
-                TaskRecord.failed(
-                    started=started, parameters=parameters, error=str(error)
-                ),
-            )
+            self._write_record(name, record.failed(error=str(error)))
             raise
-        record = TaskRecord.done(
-            outcome,
-            started=started,
-            parameters=parameters,
-            wall_seconds=time.monotonic() - clock,
-            root_dir=self.root_dir,
+        record = record.done(
+            outcome, wall_seconds=time.monotonic() - clock, root_dir=self.root_dir
         )
         self._write_record(name, record)
         return record
@@ -407,7 +400,10 @@ class Job:
             path = self.task_record_path(task_name)
             task_record = TaskRecord.read(path, root_dir=self.root_dir)
             tasks[task_name] = TaskSummary(
-                task_record.status, task_record.started, path
+                task_record.latest_run.status,
+                task_record.latest_run.started,
+                len(task_record.runs),
+                path,
             )
         Manifest(self.identity, tasks).write(self.manifest_path)
 
