@@ -5,7 +5,7 @@ import re
 import shutil
 import signal
 import socket
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +21,7 @@ from omphjc.events import EventFormat
 from omphjc.events.delphes_root import DelphesROOTFile
 from omphjc.jobs import (
     EVENTS_OUTPUT,
+    AcceptedInput,
     EventOutput,
     Job,
     JobIdentity,
@@ -125,6 +126,7 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
             "error": None,
         }
     ]
+    assert written["accepted_input"] is None
     assert written["result"] == {
         "outputs": {
             "events": {
@@ -702,6 +704,122 @@ def test_a_run_whose_record_was_deleted_records_its_end(
     assert job.task_record("x") == record
 
 
+PARAMETERS = {"events": 10, "input_fingerprint": "v1:original"}
+CHANGED_INPUT_PARAMETERS = {"events": 10, "input_fingerprint": "v1:changed"}
+
+
+def _body(job: Job) -> Callable[[bool, Path], TaskOutcome]:
+    """Return a body that makes the output of task ``x`` of `job`."""
+    return lambda overwrite, run_dir: _make_output(job)
+
+
+def test_an_accepted_input_keeps_a_done_task_without_a_run(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    done_record = job.run_task("x", PARAMETERS, _body(job))
+    with pytest.raises(ValueError, match="input_fingerprint: expected v1:original"):
+        job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job))
+    accepted_record = job.run_task(
+        "x", CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True
+    )
+    assert accepted_record.accepted_input is not None
+    assert accepted_record.accepted_input.fingerprint == "v1:changed"
+    assert accepted_record.is_done
+    assert (
+        accepted_record.parameters,
+        accepted_record.runs,
+        accepted_record.result,
+    ) == (
+        done_record.parameters,
+        done_record.runs,
+        done_record.result,
+    )
+    assert job.task_record("x") == accepted_record
+    assert job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job)) == accepted_record
+    assert job.run_task("x", PARAMETERS, _body(job)) == accepted_record
+    assert (
+        job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
+        == accepted_record
+    )
+    assert (
+        job.run_task("x", PARAMETERS, _body(job), accept_input=True) == accepted_record
+    )
+
+
+def test_a_later_acceptance_replaces_the_earlier_one(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    job.run_task("x", PARAMETERS, _body(job))
+    job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
+    later_parameters = {**PARAMETERS, "input_fingerprint": "v1:later"}
+    later_record = job.run_task("x", later_parameters, _body(job), accept_input=True)
+    assert later_record.accepted_input is not None
+    assert later_record.accepted_input.fingerprint == "v1:later"
+    assert job.run_task("x", later_parameters, _body(job)) == later_record
+    with pytest.raises(ValueError, match="input_fingerprint: expected v1:original"):
+        job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job))
+
+
+def test_an_input_is_accepted_only_when_nothing_else_differs(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    done_record = job.run_task("x", PARAMETERS, _body(job))
+    other_parameters = {**CHANGED_INPUT_PARAMETERS, "events": 20}
+    with pytest.raises(ValueError, match="events: expected 10") as refusal:
+        job.run_task("x", other_parameters, _body(job), accept_input=True)
+    assert "input_fingerprint" not in str(refusal.value)
+    with pytest.raises(ValueError, match="events: expected 10"):
+        job.run_task("x", {"events": 20}, _body(job), accept_input=True)
+    with pytest.raises(ValueError, match="cannot both be set"):
+        job.run_task(
+            "x", CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True, force=True
+        )
+    assert job.task_record("x") == done_record
+
+
+def test_accept_input_changes_nothing_for_a_task_that_is_not_done(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    with pytest.raises(RuntimeError, match="boom"):
+        job.run_task("x", PARAMETERS, _fail, accept_input=True)
+    failed_record = job.task_record("x")
+    assert failed_record is not None
+    assert failed_record.latest_run.status == "failed"
+    record = job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
+    assert record.is_done and len(record.runs) == 1
+    assert record.parameters == CHANGED_INPUT_PARAMETERS
+    assert record.accepted_input is None
+
+
+def test_a_record_holds_an_accepted_input_only_when_its_latest_run_is_done() -> None:
+    with pytest.raises(ValueError, match="has an accepted input"):
+        TaskRecord({}, (_run("failed"),), accepted_input=AcceptedInput("f", "t"))
+
+
+def test_a_task_run_again_after_an_acceptance_compares_the_input_it_ran_on(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    job.run_task("x", PARAMETERS, _body(job))
+    job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
+    (job.task_dir("x") / "out.txt").unlink()
+    with pytest.raises(ValueError, match="input_fingerprint: expected v1:original"):
+        job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job))
+    rerun = job.run_task("x", PARAMETERS, _body(job))
+    assert len(rerun.runs) == 2
+    assert rerun.accepted_input is None
+    with pytest.raises(ValueError, match="input_fingerprint: expected v1:original"):
+        job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job))
+    forced = job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job), force=True)
+    assert (
+        forced.parameters == CHANGED_INPUT_PARAMETERS and forced.accepted_input is None
+    )
+
+
 def test_two_jobs_opened_on_one_directory_keep_the_records_of_both_tasks(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
@@ -1232,6 +1350,40 @@ def test_a_stage_whose_input_events_changed_is_refused_unless_forced(
         simulate(job, delphes_root_path=delphes_root_path)
     forced = simulate(job, delphes_root_path=delphes_root_path, force=True)
     assert forced.parameters["input_fingerprint"] == root_fingerprint
+
+
+def test_an_accepted_input_keeps_a_stage_and_the_stages_after_it(
+    specs: Mapping[str, ProcessSpec],
+    mg5_path: Path,
+    delphes_pythia8_path: Path,
+    delphes_root_path: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    _, showered, simulated = _run_all(
+        job, mg5_path, delphes_pythia8_path, delphes_root_path
+    )
+    monkeypatch.setenv("FAKE_MG5_EVENTS", "2")
+    generate(job, n_events=10, mg5_path=mg5_path, force=True)
+    lhe_fingerprint = job.require_events("generate").fingerprint
+    accepted_record = shower(
+        job, delphes_pythia8_path=delphes_pythia8_path, accept_input=True
+    )
+    assert accepted_record.accepted_input is not None
+    assert accepted_record.accepted_input.fingerprint == lhe_fingerprint
+    assert accepted_record.parameters == showered.parameters
+    assert accepted_record.runs == showered.runs
+    assert shower(job, delphes_pythia8_path=delphes_pythia8_path) == accepted_record
+    assert simulate(job, delphes_root_path=delphes_root_path) == simulated
+    assert (
+        simulate(job, delphes_root_path=delphes_root_path, accept_input=True)
+        == simulated
+    )
+    with pytest.raises(ValueError, match="cannot both be set"):
+        shower(job, accept_input=True, force=True)
+    with pytest.raises(ValueError, match="cannot both be set"):
+        simulate(job, accept_input=True, force=True)
 
 
 def test_a_kept_stage_reads_no_event_file(

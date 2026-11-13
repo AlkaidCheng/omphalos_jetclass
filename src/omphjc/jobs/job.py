@@ -28,6 +28,7 @@ from omphjc.comparison import Difference
 from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.task import (
+    INPUT_FINGERPRINT_PARAMETER,
     EventOutput,
     Task,
     TaskOutcome,
@@ -248,28 +249,38 @@ class Job:
         body: TaskBody,
         *,
         log_name: str | None = None,
+        accept_input: bool = False,
         force: bool = False,
     ) -> TaskRecord:
         """Run task `name` through `body` unless its result can be kept; record it.
 
         A task recorded as done, with its outputs present and the same
         `parameters`, is kept. One recorded as done with other parameters, or
-        with an output of another size than recorded, is refused unless
-        `force` is set. One that failed, was interrupted or lost an output
-        runs again, and the run is added to its record when `parameters` are
-        the same; with other parameters, or under `force`, it runs as a new
-        task with a new record. Either way `body` is told to replace what the
-        earlier run left. The first task that runs creates the job directory
-        with its ``job.json``. Each run gets a run ID and a directory,
-        ``<root>/<name>/runs/<run_id>``, that `body` receives for the
-        program's log. The record of the task, ``task.json`` in its
-        directory, is written before `body` runs and after it returns or
-        raises, so a failed or interrupted run records how far it got and
-        where its log is. A run that ``SIGTERM`` or a keyboard interrupt ended
-        is recorded as interrupted, and one that raised anything else as
-        failed. How a run ended is written only while it is still the latest
-        run in the record on disk.
-        The manifest is written again after each of these writes.
+        with an output of another size than recorded, is refused unless `force`
+        is set. With `accept_input`, a task recorded as done with its outputs
+        present is also kept when `parameters` differ from those it ran with in
+        the fingerprint of its input alone
+        (:data:`~omphjc.jobs.task.INPUT_FINGERPRINT_PARAMETER`): the record
+        keeps the fingerprint of the input the task read among its parameters
+        and holds the accepted one, with the time, as its ``accepted_input``,
+        which replaces an earlier one, and gains no run. The task is then kept
+        for either input, without `accept_input` too.
+
+        One that failed, was interrupted or lost an output runs again, and the
+        run is added to its record when `parameters` are the same; with other
+        parameters, or under `force`, it runs as a new task with a new record.
+        Either way `body` is told to replace what the earlier run left. The
+        first task that runs creates the job directory with its ``job.json``.
+
+        Each run gets a run ID and a directory,
+        ``<root>/<name>/runs/<run_id>``, that `body` receives for the program's
+        log. The record of the task, ``task.json`` in its directory, is written
+        before `body` runs and after it returns or raises, so a failed or
+        interrupted run records how far it got and where its log is. A run that
+        ``SIGTERM`` or a keyboard interrupt ended is recorded as interrupted,
+        and one that raised anything else as failed. How a run ended is written
+        only while it is still the latest run in the record on disk. The
+        manifest is written again after each of these writes.
 
         Parameters
         ----------
@@ -284,6 +295,10 @@ class Job:
         log_name : str or None, optional
             The name of the file the task's program writes its log to in the
             directory of the run; ``None`` for a task without a log.
+        accept_input : bool, optional
+            Keep a done task whose input alone has changed, and record the
+            acceptance. It changes nothing for a task that is not done or has
+            lost an output.
         force : bool, optional
             Run the task even when its result could be kept.
 
@@ -300,7 +315,7 @@ class Job:
             message names each parameter that differs. If the ``job.json`` of
             the directory identifies another job. If the ``task.json`` of a
             task of the job cannot be read as a record. If `log_name` is not
-            a plain file name.
+            a plain file name. If `accept_input` and `force` are both set.
         FileNotFoundError
             If the ``job.json`` of the directory was removed while the task
             ran. The task is then not recorded.
@@ -311,17 +326,14 @@ class Job:
         Exception
             Whatever `body` raised, after the failure is recorded.
         """
+        if accept_input and force:
+            raise ValueError("accept_input and force cannot both be set")
         task = self.task(name)
         previous_record = task.record
-        if previous_record is not None and previous_record.is_done and not force:
-            self._check_parameters(name, previous_record.parameters, parameters)
-            if task.status is TaskStatus.DONE:
-                return previous_record
-            if task.status is TaskStatus.CHANGED:
-                raise ValueError(
-                    f"{task.detail}; run omphjc {name} with --force to "
-                    "regenerate the file"
-                )
+        if not force:
+            kept_record = self._kept_record(task, parameters, accept_input=accept_input)
+            if kept_record is not None:
+                return kept_record
         overwrite = force or previous_record is not None
         clock = time.monotonic()
         self._record_identity()
@@ -347,6 +359,64 @@ class Job:
             outcome, wall_seconds=time.monotonic() - clock, root_dir=self.root_dir
         )
         self._write_run_end(name, record)
+        return record
+
+    def _kept_record(
+        self, task: Task, parameters: dict[str, Any], *, accept_input: bool
+    ) -> TaskRecord | None:
+        """Return the record of `task` when its result is kept for `parameters`.
+
+        It is ``None`` for a task to run: one without a record, one that is
+        not done, and one that lost an output and has the same parameters.
+
+        Raises
+        ------
+        ValueError
+            As :meth:`run_task` refuses a task recorded as done.
+        """
+        record = task.record
+        if record is None or not record.is_done:
+            return None
+        if task.status is TaskStatus.DONE:
+            if record.is_accepted_for(parameters):
+                return record
+            if accept_input:
+                return self._accept_input(task.name, record, parameters)
+        self._check_parameters(task.name, record.parameters, parameters)
+        if task.status is TaskStatus.DONE:
+            return record
+        if task.status is TaskStatus.CHANGED:
+            raise ValueError(
+                f"{task.detail}; run omphjc {task.name} with --force to "
+                "regenerate the file"
+            )
+        return None
+
+    def _accept_input(
+        self, name: str, record: TaskRecord, parameters: dict[str, Any]
+    ) -> TaskRecord:
+        """Keep the done task `name` for the input in `parameters`; record that.
+
+        `record` is returned as it is when `parameters` are those of the
+        task. Otherwise they may differ in the input fingerprint alone, and
+        the record is written with that fingerprint as its accepted input.
+
+        Raises
+        ------
+        ValueError
+            If another parameter differs; the message names each one, and
+            leaves out the input fingerprint.
+        """
+        if parameters == record.parameters:
+            return record
+        key = INPUT_FINGERPRINT_PARAMETER
+        # The parameters the task ran with, with the requested input in place.
+        acceptable_parameters = dict(record.parameters)
+        if key in parameters:
+            acceptable_parameters[key] = parameters[key]
+        self._check_parameters(name, acceptable_parameters, parameters)
+        record = record.with_accepted_input(parameters[key])
+        self._write_record(name, record)
         return record
 
     def set_aside_folders(self) -> list[SetAsideFolder]:

@@ -3,6 +3,9 @@
 from collections.abc import Mapping
 from pathlib import Path
 
+_SHOWN_HASH_DIGITS = 8
+"""Digits of a fingerprint's hash that a report shows."""
+
 
 def format_usage(usage: Mapping[str, float]) -> str:
     """Return a stage's wall time, CPU time and peak memory in one line."""
@@ -42,6 +45,14 @@ def format_size(n_bytes: int) -> str:
 def format_count(number: int, noun: str) -> str:
     """Return ``1 folder`` or ``3 folders``."""
     return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+
+
+def format_fingerprint(fingerprint: str) -> str:
+    """Return `fingerprint` with its hash cut to eight digits, as ``lhe-v1:3f2a9c1e...``."""
+    prefix, separator, content_hash = fingerprint.partition(":")
+    if len(content_hash) <= _SHOWN_HASH_DIGITS:
+        return fingerprint
+    return f"{prefix}{separator}{content_hash[:_SHOWN_HASH_DIGITS]}..."
 
 
 def format_row(label: str, value: object) -> str:

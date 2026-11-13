@@ -8,6 +8,7 @@ from omphjc.jobs.job import Job, sha256
 from omphjc.jobs.stages.shower import SHOWER
 from omphjc.jobs.task import (
     EVENTS_OUTPUT,
+    INPUT_FINGERPRINT_PARAMETER,
     EventOutput,
     TaskOutcome,
     TaskRecord,
@@ -28,6 +29,7 @@ def simulate(
     *,
     card_path: Path | None = None,
     timeout: float | None = None,
+    accept_input: bool = False,
     force: bool = False,
     delphes_root_path: Path | None = None,
 ) -> TaskRecord:
@@ -51,6 +53,10 @@ def simulate(
         The detector card to run instead of the process's.
     timeout : float or None, optional
         Seconds the stage may take; ``None`` for no limit.
+    accept_input : bool, optional
+        Keep the stage's result although the events it reads have changed
+        since it ran, and record that (:meth:`omphjc.jobs.Job.run_task`). A
+        stage that is not done runs as it does without the option.
     force : bool, optional
         Run the stage again even when its result could be kept.
     delphes_root_path : Path or None, optional
@@ -64,7 +70,8 @@ def simulate(
     Raises
     ------
     ValueError
-        If the shower stage of `job` has not run to completion.
+        If the shower stage of `job` has not run to completion, or
+        `accept_input` and `force` are both set.
     FileNotFoundError
         If `card_path` is given and is not a file.
     """
@@ -112,8 +119,13 @@ def simulate(
     parameters = {
         "seed": job.seed,
         "card": card_hash,
-        "input_fingerprint": events.fingerprint,
+        INPUT_FINGERPRINT_PARAMETER: events.fingerprint,
     }
     return job.run_task(
-        SIMULATE, parameters, body, log_name=SimulationWorkspace.log_name, force=force
+        SIMULATE,
+        parameters,
+        body,
+        log_name=SimulationWorkspace.log_name,
+        accept_input=accept_input,
+        force=force,
     )

@@ -32,6 +32,11 @@ OUTDIR_OPTION = click.option(
 FORCE_OPTION = click.option(
     "--force", is_flag=True, help="Run the stage again, replacing its outputs."
 )
+ACCEPT_INPUT_OPTION = click.option(
+    "--accept-input",
+    is_flag=True,
+    help="Keep the stage's finished result although the events it reads have changed.",
+)
 SET_OPTION = click.option(
     "--set",
     "assignments",

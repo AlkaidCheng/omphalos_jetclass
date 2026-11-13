@@ -7,11 +7,13 @@ import click
 
 from omphjc.cli.formatting import (
     format_count,
+    format_fingerprint,
     format_job_line,
     format_row,
     format_usage,
 )
 from omphjc.cli.options import (
+    ACCEPT_INPUT_OPTION,
     EXISTING_FILE,
     FORCE_OPTION,
     JOB_ID_OPTION,
@@ -23,6 +25,7 @@ from omphjc.cli.options import (
 )
 from omphjc.jobs import (
     GENERATE,
+    INPUT_FINGERPRINT_PARAMETER,
     SHOWER,
     SIMULATE,
     Job,
@@ -142,6 +145,7 @@ def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     default=None,
     help="Delphes's DelphesPythia8 (default: the one on PATH).",
 )
+@ACCEPT_INPUT_OPTION
 @click.pass_obj
 def shower_job(
     specs: Catalogue,
@@ -152,8 +156,10 @@ def shower_job(
     timeout: float | None,
     force: bool,
     delphes_pythia8_path: Path | None,
+    accept_input: bool,
 ) -> None:
     """Shower one job's generated events with Pythia 8; the detector comes later."""
+    _refuse_accept_input_with_force(accept_input, force)
     spec = lookup_process(specs, name)
     overrides = dict(parse_assignment(item) for item in assignments)
 
@@ -162,6 +168,7 @@ def shower_job(
             job,
             overrides=overrides,
             timeout=timeout,
+            accept_input=accept_input,
             force=force,
             delphes_pythia8_path=delphes_pythia8_path,
         )
@@ -171,6 +178,7 @@ def shower_job(
         job_id,
         outdir,
         stage=SHOWER,
+        upstream_stage=GENERATE,
         run=run,
         title="Pythia shower",
         lines=_shower_lines,
@@ -213,6 +221,7 @@ def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     default=None,
     help="Delphes's DelphesROOT (default: the one on PATH).",
 )
+@ACCEPT_INPUT_OPTION
 @click.pass_obj
 def simulate_job(
     specs: Catalogue,
@@ -223,8 +232,10 @@ def simulate_job(
     timeout: float | None,
     force: bool,
     delphes_root_path: Path | None,
+    accept_input: bool,
 ) -> None:
     """Simulate the detector on one job's showered events with Delphes."""
+    _refuse_accept_input_with_force(accept_input, force)
     spec = lookup_process(specs, name)
 
     def run(job: Job) -> TaskRecord:
@@ -232,6 +243,7 @@ def simulate_job(
             job,
             card_path=card_path,
             timeout=timeout,
+            accept_input=accept_input,
             force=force,
             delphes_root_path=delphes_root_path,
         )
@@ -241,6 +253,7 @@ def simulate_job(
         job_id,
         outdir,
         stage=SIMULATE,
+        upstream_stage=SHOWER,
         run=run,
         title="Delphes simulation",
         lines=_simulation_lines,
@@ -266,14 +279,16 @@ def _run_stage_command(
     run: Callable[[Job], TaskRecord],
     title: str,
     lines: Callable[[Job, TaskRecord], Iterable[str]],
+    upstream_stage: str | None = None,
 ) -> None:
     """Run `stage` of one job of `spec` through `run` and print its report.
 
     The report starts with `title`, which names the stage, and the ID of the
     task's latest run; `lines` gives the rows between the ID and what that run
-    took. A task run more than once also gets a row with its number of runs
-    and the status of each. An error in :data:`_STAGE_ERRORS` becomes a
-    :class:`click.ClickException`.
+    took. A stage kept for other events of `upstream_stage`, the stage whose events
+    it reads, than those it ran on gets a row that says so. A task with more
+    than one run also gets a row with their number and the status of each.
+    An error in :data:`_STAGE_ERRORS` becomes a :class:`click.ClickException`.
     """
     try:
         job = Job(spec, outdir, job_id)
@@ -282,18 +297,45 @@ def _run_stage_command(
             record = run(job)
     except _STAGE_ERRORS as error:
         raise click.ClickException(str(error)) from error
-    kept = record == previous_record
+    kept = previous_record is not None and record.runs == previous_record.runs
     outcome = "done, kept from an earlier run" if kept else "done"
     click.echo(format_job_line(job.spec.name, job.job_id, job.root_dir))
     click.echo(f"{title}: {outcome}")
     click.echo(format_row("run ID", record.latest_run.run_id))
     for line in lines(job, record):
         click.echo(line)
+    if upstream_stage is not None:
+        _report_accepted_input(job, record, upstream_stage)
     if len(record.runs) > 1:
         statuses = ", ".join(run.status for run in record.runs)
         click.echo(format_row("runs", f"{len(record.runs)} ({statuses})"))
     click.echo(format_row("took", format_usage(record.latest_run.usage)))
     _report_set_aside(job)
+
+
+def _report_accepted_input(job: Job, record: TaskRecord, upstream_stage: str) -> None:
+    """Print the input the task was accepted for, while it differs from the one it ran on.
+
+    The row is printed when the record holds an accepted input and the events
+    of `upstream_stage` are no longer those the task ran on.
+    """
+    accepted_input = record.accepted_input
+    input_fingerprint = record.parameters[INPUT_FINGERPRINT_PARAMETER]
+    if accepted_input is None:
+        return
+    if job.require_events(upstream_stage).fingerprint == input_fingerprint:
+        return
+    acceptance = (
+        f"accepted (ran on {format_fingerprint(input_fingerprint)}, "
+        f"accepted for {format_fingerprint(accepted_input.fingerprint)})"
+    )
+    click.echo(format_row("input", acceptance))
+
+
+def _refuse_accept_input_with_force(accept_input: bool, force: bool) -> None:
+    """Refuse ``--accept-input`` together with ``--force``."""
+    if accept_input and force:
+        raise click.UsageError("--accept-input and --force cannot be used together.")
 
 
 def _report_set_aside(job: Job) -> None:

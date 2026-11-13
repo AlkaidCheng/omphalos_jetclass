@@ -171,6 +171,9 @@
 - Each run of a task writes its log in `<stage>/runs/<run_id>/`, named by
   the run ID that `task.json` records and the stage reports print first, and
   later runs leave it in place. (#68)
+- `omphjc shower` and `omphjc simulate` take `--accept-input`, which keeps a
+  result whose input events changed and records the acceptance in
+  `task.json`. (#70)
 
 ### Fixed
 
