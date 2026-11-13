@@ -148,6 +148,10 @@ class ProcessSpec:
         return self.madspin_card is not None
 
 
+class CatalogueError(ValueError):
+    """A catalogue file whose content is not a valid catalogue; the message names it."""
+
+
 def process_names() -> tuple[str, ...]:
     """Return the catalogue names in production order."""
     return tuple(default_catalogue())
@@ -170,7 +174,13 @@ def get_process(name: str) -> ProcessSpec:
 
 @cache
 def default_catalogue() -> Mapping[str, ProcessSpec]:
-    """Return the default catalogue, keyed by process name."""
+    """Return the default catalogue, keyed by process name.
+
+    Raises
+    ------
+    CatalogueError
+        If the default catalogue file is not a valid catalogue.
+    """
     return read_catalogue(catalogue_path())
 
 
@@ -195,25 +205,39 @@ def read_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
 
     Raises
     ------
-    ValueError
-        If the ``common`` block or an entry holds an unknown key, an entry
-        lacks a required key, has a malformed process or model name or holds
-        a value of the wrong type, a named file does not exist, two entries
+    CatalogueError
+        If the file is not UTF-8 YAML holding a ``processes`` mapping, the
+        ``common`` block, an entry or a settings block is not a mapping,
+        ``definitions`` or an entry's ``processes`` is not a list of strings,
+        the ``common`` block or an entry holds an unknown key, an entry lacks
+        a required key, has a malformed process or model name or holds a
+        value of the wrong type, a named file does not exist, two entries
         share a label, or an entry is matched while ``common.pythia_matching``
-        sets no ``JetMatching:merge``.
+        sets no ``JetMatching:merge``. The message names the file.
     """
-    with path.open(encoding="utf-8") as stream:
-        document = yaml.safe_load(stream)
-    base_dir = path.parent
+    try:
+        with path.open(encoding="utf-8") as stream:
+            document = yaml.safe_load(stream)
+        return _read_document(document, base_dir=path.parent)
+    except (yaml.YAMLError, ValueError) as error:
+        raise CatalogueError(f"Catalogue {path}: {error}") from error
+
+
+def _read_document(document: Any, *, base_dir: Path) -> dict[str, ProcessSpec]:
+    entries = document.get("processes") if isinstance(document, dict) else None
+    if not isinstance(entries, dict):
+        raise ValueError("The file holds no 'processes' mapping")
     common = document.get("common", {})
+    if not isinstance(common, dict):
+        raise ValueError(f"The common block must be a mapping, got {common!r}")
     unknown = common.keys() - _COMMON_KEYS
     if unknown:
         raise ValueError(f"The common block has unknown keys: {sorted(unknown)}")
     shared = _Shared(
-        definitions=tuple(common.get("definitions", ())),
-        run_card=_read_run_card(common.get("run_card", {})),
-        pythia=_read_settings(common.get("pythia", {})),
-        pythia_matching=_read_settings(common.get("pythia_matching", {})),
+        definitions=_strings("common", common, "definitions"),
+        run_card=_read_run_card(_mapping("common", common, "run_card")),
+        pythia=_read_settings(_mapping("common", common, "pythia")),
+        pythia_matching=_read_settings(_mapping("common", common, "pythia_matching")),
         models_dir=base_dir / common.get("models_dir", _DEFAULT_MODELS_DIR),
         delphes_card=_existing(
             "common", common, "delphes_card", base_dir, directory=False
@@ -221,7 +245,7 @@ def read_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     )
     specs = {
         name: _build_spec(name, entry, shared, base_dir=base_dir)
-        for name, entry in document["processes"].items()
+        for name, entry in entries.items()
     }
     labels = [spec.label for spec in specs.values()]
     duplicates = sorted({label for label in labels if labels.count(label) > 1})
@@ -243,22 +267,25 @@ class _Shared:
 
 
 def _build_spec(
-    name: str, entry: Mapping[str, Any], shared: _Shared, *, base_dir: Path
+    name: str, entry: Any, shared: _Shared, *, base_dir: Path
 ) -> ProcessSpec:
+    owner = f"Process {name!r}"
+    if not isinstance(entry, dict):
+        raise ValueError(f"{owner} must be a mapping, got {entry!r}")
     missing = _REQUIRED_KEYS - entry.keys()
     if missing:
-        raise ValueError(f"Process {name!r} lacks required keys: {sorted(missing)}")
+        raise ValueError(f"{owner} lacks required keys: {sorted(missing)}")
     unknown = entry.keys() - _REQUIRED_KEYS - _OPTIONAL_KEYS
     if unknown:
-        raise ValueError(f"Process {name!r} has unknown keys: {sorted(unknown)}")
+        raise ValueError(f"{owner} has unknown keys: {sorted(unknown)}")
     run_card = dict(shared.run_card)
-    run_card.update(_read_run_card(entry.get("run_card", {})))
+    run_card.update(_read_run_card(_mapping(owner, entry, "run_card")))
     pythia = dict(shared.pythia)
-    pythia.update(_read_settings(entry.get("pythia", {})))
+    pythia.update(_read_settings(_mapping(owner, entry, "pythia")))
     matching = bool(entry.get("matching", False))
     if matching and "JetMatching:merge" not in shared.pythia_matching:
         raise ValueError(
-            f"Process {name!r} is matched but the catalogue's common.pythia_matching "
+            f"{owner} is matched but the catalogue's common.pythia_matching "
             "block does not switch JetMatching:merge on"
         )
     model = str(entry["model"])
@@ -268,22 +295,36 @@ def _build_spec(
         label=str(entry["label"]),
         description=str(entry["description"]),
         model=model,
-        definitions=shared.definitions + tuple(entry.get("definitions", ())),
-        processes=tuple(entry["processes"]),
+        definitions=shared.definitions + _strings(owner, entry, "definitions"),
+        processes=_strings(owner, entry, "processes"),
         run_card=run_card,
         pythia=pythia,
         pythia_matching=dict(shared.pythia_matching),
         matching=matching,
         seed_offset=int(entry.get("seed_offset", 0)),
         model_dir=model_dir if model_dir.is_dir() else None,
-        madspin_card=_existing(
-            f"Process {name!r}", entry, "madspin_card", base_dir, directory=False
-        ),
+        madspin_card=_existing(owner, entry, "madspin_card", base_dir, directory=False),
         delphes_card=shared.delphes_card,
         reference_cards=_existing(
-            f"Process {name!r}", entry, "reference_cards", base_dir, directory=True
+            owner, entry, "reference_cards", base_dir, directory=True
         ),
     )
+
+
+def _mapping(owner: str, block: Mapping[str, Any], key: str) -> Mapping[str, Any]:
+    """Return the mapping under `key` of `block`, empty when the key is absent."""
+    value = block.get(key, {})
+    if not isinstance(value, dict):
+        raise ValueError(f"{owner}: {key} must be a mapping, got {value!r}")
+    return value
+
+
+def _strings(owner: str, block: Mapping[str, Any], key: str) -> tuple[str, ...]:
+    """Return the list of strings under `key` of `block`, empty when it is absent."""
+    value = block.get(key, [])
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"{owner}: {key} must be a list of strings, got {value!r}")
+    return tuple(value)
 
 
 def _existing(

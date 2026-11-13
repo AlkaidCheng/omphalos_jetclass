@@ -172,3 +172,7 @@
 - `ProcCard` joins the lines of a command that MadGraph writes on several
   lines, so the fingerprint of an event file does not depend on the directory
   of its job. (#52)
+- `read_catalogue` raises a `CatalogueError` that names the file for a
+  malformed catalogue, including `definitions` or `processes` that are not
+  lists of strings, and `omphjc --catalogue` reports it without a traceback.
+  (#62)

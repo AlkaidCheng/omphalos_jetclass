@@ -20,7 +20,7 @@ from omphjc.cli.options import (
 from omphjc.cli.stages import generate_job, shower_job, simulate_job
 from omphjc.config_paths import config_dir, export_config
 from omphjc.jobs import Job
-from omphjc.processes import default_catalogue, read_catalogue
+from omphjc.processes import CatalogueError, default_catalogue, read_catalogue
 from omphjc.stamps import StampError
 from omphjc.tools.delphes.card import DelphesCard, reference_card
 from omphjc.tools.madgraph.cards import launch_commands, proc_card_commands
@@ -41,11 +41,14 @@ from omphjc.validation.cards import compare_all
 @click.pass_context
 def cli(context: click.Context, catalogue_path: Path | None) -> None:
     """Generate JetClass samples for Delphes and Parnassus."""
-    context.obj = (
-        default_catalogue()
-        if catalogue_path is None
-        else read_catalogue(catalogue_path)
-    )
+    try:
+        context.obj = (
+            default_catalogue()
+            if catalogue_path is None
+            else read_catalogue(catalogue_path)
+        )
+    except CatalogueError as error:
+        raise click.ClickException(str(error)) from error
 
 
 cli.add_command(generate_job)
