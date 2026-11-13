@@ -229,6 +229,40 @@ def test_process_lines_must_be_a_list_of_strings(tmp_path: Path) -> None:
         read_catalogue(path)
 
 
+@pytest.mark.parametrize(
+    ("text", "key"),
+    [
+        ("commn:\n  definitions: []\nprocesses:\n" + ENTRY, "commn"),
+        ("process:\n" + ENTRY, "process"),
+    ],
+)
+def test_an_unknown_top_level_key_is_refused(
+    tmp_path: Path, text: str, key: str
+) -> None:
+    path = tmp_path / "catalogue.yaml"
+    path.write_text(text, encoding="utf-8")
+    message = f"Catalogue {path}: The file has unknown top-level keys: [{key!r}]"
+    with pytest.raises(CatalogueError, match=re.escape(message)):
+        read_catalogue(path)
+
+
+@pytest.mark.parametrize("value", ["'no'", '"false"', "1", "null"])
+def test_matching_must_be_a_boolean(tmp_path: Path, value: str) -> None:
+    path = tmp_path / "catalogue.yaml"
+    path.write_text(
+        "processes:\n" + ENTRY + f"    matching: {value}\n", encoding="utf-8"
+    )
+    message = f"Catalogue {path}: Process 'X': matching must be true or false"
+    with pytest.raises(CatalogueError, match=re.escape(message)):
+        read_catalogue(path)
+
+
+def test_matching_reads_a_yaml_boolean(tmp_path: Path) -> None:
+    path = tmp_path / "catalogue.yaml"
+    path.write_text("processes:\n" + ENTRY + "    matching: no\n", encoding="utf-8")
+    assert read_catalogue(path)["X"].matching is False
+
+
 def test_the_delphes_card_is_named_once_for_every_process(
     specs: Mapping[str, ProcessSpec],
 ) -> None:

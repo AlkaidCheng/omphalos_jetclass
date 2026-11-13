@@ -27,6 +27,7 @@ RunCardValue = bool | int | float | str | dict[int, float]
 SettingValue = bool | int | float | str
 """A Pythia setting value as written in the catalogue."""
 
+_TOP_LEVEL_KEYS = frozenset({"common", "processes"})
 _REQUIRED_KEYS = frozenset({"label", "description", "model", "processes"})
 _OPTIONAL_KEYS = frozenset(
     {
@@ -209,7 +210,8 @@ def read_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
         If the file is not UTF-8 YAML holding a ``processes`` mapping, the
         ``common`` block, an entry or a settings block is not a mapping,
         ``definitions`` or an entry's ``processes`` is not a list of strings,
-        the ``common`` block or an entry holds an unknown key, an entry lacks
+        an entry's ``matching`` is not a boolean, the file, the ``common``
+        block or an entry holds an unknown key, an entry lacks
         a required key, has a malformed process or model name or holds a
         value of the wrong type, a named file does not exist, two entries
         share a label, or an entry is matched while ``common.pythia_matching``
@@ -224,7 +226,12 @@ def read_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
 
 
 def _read_document(document: Any, *, base_dir: Path) -> dict[str, ProcessSpec]:
-    entries = document.get("processes") if isinstance(document, dict) else None
+    if not isinstance(document, dict):
+        raise ValueError("The file holds no 'processes' mapping")
+    unknown = document.keys() - _TOP_LEVEL_KEYS
+    if unknown:
+        raise ValueError(f"The file has unknown top-level keys: {sorted(unknown)}")
+    entries = document.get("processes")
     if not isinstance(entries, dict):
         raise ValueError("The file holds no 'processes' mapping")
     common = document.get("common", {})
@@ -282,7 +289,9 @@ def _build_spec(
     run_card.update(_read_run_card(_mapping(owner, entry, "run_card")))
     pythia = dict(shared.pythia)
     pythia.update(_read_settings(_mapping(owner, entry, "pythia")))
-    matching = bool(entry.get("matching", False))
+    matching = entry.get("matching", False)
+    if not isinstance(matching, bool):
+        raise ValueError(f"{owner}: matching must be true or false, got {matching!r}")
     if matching and "JetMatching:merge" not in shared.pythia_matching:
         raise ValueError(
             f"{owner} is matched but the catalogue's common.pythia_matching "
