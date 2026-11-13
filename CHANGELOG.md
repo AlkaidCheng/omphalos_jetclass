@@ -174,6 +174,10 @@
 
 ### Fixed
 
+- `task.json` records a run that `SIGTERM` or a keyboard interrupt ended as
+  `interrupted`, not `failed`. (#69)
+- A run that a newer run of its stage replaced raises `ReplacedRunError` and
+  leaves that run's record in place. (#69)
 - A model copy cut short in `generate_events` is sealed with the run's other
   artifacts, so the next run deletes it instead of setting it aside. (#20)
 - `omphjc generate` derives the seeds of MadGraph's unweighting and MadSpin's

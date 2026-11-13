@@ -48,6 +48,14 @@ class TerminationError(RuntimeError):
     """The process received a termination signal."""
 
 
+class ReplacedRunError(RuntimeError):
+    """A newer run of the task started before this one ended, so its end is not recorded."""
+
+
+# What ends a run without its program or omphjc failing.
+_INTERRUPTIONS = (TerminationError, KeyboardInterrupt)
+
+
 TaskBody = Callable[[bool, Path], TaskOutcome]
 """Runs a task; the arguments say whether to replace what an earlier run left,
 and give the directory of this run, where the program writes its log."""
@@ -257,7 +265,10 @@ class Job:
         program's log. The record of the task, ``task.json`` in its
         directory, is written before `body` runs and after it returns or
         raises, so a failed or interrupted run records how far it got and
-        where its log is.
+        where its log is. A run that ``SIGTERM`` or a keyboard interrupt ended
+        is recorded as interrupted, and one that raised anything else as
+        failed. How a run ended is written only while it is still the latest
+        run in the record on disk.
         The manifest is written again after each of these writes.
 
         Parameters
@@ -293,6 +304,10 @@ class Job:
         FileNotFoundError
             If the ``job.json`` of the directory was removed while the task
             ran. The task is then not recorded.
+        ReplacedRunError
+            If a newer run of the task started before this one ended. The
+            record of the newer run is left unchanged, and the end of this
+            one is not recorded.
         Exception
             Whatever `body` raised, after the failure is recorded.
         """
@@ -322,12 +337,16 @@ class Job:
             run_dir.mkdir(parents=True)
             outcome = body(overwrite, run_dir)
         except BaseException as error:
-            self._write_record(name, record.failed(error=str(error)))
+            message = str(error) or type(error).__name__
+            if isinstance(error, _INTERRUPTIONS):
+                self._write_run_end(name, record.interrupted(error=message))
+            else:
+                self._write_run_end(name, record.failed(error=message))
             raise
         record = record.done(
             outcome, wall_seconds=time.monotonic() - clock, root_dir=self.root_dir
         )
-        self._write_record(name, record)
+        self._write_run_end(name, record)
         return record
 
     def set_aside_folders(self) -> list[SetAsideFolder]:
@@ -402,6 +421,25 @@ class Job:
             f"{name} with --force to replace its result."
         )
 
+    def _write_run_end(self, name: str, record: TaskRecord) -> None:
+        """Write `record`, which says how its latest run ended, for task `name`.
+
+        Raises
+        ------
+        ReplacedRunError
+            If the record on disk already holds a newer run of the task.
+            That record is left unchanged.
+        """
+        run = record.latest_run
+        recorded = self.task_record(name)
+        if recorded is not None and recorded.latest_run.run_id != run.run_id:
+            raise ReplacedRunError(
+                f"Run {run.run_id!r} of the {name} task in {self.root_dir} is not "
+                f"recorded as {run.status}: run {recorded.latest_run.run_id!r} of "
+                "the task started before it ended"
+            )
+        self._write_record(name, record)
+
     def _write_record(self, name: str, record: TaskRecord) -> None:
         """Write `record` as the record of task `name`, then the manifest.
 
@@ -436,8 +474,8 @@ def exception_on_termination() -> Iterator[None]:
 
     A batch system ends a job that exceeds its time limit with ``SIGTERM``,
     which would otherwise end the process without running any ``finally``;
-    as an exception it stops the running program, records the failure of the
-    task and leaves the run's files sealed.
+    as an exception it stops the program, records the run as interrupted
+    and leaves the run's files sealed.
     """
 
     def raise_terminated(signum: int, frame: FrameType | None) -> None:

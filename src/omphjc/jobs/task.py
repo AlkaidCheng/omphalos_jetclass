@@ -65,9 +65,11 @@ known about the task and the sample it made; its keys are the stage's own.
 the same parameters, after a failure, an interruption or the loss of an
 output, adds a run; a run with other parameters, or under ``force``, starts a
 new task with one run. The ``status`` of a run says how it ended:
-``"running"``, ``"done"``, ``"failed"`` or ``"interrupted"``. A run that a
-killed process left ``"running"`` is marked ``"interrupted"`` when the next
-one starts. What a rerun follows is the status of the run before it: a
+``"running"``, ``"done"``, ``"failed"`` or ``"interrupted"``. A run is
+``"failed"`` when its program or omphjc failed, and ``"interrupted"`` when a
+signal ended it, with the signal as its ``error``. A run that a killed process
+left ``"running"`` is marked ``"interrupted"`` when the next one starts. What
+a rerun follows is the status of the run before it: a
 failure, an interruption, or, after a ``"done"`` run, a missing output.
 
 ``run_id`` is the start time of a run in UTC and eight random hexadecimal
@@ -84,9 +86,9 @@ the external program's processes where the platform reports them.
 
 :meth:`TaskRecord.running` starts the record of a task, and
 :meth:`TaskRecord.rerun` adds a run to it; :meth:`TaskRecord.with_log` names
-the log of that run. :meth:`TaskRecord.failed` and :meth:`TaskRecord.done`
-record how the latest run ended, the second with the result of the
-:class:`TaskOutcome` it returned, unchanged.
+the log of that run. :meth:`TaskRecord.failed`, :meth:`TaskRecord.interrupted`
+and :meth:`TaskRecord.done` record how the latest run ended, the last with
+the result of the :class:`TaskOutcome` it returned, unchanged.
 
 A record says how each run of the task ended, nothing more. Whether the task
 is done now also depends on its output files, which may have been deleted or
@@ -393,6 +395,13 @@ class TaskRecord(RecordFile):
     def failed(self, *, error: str) -> "TaskRecord":
         """Return the record with its latest run failed with `error`."""
         runs = self._runs_with_latest(status=FAILED, finished=timestamp(), error=error)
+        return replace(self, runs=runs)
+
+    def interrupted(self, *, error: str) -> "TaskRecord":
+        """Return the record with its latest run interrupted by `error`."""
+        runs = self._runs_with_latest(
+            status=INTERRUPTED, finished=timestamp(), error=error
+        )
         return replace(self, runs=runs)
 
     def done(
