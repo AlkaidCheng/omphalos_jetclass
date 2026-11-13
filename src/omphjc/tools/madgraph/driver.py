@@ -151,6 +151,7 @@ def generate_events(
     n_cores: int | None = None,
     timeout: float | None = None,
     overwrite: bool = False,
+    log_dir: Path | None = None,
     mg5_path: Path | None = None,
 ) -> MadGraphRun:
     """Generate parton-level events for `spec` with MadGraph.
@@ -186,6 +187,10 @@ def generate_events(
         check has passed: deleted when the earlier run sealed it and nothing
         in it changed since, otherwise, as after a run killed before sealing,
         moved aside (see `MadGraphRun.set_aside`).
+    log_dir : Path or None, optional
+        An existing directory to write the log in. By default the log is in
+        `workdir` and a later run replaces it; one in another directory stays
+        there.
     mg5_path : Path or None, optional
         MadGraph's ``bin/mg5_aMC``; by default the one on PATH.
 
@@ -220,7 +225,13 @@ def generate_events(
         n_cores = available_cores()
     if n_cores < 1:
         raise ValueError(f"n_cores must be positive, got {n_cores}")
-    workspace = MadGraphWorkspace(spec, workdir, mg5_path=mg5_path, timeout=timeout)
+    workspace = MadGraphWorkspace(
+        spec,
+        workdir,
+        mg5_path=mg5_path,
+        timeout=timeout,
+        log_dir=log_dir,
+    )
     if not overwrite:
         require_unoccupied(workspace.process_dir, what="Process directory")
     # Built before MadGraph starts or anything is removed, so that an invalid
@@ -275,6 +286,8 @@ class MadGraphWorkspace(ProgramWorkspace):
         MadGraph's ``bin/mg5_aMC``; by default the one on PATH.
     timeout : float or None, optional
         Seconds the run may take from now; ``None`` sets no limit.
+    log_dir : Path or None, optional
+        As :class:`~omphjc.workspace.ProgramWorkspace`.
 
     Attributes
     ----------
@@ -308,8 +321,11 @@ class MadGraphWorkspace(ProgramWorkspace):
         *,
         mg5_path: Path | None = None,
         timeout: float | None = None,
+        log_dir: Path | None = None,
     ) -> None:
-        super().__init__(spec.name, workdir, program_path=mg5_path, timeout=timeout)
+        super().__init__(
+            spec.name, workdir, program_path=mg5_path, timeout=timeout, log_dir=log_dir
+        )
         self.spec = spec
         if any(character.isspace() for character in str(self.workdir)):
             raise ValueError(
@@ -329,7 +345,7 @@ class MadGraphWorkspace(ProgramWorkspace):
 
     @property
     def artifacts(self) -> list[str]:
-        names = [self.spec.name, _PROCESS_SCRIPT, _LAUNCH_SCRIPT, _LOG_FILE]
+        names = [self.spec.name, _PROCESS_SCRIPT, _LAUNCH_SCRIPT, *super().artifacts]
         if self.spec.model_dir is not None:
             names.append(f"{_MODELS_DIR}/{self.spec.model_base}")
         return names

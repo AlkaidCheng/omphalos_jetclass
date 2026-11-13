@@ -12,7 +12,7 @@ from omphjc.jobs.task import (
     TaskRecord,
     TaskResult,
 )
-from omphjc.tools.madgraph.driver import generate_events
+from omphjc.tools.madgraph.driver import MadGraphWorkspace, generate_events
 from omphjc.tools.madgraph.lhe_file import LHEFile
 
 GENERATE = "generate"
@@ -71,7 +71,7 @@ def generate(
     """
     task_dir = job.task_dir(GENERATE)
 
-    def body(overwrite: bool) -> TaskOutcome:
+    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
         run = generate_events(
             job.spec,
             workdir=task_dir,
@@ -80,6 +80,7 @@ def generate(
             n_cores=n_cores,
             timeout=timeout,
             overwrite=overwrite,
+            log_dir=run_dir,
             mg5_path=mg5_path,
         )
         cards = _copy_cards(run.process_dir / "Cards", task_dir / _CARDS_DIR, job)
@@ -102,13 +103,14 @@ def generate(
                     "cards": cards,
                 },
             ),
-            log_path=run.log_path,
             usage=run.usage.as_record(),
             set_aside_dir=run.set_aside,
         )
 
     parameters = {"events": n_events, "seed": job.seed}
-    return job.run_task(GENERATE, parameters, body, force=force)
+    return job.run_task(
+        GENERATE, parameters, body, log_name=MadGraphWorkspace.log_name, force=force
+    )
 
 
 def _copy_cards(source_dir: Path, target_dir: Path, job: Job) -> dict[str, str]:

@@ -25,22 +25,26 @@ A task is the work of one stage in a job. Its record is the file
       },
       "runs": [
         {
+          "run_id": "20261023T010000Z-4f9c2a1e",
           "status": "failed",
           "started": "2026-10-23T01:00:00+00:00",
+          "host": "node01",
           "finished": "2026-10-23T01:05:00+00:00",
           "usage": {"wall_seconds": 301.2},
-          "log": "generate/madgraph.log",
+          "log": "generate/runs/20261023T010000Z-4f9c2a1e/madgraph.log",
           "set_aside": null,
           "error": "MadGraph exited with status 1"
         },
         {
+          "run_id": "20261023T020000Z-b81d07c3",
           "status": "done",
           "started": "2026-10-23T02:00:00+00:00",
+          "host": "node01",
           "finished": "2026-10-23T02:20:00+00:00",
           "usage": {
             "wall_seconds": 1203.4, "cpu_seconds": 9012.7, "peak_memory_mib": 812.5
           },
-          "log": "generate/madgraph.log",
+          "log": "generate/runs/20261023T020000Z-b81d07c3/madgraph.log",
           "set_aside": null,
           "error": null
         }
@@ -64,17 +68,25 @@ new task with one run. The ``status`` of a run says how it ended:
 ``"running"``, ``"done"``, ``"failed"`` or ``"interrupted"``. A run that a
 killed process left ``"running"`` is marked ``"interrupted"`` when the next
 one starts. What a rerun follows is the status of the run before it: a
-failure, an interruption, or, after a ``"done"`` run, a missing output. Every
-path is relative to the job directory; ``set_aside`` names the folder into
-which the run moved what an earlier run left and it could not confirm as that
-run's (:mod:`omphjc.stamps`), ``null`` when it moved nothing. ``usage`` is
+failure, an interruption, or, after a ``"done"`` run, a missing output.
+
+``run_id`` is the start time of a run in UTC and eight random hexadecimal
+digits, so the IDs of a task's runs sort by start time, and ``host`` is the
+name of the machine the run ran on. ``log`` is the file the run's program
+writes its log to, in the directory of the run (:mod:`omphjc.jobs.job`),
+``null`` for a task without a log; the file is missing when the run ended
+before its program started. Every path is relative to the job directory;
+``set_aside`` names the folder into which the run moved what an earlier run
+left and it could not confirm as that run's (:mod:`omphjc.stamps`), ``null``
+when it moved nothing. ``usage`` is
 what the run took: its wall time, and the CPU time and peak memory (MiB) of
 the external program's processes where the platform reports them.
 
 :meth:`TaskRecord.running` starts the record of a task, and
-:meth:`TaskRecord.rerun` adds a run to it. :meth:`TaskRecord.failed`
-and :meth:`TaskRecord.done` record how the latest run ended, the second
-with the result of the :class:`TaskOutcome` it returned, unchanged.
+:meth:`TaskRecord.rerun` adds a run to it; :meth:`TaskRecord.with_log` names
+the log of that run. :meth:`TaskRecord.failed` and :meth:`TaskRecord.done`
+record how the latest run ended, the second with the result of the
+:class:`TaskOutcome` it returned, unchanged.
 
 A record says how each run of the task ended, nothing more. Whether the task
 is done now also depends on its output files, which may have been deleted or
@@ -84,6 +96,8 @@ latest run is done has :attr:`TaskStatus.DONE` only while its outputs are
 intact.
 """
 
+import secrets
+import socket
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
@@ -93,6 +107,7 @@ from typing import Any, ClassVar
 
 from omphjc.events.formats import EventFormat
 from omphjc.jobs.record_file import RecordFile
+from omphjc.stamps import COMPACT_UTC_FORMAT
 
 # How a run ended, or that it is still running.
 RUNNING = "running"
@@ -101,6 +116,9 @@ FAILED = "failed"
 INTERRUPTED = "interrupted"
 
 _STATUSES = (RUNNING, DONE, FAILED, INTERRUPTED)
+
+_RUN_ID_RANDOM_BYTES = 4
+"""Random bytes in a run ID, written as twice as many hexadecimal digits."""
 
 EVENTS_OUTPUT = "events"
 """The name of the output that holds the events the next task reads."""
@@ -195,8 +213,6 @@ class TaskOutcome:
     ----------
     result : TaskResult
         What the task made.
-    log_path : Path or None
-        The log of the task's program, inside the job directory.
     usage : dict[str, float]
         Resources the task's program used, such as ``cpu_seconds`` and
         ``peak_memory_mib``; the job adds ``wall_seconds``.
@@ -207,12 +223,11 @@ class TaskOutcome:
     """
 
     result: TaskResult
-    log_path: Path | None = None
     usage: dict[str, float] = field(default_factory=dict)
     set_aside_dir: Path | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class TaskRun:
     """One run of a task; the module docstring describes the fields.
 
@@ -222,8 +237,10 @@ class TaskRun:
         If `status` is not one the module docstring lists.
     """
 
+    run_id: str
     status: str
     started: str
+    host: str
     finished: str | None = None
     usage: dict[str, float] = field(default_factory=dict)
     log: str | None = None
@@ -233,6 +250,18 @@ class TaskRun:
     def __post_init__(self) -> None:
         if self.status not in _STATUSES:
             raise ValueError(f"unknown run status {self.status!r}")
+
+    @classmethod
+    def started_now(cls) -> "TaskRun":
+        """Return a run that starts now on this host, with a new run ID."""
+        start_time = datetime.now(timezone.utc)
+        random_digits = secrets.token_hex(_RUN_ID_RANDOM_BYTES)
+        return cls(
+            run_id=f"{start_time.strftime(COMPACT_UTC_FORMAT)}-{random_digits}",
+            status=RUNNING,
+            started=start_time.isoformat(timespec="seconds"),
+            host=socket.gethostname(),
+        )
 
 
 @dataclass(frozen=True)
@@ -338,57 +367,58 @@ class TaskRecord(RecordFile):
         )
 
     @classmethod
-    def running(cls, parameters: dict[str, Any], *, started: str) -> "TaskRecord":
-        """Return the record of a new task whose first run has started."""
-        return cls(parameters, (TaskRun(RUNNING, started),))
+    def running(cls, parameters: dict[str, Any]) -> "TaskRecord":
+        """Return the record of a new task whose first run starts now."""
+        return cls(parameters, (TaskRun.started_now(),))
 
-    def rerun(self, *, started: str) -> "TaskRecord":
-        """Return the record with a further run that has started.
+    def rerun(self) -> "TaskRecord":
+        """Return the record with a further run that starts now.
 
         A run still ``running``, left by a killed process, becomes
         ``interrupted``. The record holds no result until the new run is
         done.
         """
-        latest = self.latest_run
         previous_runs = self.runs
-        if latest.status == RUNNING:
-            interrupted = replace(latest, status=INTERRUPTED)
-            previous_runs = (*previous_runs[:-1], interrupted)
-        run = TaskRun(RUNNING, started)
-        return replace(self, runs=(*previous_runs, run), result=None)
+        if self.latest_run.status == RUNNING:
+            previous_runs = self._runs_with_latest(status=INTERRUPTED)
+        return replace(self, runs=(*previous_runs, TaskRun.started_now()), result=None)
+
+    def with_log(self, log: str) -> "TaskRecord":
+        """Return the record with `log` as the log of its latest run.
+
+        `log` is the path of the file, relative to the job directory.
+        """
+        return replace(self, runs=self._runs_with_latest(log=log))
 
     def failed(self, *, error: str) -> "TaskRecord":
         """Return the record with its latest run failed with `error`."""
-        latest = replace(
-            self.latest_run, status=FAILED, finished=timestamp(), error=error
-        )
-        return replace(self, runs=(*self.runs[:-1], latest))
+        runs = self._runs_with_latest(status=FAILED, finished=timestamp(), error=error)
+        return replace(self, runs=runs)
 
     def done(
         self, outcome: TaskOutcome, *, wall_seconds: float, root_dir: Path
     ) -> "TaskRecord":
         """Return the record with its latest run done and the result of `outcome`.
 
-        The log and the set-aside folder of `outcome` are made relative to
-        `root_dir`, the job directory, and `wall_seconds` is added to its usage.
+        The set-aside folder of `outcome` is made relative to `root_dir`, the
+        job directory, and `wall_seconds` is added to its usage.
         """
-
-        def relative(path: Path) -> str:
-            return path.relative_to(root_dir).as_posix()
-
-        latest = replace(
-            self.latest_run,
+        set_aside_dir = outcome.set_aside_dir
+        runs = self._runs_with_latest(
             status=DONE,
             finished=timestamp(),
             usage={"wall_seconds": round(wall_seconds, 3), **outcome.usage},
-            log=None if outcome.log_path is None else relative(outcome.log_path),
             set_aside=(
                 None
-                if outcome.set_aside_dir is None
-                else relative(outcome.set_aside_dir)
+                if set_aside_dir is None
+                else set_aside_dir.relative_to(root_dir).as_posix()
             ),
         )
-        return replace(self, runs=(*self.runs[:-1], latest), result=outcome.result)
+        return replace(self, runs=runs, result=outcome.result)
+
+    def _runs_with_latest(self, **changes: Any) -> tuple[TaskRun, ...]:
+        """Return the runs, the latest with its fields replaced by `changes`."""
+        return (*self.runs[:-1], replace(self.latest_run, **changes))
 
     def _done_result(self) -> TaskResult:
         """Return the result, which only a record whose latest run is done holds."""

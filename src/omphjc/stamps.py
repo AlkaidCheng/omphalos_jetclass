@@ -39,7 +39,8 @@ from omphjc.safe_paths import inside, is_occupied, remove_inside
 STAMP_FILE = "omphjc-stamp.json"
 SET_ASIDE_DIR = "omphjc-set-aside"
 _PRODUCER = "omphjc"
-_CREATED_FORMAT = "%Y%m%dT%H%M%SZ"
+COMPACT_UTC_FORMAT = "%Y%m%dT%H%M%SZ"
+"""A UTC time as it is written in a name, such as ``20261027T153012Z``."""
 # A folder _set_aside makes: the creation time, then the suffix tempfile.mkdtemp adds.
 _SET_ASIDE_FOLDER = re.compile(r"([0-9]{8}T[0-9]{6}Z)-[A-Za-z0-9_]+")
 
@@ -310,7 +311,7 @@ def set_aside_folders(directory: Path) -> list[SetAsideFolder]:
             match = _SET_ASIDE_FOLDER.fullmatch(entry.name)
             if match is None or not entry.is_dir(follow_symlinks=False):
                 continue
-            created = datetime.strptime(match.group(1), _CREATED_FORMAT)
+            created = datetime.strptime(match.group(1), COMPACT_UTC_FORMAT)
             found.append(
                 SetAsideFolder(
                     path=Path(entry.path), created=created.replace(tzinfo=timezone.utc)
@@ -350,7 +351,7 @@ def _set_aside(directory: Path, artifacts: Mapping[str, Path]) -> Path:
     """Move `artifacts` into a new folder under ``omphjc-set-aside/``; return it."""
     set_aside_dir = inside(directory, SET_ASIDE_DIR)
     set_aside_dir.mkdir(exist_ok=True)
-    created = datetime.now(timezone.utc).strftime(_CREATED_FORMAT)
+    created = datetime.now(timezone.utc).strftime(COMPACT_UTC_FORMAT)
     folder = Path(tempfile.mkdtemp(dir=set_aside_dir, prefix=f"{created}-"))
     for name, path in artifacts.items():
         target_path = folder / name

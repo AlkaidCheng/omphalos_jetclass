@@ -184,7 +184,8 @@ class ProgramWorkspace(Workspace):
     """The directory of one process's runs of one external program.
 
     A subclass names its program in the class attributes below, as it names
-    its purpose and artifacts for :class:`Workspace`.
+    its purpose for :class:`Workspace`, and adds what its run makes to
+    :attr:`artifacts`.
 
     Parameters
     ----------
@@ -194,6 +195,10 @@ class ProgramWorkspace(Workspace):
         The program file to run instead of the one on PATH.
     timeout : float or None
         Seconds the run may take from now; ``None`` sets no limit.
+    log_dir : Path or None, optional
+        An existing directory for the log. ``None``, the default, keeps the
+        log in `workdir` as one of the run's artifacts; a log elsewhere is
+        not an artifact, so a later run in `workdir` leaves it in place.
 
     Attributes
     ----------
@@ -229,10 +234,12 @@ class ProgramWorkspace(Workspace):
         *,
         program_path: Path | None,
         timeout: float | None,
+        log_dir: Path | None = None,
     ) -> None:
         if timeout is not None and timeout <= 0:
             raise ValueError(f"timeout must be positive, got {timeout}")
         super().__init__(process_name, workdir)
+        self.log_dir = log_dir
         self.program_path = find_program(
             self.program, program_path, description=self.description
         )
@@ -244,7 +251,12 @@ class ProgramWorkspace(Workspace):
     @property
     def log_path(self) -> Path:
         """The program's output for the run."""
-        return self.workdir / self.log_name
+        return (self.workdir if self.log_dir is None else self.log_dir) / self.log_name
+
+    @property
+    def artifacts(self) -> list[str]:
+        """The log, when it is in the directory; a subclass adds what its run makes."""
+        return [self.log_name] if self.log_dir is None else []
 
     def run(
         self, command: Sequence[str | os.PathLike[str]], *, failure_message: str

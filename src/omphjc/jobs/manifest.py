@@ -12,7 +12,7 @@ name of the task::
       "tasks": {
         "generate": {
           "status": "done",
-          "started": "2026-10-23T02:00:00+00:00",
+          "latest_run_id": "20261023T020000Z-b81d07c3",
           "n_runs": 2,
           "record_path": "generate/task.json"
         }
@@ -21,9 +21,9 @@ name of the task::
 
 ``process``, ``job_id`` and ``seed`` identify the job as ``job.json`` does
 (:mod:`omphjc.jobs.identity`), and ``omphjc_version`` is the version of omphjc
-that wrote the manifest. A task has the ``status`` and the start time of the
-latest run in its record (:mod:`omphjc.jobs.task`) and the number of runs in
-the record, ``n_runs``. ``record_path`` is the path of the
+that wrote the manifest. A task has the ``status`` and the ID of the latest
+run in its record (:mod:`omphjc.jobs.task`) and the number of runs in the
+record, ``n_runs``. ``record_path`` is the path of the
 record, relative to the job directory. :mod:`omphjc.jobs.record_file`
 describes ``schema``.
 
@@ -48,8 +48,8 @@ class TaskSummary:
     ----------
     status : str
         The status of the task, that of the latest run in its record.
-    started : str
-        The start time of that run.
+    latest_run_id : str
+        The ID of that run, which begins with its start time.
     n_runs : int
         The number of runs in the record.
     record_path : Path
@@ -57,7 +57,7 @@ class TaskSummary:
     """
 
     status: str
-    started: str
+    latest_run_id: str
     n_runs: int
     record_path: Path
 
@@ -93,7 +93,7 @@ class Manifest(RecordFile):
         tasks = {
             name: TaskSummary(
                 status=entry["status"],
-                started=entry["started"],
+                latest_run_id=entry["latest_run_id"],
                 n_runs=entry["n_runs"],
                 record_path=root_dir / entry["record_path"],
             )

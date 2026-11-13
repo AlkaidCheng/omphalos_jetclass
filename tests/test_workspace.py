@@ -128,12 +128,15 @@ class ToolWorkspace(ProgramWorkspace):
         *,
         tool_path: Path | None = None,
         timeout: float | None = None,
+        log_dir: Path | None = None,
     ) -> None:
-        super().__init__(process_name, workdir, program_path=tool_path, timeout=timeout)
-
-    @property
-    def artifacts(self) -> list[str]:
-        return [self.log_name]
+        super().__init__(
+            process_name,
+            workdir,
+            program_path=tool_path,
+            timeout=timeout,
+            log_dir=log_dir,
+        )
 
 
 @pytest.fixture
@@ -157,6 +160,18 @@ def test_a_program_workspace_takes_the_given_program_or_finds_it_on_path(
         ToolWorkspace("HToBB", tmp_path)
     with pytest.raises(FileNotFoundError, match="the fake tool .* not found"):
         ToolWorkspace("HToBB", tmp_path, tool_path=tmp_path / "missing")
+
+
+def test_a_log_in_another_directory_is_not_an_artifact(
+    tool_path: Path, tmp_path: Path
+) -> None:
+    workdir = tmp_path / "work"
+    workspace = ToolWorkspace("HToBB", workdir, tool_path=tool_path)
+    assert workspace.artifacts == ["tool.log"]
+    log_dir = tmp_path / "logs"
+    workspace = ToolWorkspace("HToBB", workdir, tool_path=tool_path, log_dir=log_dir)
+    assert workspace.artifacts == []
+    assert workspace.log_path == log_dir / "tool.log"
 
 
 @pytest.mark.parametrize("timeout", [0, -1.0])

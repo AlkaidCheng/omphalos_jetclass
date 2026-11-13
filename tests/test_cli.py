@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -5,6 +6,15 @@ from click.testing import CliRunner
 
 from omphjc.cli import cli
 from omphjc.config_paths import export_config
+
+RUN_ROW = re.compile(r"  run ID            (\d{8}T\d{6}Z-[0-9a-f]{8})")
+
+
+def _run_id(line: str) -> str:
+    """Return the run ID in the report row `line`, which must be the run row."""
+    match = RUN_ROW.fullmatch(line)
+    assert match is not None, line
+    return match.group(1)
 
 
 def test_processes_lists_every_class() -> None:
@@ -139,15 +149,16 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
     lines = result.output.splitlines()
     assert lines[0].startswith("HToBB job 1: ") and lines[0].endswith("HToBB/job_1")
     assert lines[1] == "MadGraph generation: done"
-    assert lines[2] == "  MadGraph 3.5.7, seed 10000001"
-    assert lines[3] == "  events requested  10"
-    assert lines[4] == "  events generated  10000"
-    assert lines[5] == "  cross section     1.05282 +- 0.0024 pb"
-    assert lines[6].startswith("  event file        generate/HToBB/Events/")
-    assert lines[7] == "  log               generate/madgraph.log"
-    assert lines[8] == "  cards             generate/cards/"
-    assert lines[9].startswith("  took              ") and "s wall" in lines[9]
-    assert "s CPU" in lines[9] and "MiB peak" in lines[9]
+    run_id = _run_id(lines[2])
+    assert lines[3] == "  MadGraph 3.5.7, seed 10000001"
+    assert lines[4] == "  events requested  10"
+    assert lines[5] == "  events generated  10000"
+    assert lines[6] == "  cross section     1.05282 +- 0.0024 pb"
+    assert lines[7].startswith("  event file        generate/HToBB/Events/")
+    assert lines[8] == f"  log               generate/runs/{run_id}/madgraph.log"
+    assert lines[9] == "  cards             generate/cards/"
+    assert lines[10].startswith("  took              ") and "s wall" in lines[10]
+    assert "s CPU" in lines[10] and "MiB peak" in lines[10]
     job_dir = tmp_path / "HToBB" / "job_1"
     record_paths = [job_dir / "generate" / "task.json", job_dir / "manifest.json"]
     written = [path.read_text() for path in record_paths]
@@ -180,8 +191,8 @@ def test_a_report_counts_the_runs_of_a_rerun_task(
     rerun = CliRunner().invoke(cli, arguments)
     assert rerun.exit_code == 0, rerun.output
     lines = rerun.output.splitlines()
-    assert lines[9] == "  runs              2 (failed, done)"
-    assert lines[10].startswith("  took              ")
+    assert lines[10] == "  runs              2 (failed, done)"
+    assert lines[11].startswith("  took              ")
 
 
 def test_shower_runs_after_generate_and_reports(
@@ -201,15 +212,16 @@ def test_shower_runs_after_generate_and_reports(
     lines = result.output.splitlines()
     assert lines[0].startswith("HToBB job 1: ")
     assert lines[1] == "Pythia shower: done"
-    assert lines[2] == "  Pythia 8.318, seed 10000001"
-    assert lines[3] == "  events read       1"
-    assert lines[4] == "  events kept       1"
-    assert lines[5] == "  output            shower/particles.root"
-    assert lines[6] == "  log               shower/shower.log"
+    run_id = _run_id(lines[2])
+    assert lines[3] == "  Pythia 8.318, seed 10000001"
+    assert lines[4] == "  events read       1"
+    assert lines[5] == "  events kept       1"
+    assert lines[6] == "  output            shower/particles.root"
+    assert lines[7] == f"  log               shower/runs/{run_id}/shower.log"
     assert (
-        lines[7] == "  settings          shower/pythia.cmnd, shower/particles_card.tcl"
+        lines[8] == "  settings          shower/pythia.cmnd, shower/particles_card.tcl"
     )
-    assert lines[8].startswith("  took              ") and "s wall" in lines[8]
+    assert lines[9].startswith("  took              ") and "s wall" in lines[9]
     again = CliRunner().invoke(cli, shower)
     assert again.exit_code == 0, again.output
     assert "Pythia shower: done, kept from an earlier run" in again.output
@@ -270,12 +282,13 @@ def test_simulate_runs_after_shower_and_reports(
     lines = result.output.splitlines()
     assert lines[0].startswith("HToBB job 1: ")
     assert lines[1] == "Delphes simulation: done"
-    assert lines[2] == "  card              simulate/delphes_card.tcl"
-    assert lines[3] == "  seed              10000001"
-    assert lines[4] == "  events            1"
-    assert lines[5] == "  output            simulate/delphes.root"
-    assert lines[6] == "  log               simulate/simulate.log"
-    assert lines[7].startswith("  took              ") and "s wall" in lines[7]
+    run_id = _run_id(lines[2])
+    assert lines[3] == "  card              simulate/delphes_card.tcl"
+    assert lines[4] == "  seed              10000001"
+    assert lines[5] == "  events            1"
+    assert lines[6] == "  output            simulate/delphes.root"
+    assert lines[7] == f"  log               simulate/runs/{run_id}/simulate.log"
+    assert lines[8].startswith("  took              ") and "s wall" in lines[8]
     again = CliRunner().invoke(cli, simulate)
     assert again.exit_code == 0, again.output
     assert "Delphes simulation: done, kept from an earlier run" in again.output

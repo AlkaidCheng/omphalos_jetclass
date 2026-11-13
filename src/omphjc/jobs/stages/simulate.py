@@ -13,7 +13,11 @@ from omphjc.jobs.task import (
     TaskRecord,
     TaskResult,
 )
-from omphjc.tools.delphes.driver import detector_card_text, simulate_events
+from omphjc.tools.delphes.driver import (
+    SimulationWorkspace,
+    detector_card_text,
+    simulate_events,
+)
 
 SIMULATE = "simulate"
 """The stage's name and directory, ``<job>/simulate/``."""
@@ -69,7 +73,7 @@ def simulate(
     card_text = detector_card_text(job.spec, card_path)
     card_hash = hashlib.sha256(card_text.encode("utf-8")).hexdigest()
 
-    def body(overwrite: bool) -> TaskOutcome:
+    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
         # This module loads the array libraries, so it is imported here and
         # not when a command starts.
         from omphjc.events.delphes_root import DelphesROOTFile
@@ -82,6 +86,7 @@ def simulate(
             card_path=card_path,
             timeout=timeout,
             overwrite=overwrite,
+            log_dir=run_dir,
             delphes_root_path=delphes_root_path,
         )
         delphes_file = DelphesROOTFile.read(run.output_path)
@@ -100,7 +105,6 @@ def simulate(
                     "card": {job.relative_path(run.card_path): sha256(run.card_path)}
                 },
             ),
-            log_path=run.log_path,
             usage=run.usage.as_record(),
             set_aside_dir=run.set_aside,
         )
@@ -110,4 +114,6 @@ def simulate(
         "card": card_hash,
         "input_fingerprint": events.fingerprint,
     }
-    return job.run_task(SIMULATE, parameters, body, force=force)
+    return job.run_task(
+        SIMULATE, parameters, body, log_name=SimulationWorkspace.log_name, force=force
+    )

@@ -383,20 +383,20 @@ runs/dev/HToBB/job_1/
 ├── manifest.json          the stages that have a record, with the status of each
 ├── generate/              the MadGraph working directory, MadGraph's own layout inside
 │   ├── task.json          the record: what the stage ran with and what came out
+│   ├── runs/<run_id>/madgraph.log   one directory per run, with that run's log
 │   ├── cards/             the cards MadGraph ran with, hashed in the record
-│   ├── madgraph.log
 │   └── HToBB/Events/run_01/unweighted_events.lhe.gz
 ├── shower/                the DelphesPythia8 working directory
 │   ├── task.json
+│   ├── runs/<run_id>/shower.log     DelphesPythia8's output, Pythia's statistics included
 │   ├── events.lhe         the generated events, uncompressed for DelphesPythia8
 │   ├── pythia.cmnd        the Pythia settings as run, hashed in the record
 │   ├── particles_card.tcl the card that writes the record and simulates nothing, hashed
-│   ├── shower.log         DelphesPythia8's output, Pythia's statistics included
 │   └── particles.root     every showered event's generator record (Particle branch)
 └── simulate/              the DelphesROOT working directory
     ├── task.json
+    ├── runs/<run_id>/simulate.log   DelphesROOT's output
     ├── delphes_card.tcl   the detector card as run, seeded, hashed in the record
-    ├── simulate.log       DelphesROOT's output
     └── delphes.root
 ```
 
@@ -408,11 +408,16 @@ stage that runs writes the process, the job number and the seed to `job.json`,
 and no stage runs in a directory whose `job.json` gives another process, job
 number or seed. Each stage keeps a record, `task.json`, in its directory: the
 parameters it was asked for, its result, and one entry per run of the stage
-with the run's status, its start and end times, its log, and what it took: the
-wall time of the run and the CPU time and peak memory of the program's
-processes. The status of the stage is that of its latest run, and what a
-rerun followed is the status of the run before it: a failure, an interruption,
-or, after a run that was done, a missing output.
+with the run's ID, its status, its start and end times, the host it ran on,
+its log, and what it took: the wall time of the run and the CPU time and peak
+memory of the program's processes. The run ID is the start time in UTC and
+eight random hexadecimal digits, such as `20261027T153012Z-4f9c2a1e`, and the
+stage's report prints it first. Each run writes the program's log in
+`runs/<run_id>/` in the stage's directory, where it stays when the stage runs
+again, so the record names the log of a failed or interrupted run too. The
+status of the stage is that of its latest run, and what a rerun followed is
+the status of the run before it: a failure, an interruption, or, after a run
+that was done, a missing output.
 The result names the stage's outputs, giving
 each file's size and an event file's format, number of events and fingerprint,
 and holds the metadata of what it made. Two event files with the same events
@@ -433,11 +438,10 @@ refused unless `--force` is given.
 
 `manifest.json` is an index of the job: the process, the job number, the seed
 and the omphjc version, and for each stage that has a record its status, the
-start time of its latest run, its number of runs and the path of its
-`task.json`. A stage writes it again from the
-records whenever it writes its own. The commands read the records and never
-the manifest, so a deleted manifest is written again by the next stage that
-runs.
+ID of its latest run, its number of runs and the path of its `task.json`. A
+stage writes it again from the records whenever it writes its own. The
+commands read the records and never the manifest, so a deleted manifest is
+written again by the next stage that runs.
 
 Running a stage again keeps a result recorded as done whose outputs are
 present and whose parameters match, runs again a stage that failed, was
