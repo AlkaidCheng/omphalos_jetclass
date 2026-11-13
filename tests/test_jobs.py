@@ -27,6 +27,7 @@ from omphjc.jobs import (
     TaskOutput,
     TaskRecord,
     TaskResult,
+    TaskRun,
     TaskStatus,
     TaskSummary,
     TerminationError,
@@ -78,9 +79,8 @@ def test_a_job_has_a_directory_per_process_and_number(
 def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
     output_path = tmp_path / "x" / "out"
     record = TaskRecord(
-        status="done",
-        started="t",
         parameters={"events": 10},
+        runs=(TaskRun("done", "t", finished="u"),),
         result=TaskResult(
             outputs={
                 EVENTS_OUTPUT: EventOutput(
@@ -100,7 +100,18 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
     record.write(path, root_dir=tmp_path)
     written = json.loads(path.read_text())
     assert written["schema"] == 1
-    assert written["status"] == "done" and written["parameters"] == {"events": 10}
+    assert written["parameters"] == {"events": 10}
+    assert written["runs"] == [
+        {
+            "status": "done",
+            "started": "t",
+            "finished": "u",
+            "usage": {},
+            "log": None,
+            "set_aside": None,
+            "error": None,
+        }
+    ]
     assert written["result"] == {
         "outputs": {
             "events": {
@@ -141,14 +152,59 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
         TaskRecord.read(path, root_dir=tmp_path)
 
 
+def test_a_task_record_needs_a_run_and_a_result_that_fits_its_status(
+    tmp_path: Path,
+) -> None:
+    done = TaskRun("done", "t")
+    with pytest.raises(ValueError, match="the record has no runs"):
+        TaskRecord(parameters={}, runs=())
+    with pytest.raises(
+        ValueError, match="has status 'done' but the record has no result"
+    ):
+        TaskRecord(parameters={}, runs=(done,))
+    failed = TaskRun("failed", "t", error="boom")
+    with pytest.raises(
+        ValueError, match="has status 'failed' but the record has a result"
+    ):
+        TaskRecord(parameters={}, runs=(failed,), result=TaskResult())
+    with pytest.raises(ValueError, match="unknown run status 'paused'"):
+        TaskRun("paused", "t")
+    path = tmp_path / "x" / "task.json"
+    path.parent.mkdir()
+    without_runs = {"schema": 1, "parameters": {}, "result": None}
+    path.write_text(json.dumps(without_runs))
+    with pytest.raises(ValueError, match="invalid content: the record has no runs"):
+        TaskRecord.read(path, root_dir=tmp_path)
+
+
+def test_a_record_gives_its_outputs_only_when_its_latest_run_is_done(
+    tmp_path: Path,
+) -> None:
+    events = EventOutput(tmp_path / "e.lhe", 7, EventFormat.LHE, 10, "lhe-v1:abc")
+    done = TaskRecord(
+        parameters={},
+        runs=(TaskRun("done", "t"),),
+        result=TaskResult(outputs={EVENTS_OUTPUT: events}, metadata={"n": 1}),
+    )
+    assert done.events == events and done.metadata == {"n": 1}
+    assert done.is_done
+    no_events = TaskRecord({}, (TaskRun("done", "t"),), TaskResult())
+    assert no_events.events is None
+    failed = TaskRecord({}, (TaskRun("failed", "t", error="boom"),))
+    assert not failed.is_done
+    refusal = "The task record has no result: its latest run has status 'failed'"
+    with pytest.raises(ValueError, match=re.escape(refusal)):
+        _ = failed.outputs
+
+
 def test_a_task_record_refuses_a_path_outside_its_root_directory(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "job" / "x" / "task.json"
     path.parent.mkdir(parents=True)
     record = TaskRecord(
-        status="done",
-        started="t",
+        parameters={},
+        runs=(TaskRun("done", "t"),),
         result=TaskResult(
             outputs={"out": TaskOutput(tmp_path / "elsewhere" / "out", n_bytes=0)}
         ),
@@ -162,8 +218,8 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
     manifest = Manifest(
         JobIdentity(process="HToBB", job_id=1, seed=10000001),
         {
-            "x": TaskSummary("done", "t", tmp_path / "x" / "task.json"),
-            "y": TaskSummary("running", "u", tmp_path / "y" / "task.json"),
+            "x": TaskSummary("done", "t", 1, tmp_path / "x" / "task.json"),
+            "y": TaskSummary("running", "u", 2, tmp_path / "y" / "task.json"),
         },
     )
     path = tmp_path / "manifest.json"
@@ -175,8 +231,18 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
         "seed": 10000001,
         "omphjc_version": __version__,
         "tasks": {
-            "x": {"status": "done", "started": "t", "record_path": "x/task.json"},
-            "y": {"status": "running", "started": "u", "record_path": "y/task.json"},
+            "x": {
+                "status": "done",
+                "started": "t",
+                "n_runs": 1,
+                "record_path": "x/task.json",
+            },
+            "y": {
+                "status": "running",
+                "started": "u",
+                "n_runs": 2,
+                "record_path": "y/task.json",
+            },
         },
     }
     assert Manifest.read(path) == manifest
@@ -207,13 +273,14 @@ def test_a_stage_runs_once_and_its_result_is_kept(
     job = Job(specs["HToBB"], tmp_path, 1)
     record = job.run_task("x", {"events": 10}, body)
     assert calls == [False]
-    assert record.status == "done" and record.finished is not None
+    assert record.is_done and record.latest_run.finished is not None
+    assert len(record.runs) == 1
     assert record.parameters == {"events": 10}
     assert record.result == TaskResult(
         outputs={"out": TaskOutput(job.root_dir / "x" / "out.txt", n_bytes=4)},
         metadata={"n": 1},
     )
-    assert record.log is None
+    assert record.latest_run.log is None
     assert job.task_record("x") == record
 
     job = Job(specs["HToBB"], tmp_path, 1)
@@ -245,6 +312,7 @@ def test_other_parameters_need_force_and_force_replaces(
     )
     forced = job.run_task("x", {"events": 20}, body, force=True)
     assert forced.parameters == {"events": 20}
+    assert len(forced.runs) == 1
     assert calls == [False, True]
 
 
@@ -272,7 +340,10 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
 
     def body(overwrite: bool) -> TaskOutcome:
         calls.append(overwrite)
-        return _make_output(job)
+        outcome = _make_output(job)
+        return replace(
+            outcome, result=replace(outcome.result, metadata={"n": len(calls)})
+        )
 
     job = Job(specs["HToBB"], tmp_path, 1)
     assert job.task("x") == Task("x", TaskStatus.NOT_DONE)
@@ -283,14 +354,21 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
     assert job.task("x") == Task(
         "x", TaskStatus.MISSING_OUTPUT, f"{output_path} is missing", record
     )
-    job.run_task("x", {}, body)
+    rerun = job.run_task("x", {}, body)
     assert calls == [False, True]
+    assert [run.status for run in rerun.runs] == ["done", "done"]
+    assert rerun.metadata == {"n": 2}
 
-    running = TaskRecord(status="running", started="t")
+    running = TaskRecord({}, (TaskRun("running", "t"),))
     running.write(job.task_record_path("x"), root_dir=job.root_dir)
     job = Job(specs["HToBB"], tmp_path, 1)
     assert job.task("x") == Task("x", TaskStatus.NOT_DONE, record=running)
-    assert job.run_task("x", {}, body).status == "done"
+    after_kill = job.run_task("x", {}, body)
+    assert [run.status for run in after_kill.runs] == [
+        "interrupted",
+        "done",
+    ]
+    assert after_kill.runs[0].finished is None
     assert calls == [False, True, True]
 
 
@@ -330,7 +408,7 @@ def test_a_stage_whose_output_has_another_size_is_refused_unless_forced(
     with pytest.raises(ValueError, match=refused):
         job.run_task("x", {}, body)
     assert calls == [False]
-    assert job.run_task("x", {}, body, force=True).status == "done"
+    assert job.run_task("x", {}, body, force=True).is_done
     assert calls == [False, True]
     assert job.require_done("x").result.outputs["out"].n_bytes == 4
 
@@ -400,8 +478,11 @@ def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
         job.run_task("x", {"events": 10}, failing)
     record = job.task_record("x")
     assert record is not None
-    assert record.status == "failed" and record.finished is not None
-    assert record.parameters == {"events": 10} and record.error == "boom"
+    assert (
+        record.latest_run.status == "failed" and record.latest_run.finished is not None
+    )
+    assert record.parameters == {"events": 10} and record.result is None
+    assert record.latest_run.error == "boom"
 
     calls: list[bool] = []
 
@@ -410,8 +491,16 @@ def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.run_task("x", {"events": 10}, body).status == "done"
+    rerun = job.run_task("x", {"events": 10}, body)
+    assert [run.status for run in rerun.runs] == ["failed", "done"]
+    assert rerun.runs[0].usage == {}
+    assert rerun.runs[1].usage["wall_seconds"] >= 0
     assert calls == [True]
+
+    with pytest.raises(RuntimeError, match="boom"):
+        job.run_task("y", {"events": 10}, failing)
+    other = job.run_task("y", {"events": 20}, body)
+    assert len(other.runs) == 1
 
 
 def test_two_jobs_opened_on_one_directory_keep_the_records_of_both_tasks(
@@ -443,8 +532,12 @@ def test_the_manifest_lists_every_task_and_is_written_again_when_deleted(
     manifest = Manifest(
         job.identity,
         {
-            "x": TaskSummary("done", x_record.started, job.task_record_path("x")),
-            "y": TaskSummary("failed", y_record.started, job.task_record_path("y")),
+            "x": TaskSummary(
+                "done", x_record.latest_run.started, 1, job.task_record_path("x")
+            ),
+            "y": TaskSummary(
+                "failed", y_record.latest_run.started, 1, job.task_record_path("y")
+            ),
         },
     )
     assert Manifest.read(job.manifest_path) == manifest
@@ -453,7 +546,9 @@ def test_the_manifest_lists_every_task_and_is_written_again_when_deleted(
     assert job.run_task("x", {}, lambda overwrite: _make_output(job)) == x_record
     assert not job.manifest_path.exists()
     z_record = job.run_task("z", {}, lambda overwrite: TaskOutcome(TaskResult()))
-    entry = TaskSummary("done", z_record.started, job.task_record_path("z"))
+    entry = TaskSummary(
+        "done", z_record.latest_run.started, 1, job.task_record_path("z")
+    )
     assert Manifest.read(job.manifest_path) == Manifest(
         job.identity, {**manifest.tasks, "z": entry}
     )
@@ -522,7 +617,7 @@ def test_a_later_task_keeps_the_identity_file(
     created.create(job.identity_path)
     later = Job(specs["HToBB"], tmp_path, 1)
     record = later.run_task("x", {}, lambda overwrite: _make_output(later))
-    assert record.status == "done"
+    assert record.is_done
     assert JobIdentity.read(job.identity_path).omphjc_version == "0.0.1"
 
 
@@ -615,14 +710,17 @@ def test_generate_records_what_madgraph_made(
     job = Job(specs["TTBar"], tmp_path, 3)
     record = generate(job, n_events=10, mg5_path=mg5_path)
     assert job.task_record("generate") == record
-    assert record.status == "done"
+    assert record.is_done
     assert record.parameters == {"events": 10, "seed": 3}
     metadata = record.result.metadata
     assert metadata["madgraph_version"] == "3.5.7"
     assert metadata["cross_section_pb"] == pytest.approx(1.052824254921272)
     assert metadata["cross_section_error_pb"] == pytest.approx(2.3983749989e-3)
-    assert record.usage["wall_seconds"] > 0
-    assert record.usage["cpu_seconds"] >= 0 and record.usage["peak_memory_mib"] > 0
+    assert record.latest_run.usage["wall_seconds"] > 0
+    assert (
+        record.latest_run.usage["cpu_seconds"] >= 0
+        and record.latest_run.usage["peak_memory_mib"] > 0
+    )
     lhe_path = job.root_dir / (
         "generate/TTBar/Events/run_01_decayed_1/unweighted_events.lhe.gz"
     )
@@ -636,7 +734,7 @@ def test_generate_records_what_madgraph_made(
             fingerprint=LHEFile.read(lhe_path).fingerprint(),
         )
     }
-    assert record.log == "generate/madgraph.log"
+    assert record.latest_run.log == "generate/madgraph.log"
     card = job.root_dir / "generate" / "cards" / "proc_card_mg5.dat"
     assert card.is_file()
     assert metadata["cards"]["generate/cards/proc_card_mg5.dat"] == (
@@ -681,7 +779,7 @@ def test_generate_keeps_a_finished_run_unless_forced(
     again = generate(
         Job(specs["HToBB"], tmp_path, 1), n_events=20, mg5_path=mg5_path, force=True
     )
-    assert again.status == "done"
+    assert again.is_done
     assert again.parameters == {"events": 20, "seed": 10000001}
     assert log.read_text().count("$ ") == runs
 
@@ -697,11 +795,15 @@ def test_a_failed_madgraph_run_is_recorded_and_retried(
         generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
     record = Job(specs["HToBB"], tmp_path, 1).task_record("generate")
     assert record is not None
-    assert record.status == "failed" and record.finished is not None
-    assert record.error is not None and "launch.mg5" in record.error
+    assert (
+        record.latest_run.status == "failed" and record.latest_run.finished is not None
+    )
+    assert (
+        record.latest_run.error is not None and "launch.mg5" in record.latest_run.error
+    )
     monkeypatch.delenv("FAKE_MG5_FAIL")
     done = generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
-    assert done.status == "done"
+    assert done.is_done
 
 
 def test_shower_needs_a_finished_madgraph_stage(
@@ -726,7 +828,7 @@ def test_shower_records_what_it_made_and_keeps_it(
     job = Job(specs["HToBB"], tmp_path, 1)
     record = shower(job, delphes_pythia8_path=delphes_pythia8_path)
     assert job.task_record("shower") == record
-    assert record.status == "done"
+    assert record.is_done
     assert record.parameters == {
         "events": 10000,
         "seed": 10000001,
@@ -752,7 +854,7 @@ def test_shower_records_what_it_made_and_keeps_it(
             fingerprint=DelphesROOTFile.read(root_path).fingerprint(),
         )
     }
-    assert record.log == "shower/shower.log"
+    assert record.latest_run.log == "shower/shower.log"
     cmnd = (job.root_dir / "shower" / "pythia.cmnd").read_text()
     assert "Random:seed = 10000001" in cmnd and "Main:numberOfEvents = 10000" in cmnd
     card = (job.root_dir / "shower" / "particles_card.tcl").read_text()
@@ -817,7 +919,7 @@ def test_a_stage_records_the_folder_its_run_set_aside(
         return replace(_make_output(job), set_aside_dir=aside)
 
     record = job.run_task("x", {"events": 10}, body)
-    assert record.set_aside == "x/omphjc-set-aside/20260101T000000Z-abc"
+    assert record.latest_run.set_aside == "x/omphjc-set-aside/20260101T000000Z-abc"
     assert job.task_record("x") == record
 
 
@@ -835,10 +937,12 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
     job = Job(specs["HToBB"], tmp_path, 1)
     assert job.set_aside_folders() == []
     record = generate(job, n_events=10, force=True, mg5_path=mg5_path)
-    assert record.set_aside is not None
-    assert record.set_aside.startswith("generate/omphjc-set-aside/")
+    assert record.latest_run.set_aside is not None
+    assert record.latest_run.set_aside.startswith("generate/omphjc-set-aside/")
     folders = job.set_aside_folders()
-    assert [job.relative_path(folder.path) for folder in folders] == [record.set_aside]
+    assert [job.relative_path(folder.path) for folder in folders] == [
+        record.latest_run.set_aside
+    ]
     assert folders[0].size() > 0
     assert job.clear_set_aside_folders() == folders
     assert job.set_aside_folders() == []
@@ -949,7 +1053,7 @@ def test_an_event_file_of_another_size_is_refused_by_its_stage_and_the_next(
     with pytest.raises(ValueError, match=refused):
         simulate(job, delphes_root_path=delphes_root_path)
     shower(job, delphes_pythia8_path=delphes_pythia8_path, force=True)
-    assert simulate(job, delphes_root_path=delphes_root_path).status == "done"
+    assert simulate(job, delphes_root_path=delphes_root_path).is_done
 
 
 def test_simulate_records_what_it_made_and_keeps_it(
@@ -963,7 +1067,7 @@ def test_simulate_records_what_it_made_and_keeps_it(
     generate(job, n_events=10, mg5_path=mg5_path)
     showered = shower(job, delphes_pythia8_path=delphes_pythia8_path)
     record = simulate(job, delphes_root_path=delphes_root_path)
-    assert record.status == "done"
+    assert record.is_done
     assert record.parameters["seed"] == job.seed
     assert (
         record.parameters["input_fingerprint"]
@@ -982,7 +1086,7 @@ def test_simulate_records_what_it_made_and_keeps_it(
             fingerprint=DelphesROOTFile.read(root_path).fingerprint(),
         )
     }
-    assert record.log == "simulate/simulate.log"
+    assert record.latest_run.log == "simulate/simulate.log"
     card = (job.root_dir / "simulate" / "delphes_card.tcl").read_text()
     assert card.endswith("\nset RandomSeed 10000001\n")
     log = (job.root_dir / "simulate" / "simulate.log").read_text()
@@ -1006,10 +1110,7 @@ def test_simulate_records_what_it_made_and_keeps_it(
         force=True,
         delphes_root_path=delphes_root_path,
     )
-    assert (
-        forced.status == "done"
-        and forced.parameters["card"] != record.parameters["card"]
-    )
+    assert forced.is_done and forced.parameters["card"] != record.parameters["card"]
     assert (
         (job.root_dir / "simulate" / "delphes_card.tcl")
         .read_text()
@@ -1070,7 +1171,7 @@ def test_a_forced_rerun_of_each_program_leaves_the_record_of_its_task(
     for stage, run in runs.items():
         run(False)
         record = run(True)
-        assert record.set_aside is None
+        assert record.latest_run.set_aside is None
         assert job.task_record(stage) == record
         stamp = read_stamp(job.task_dir(stage))
         assert stamp is not None and "task.json" not in stamp.artifacts

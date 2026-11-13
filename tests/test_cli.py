@@ -169,6 +169,21 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
     )
 
 
+def test_a_report_counts_the_runs_of_a_rerun_task(
+    mg5_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    arguments = ["generate", "HToBB", "--job-id", "1", "--outdir", str(tmp_path)]
+    arguments += ["--events", "10", "--mg5", str(mg5_path)]
+    monkeypatch.setenv("FAKE_MG5_FAIL", "launch")
+    assert CliRunner().invoke(cli, arguments).exit_code != 0
+    monkeypatch.delenv("FAKE_MG5_FAIL")
+    rerun = CliRunner().invoke(cli, arguments)
+    assert rerun.exit_code == 0, rerun.output
+    lines = rerun.output.splitlines()
+    assert lines[9] == "  runs              2 (failed, done)"
+    assert lines[10].startswith("  took              ")
+
+
 def test_shower_runs_after_generate_and_reports(
     mg5_path: Path, delphes_pythia8_path: Path, tmp_path: Path
 ) -> None:

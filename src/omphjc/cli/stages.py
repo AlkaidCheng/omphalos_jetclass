@@ -109,7 +109,7 @@ def generate_job(
 
 def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the generate stage of `job` ran with and what it made."""
-    metadata = record.result.metadata
+    metadata = record.metadata
     events = job.require_events(GENERATE)
     yield f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
     yield format_row("events requested", record.parameters["events"])
@@ -120,7 +120,7 @@ def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     )
     yield format_row("cross section", cross_section)
     yield format_row("event file", job.relative_path(events.path))
-    yield format_row("log", record.log)
+    yield format_row("log", record.latest_run.log)
     yield format_row("cards", f"{job.relative_path(job.task_dir(GENERATE))}/cards/")
 
 
@@ -177,7 +177,7 @@ def shower_job(
 
 def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the shower stage of `job` ran with and what it made."""
-    metadata = record.result.metadata
+    metadata = record.metadata
     events = job.require_events(SHOWER)
     yield f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
     yield format_row("events read", metadata["events_read"])
@@ -185,7 +185,7 @@ def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     if "matching_efficiency" in metadata:
         yield format_row("kept by matching", f"{metadata['matching_efficiency']:.1%}")
     yield format_row("output", job.relative_path(events.path))
-    yield format_row("log", record.log)
+    yield format_row("log", record.latest_run.log)
     yield format_row("settings", ", ".join(metadata["settings"]))
 
 
@@ -248,11 +248,11 @@ def simulate_job(
 def _simulation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the simulation stage of `job` ran with and what it made."""
     events = job.require_events(SIMULATE)
-    yield format_row("card", ", ".join(record.result.metadata["card"]))
+    yield format_row("card", ", ".join(record.metadata["card"]))
     yield format_row("seed", record.parameters["seed"])
     yield format_row("events", events.n_events)
     yield format_row("output", job.relative_path(events.path))
-    yield format_row("log", record.log)
+    yield format_row("log", record.latest_run.log)
 
 
 def _run_stage_command(
@@ -268,22 +268,27 @@ def _run_stage_command(
     """Run `stage` of one job of `spec` through `run` and print its report.
 
     `title` names the stage in the report and `lines` gives the rows between
-    the title and what the stage took. An error in :data:`_STAGE_ERRORS`
-    becomes a :class:`click.ClickException`.
+    the title and what the latest run took. A task run more than once also
+    gets a row with its number of runs and the status of each. An error in
+    :data:`_STAGE_ERRORS` becomes a :class:`click.ClickException`.
     """
     try:
         job = Job(spec, outdir, job_id)
-        earlier = job.task_record(stage)
+        previous_record = job.task_record(stage)
         with exception_on_termination():
             record = run(job)
     except _STAGE_ERRORS as error:
         raise click.ClickException(str(error)) from error
-    outcome = "done, kept from an earlier run" if record == earlier else "done"
+    kept = record == previous_record
+    outcome = "done, kept from an earlier run" if kept else "done"
     click.echo(format_job_line(job.spec.name, job.job_id, job.root_dir))
     click.echo(f"{title}: {outcome}")
     for line in lines(job, record):
         click.echo(line)
-    click.echo(format_row("took", format_usage(record.usage)))
+    if len(record.runs) > 1:
+        statuses = ", ".join(run.status for run in record.runs)
+        click.echo(format_row("runs", f"{len(record.runs)} ({statuses})"))
+    click.echo(format_row("took", format_usage(record.latest_run.usage)))
     _report_set_aside(job)
 
 
