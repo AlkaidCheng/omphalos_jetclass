@@ -1,10 +1,14 @@
 """Keep the files a run writes and deletes inside the directory they belong to.
 
-Names that come from data, such as a catalogue's process and model names, are
-screened before they become part of a path, paths are normalized before they
-are compared, and a deletion names the directory it must stay inside. A
-malformed name such as ``""``, ``".."`` or ``"/etc"`` is refused rather than
-allowed to point a write or a deletion somewhere else.
+The module applies these rules:
+
+- A name that comes from data, such as a process name or a model name of a
+  catalogue, is screened before it becomes part of a path.
+- Paths are normalized before they are compared.
+- A deletion names the directory that it must stay inside.
+
+A malformed name such as ``""``, ``".."`` or ``"/etc"`` is refused, so it
+cannot point a write or a deletion somewhere else.
 """
 
 import os
@@ -103,8 +107,8 @@ def require_unoccupied(path: Path, *, what: str) -> Path:
     Raises
     ------
     FileExistsError
-        If something, a broken symbolic link included, is at `path`; the
-        message says to pass ``overwrite=True`` to replace it.
+        If something is at `path`. A broken symbolic link counts. The message
+        says to pass ``overwrite=True`` to replace it.
     """
     if is_occupied(path):
         raise FileExistsError(
@@ -128,7 +132,7 @@ def inside(root_dir: Path, *names: str) -> Path:
 
 
 def remove_inside(root_dir: Path, paths: Iterable[Path]) -> None:
-    """Delete each of `paths`, a file or a directory tree, all inside `root_dir`.
+    """Delete the files and directory trees in `paths`, all inside `root_dir`.
 
     Every path is checked before any is removed, so a refused path leaves all
     of them in place. A path that does not exist is skipped. Directory trees
@@ -138,7 +142,7 @@ def remove_inside(root_dir: Path, paths: Iterable[Path]) -> None:
     Parameters
     ----------
     root_dir : Path
-        Directory the removals must stay inside; it is never removed itself.
+        Directory the removals must stay inside. It is never removed itself.
     paths : iterable of Path
         Files or directories to delete.
 

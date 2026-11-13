@@ -16,52 +16,70 @@ Each run has a working directory of its own::
 
 MadGraph caches an imported model as ``py3_model.pkl`` inside the model's
 folder (``import_full_model`` in ``models/import_ufo.py``,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/models/import_ufo.py#L454-L456),
-so a run imports a copy and leaves the catalogue's folder untouched.
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/models/import_ufo.py#L454-L456).
+A run therefore imports a copy of the model and leaves the catalogue's folder
+untouched.
 
 A command that fails inside a script stops MadGraph without a failing exit
 status (``nice_error_handling`` in ``madgraph/interface/extended_cmd.py``,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/extended_cmd.py#L1375-L1385),
-so a run is judged by the files MadGraph writes.
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/extended_cmd.py#L1375-L1385).
+A run is therefore judged by the files MadGraph writes.
 
 MadGraph runs the jobs of a launch in parallel, by default on every CPU of the
 machine (``configure_run_mode`` in ``madgraph/interface/common_run_interface.py``,
 https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/common_run_interface.py#L3993-L4002).
-A run writes its core count into the process's ``Cards/me5_configuration.txt``,
-the configuration file MadGraph reads last (``set_configuration``, same file,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/common_run_interface.py#L4345-L4382),
-so a value in the user's or the installation's configuration does not
-override it.
 
-A run sets MadGraph's ``iseed`` and the seed of its Python generator,
-``python_seed``, to its seed. In its default spin mode, MadSpin draws its own
-seed from that generator (``run_onshell``,
+A run writes its core count into the process's ``Cards/me5_configuration.txt``.
+MadGraph reads this configuration file last (``set_configuration``, same file,
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/common_run_interface.py#L4345-L4382).
+A value in the user's or the installation's configuration therefore does not
+override the core count.
+
+A run sets two MadGraph settings to its seed: ``iseed`` and ``python_seed``,
+the seed of MadGraph's Python generator. In its default spin mode, MadSpin
+draws its own seed from that generator (``run_onshell``,
 https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/MadSpin/interface_madspin.py#L3283-L3297).
-MadGraph resets ``iseed`` to 0 in the kept ``Cards/run_card.dat``; the banner's
-run card holds the seed it used (``reset_iseed_in_run_card``,
+
+MadGraph resets ``iseed`` to 0 in the kept ``Cards/run_card.dat``
+(``reset_iseed_in_run_card``,
 https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/common_run_interface.py#L5367-L5380).
+The run card in the banner of the event file holds the seed MadGraph used.
 
-MadSpin decays the events in one separately seeded shard per core, so a sample
-with MadSpin is reproduced only on the same number of cores
-(``_split_production``,
+MadSpin splits the events into one shard per core and seeds each shard
+separately (``_split_production``,
 https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/MadSpin/interface_madspin.py#L6216-L6231).
-MadGraph unweights the events of a run with at least
-``max(80, ulimit -n - 40)`` channel directories, or 2500 when ``ulimit -n`` is
-unlimited, in new Python processes whose random numbers come from the operating
-system (``do_combine_events``,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/madevent_interface.py#L3908-L3990).
-A run with a seed raises ``ulimit -n`` to the hard limit while MadGraph runs
-(:class:`omphjc.programs.RaisedOpenFileLimit`), so only a run with at least
-the raised limit minus 40 channel directories is not reproducible.
+A sample with MadSpin is therefore reproduced only on the same number of
+cores.
 
-A working directory holds the runs of one process and carries a stamp
-(:mod:`omphjc.stamps`) naming the process. When a run ends, short of a hard
-kill, it seals its artifacts: the process directory, the model copy, the
-scripts and the log. A later run of the process deletes an artifact only when
-it was sealed and nothing in it changed since, and a process directory also
-needs MadGraph's process card; any other artifact, such as one left by a run
-killed before sealing, is moved into ``omphjc-set-aside/`` with its contents.
-Nothing else in the directory is ever touched.
+MadGraph unweights the events in new Python processes when a run has many
+channel directories (``do_combine_events``,
+https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/madevent_interface.py#L3908-L3990).
+These processes take their random numbers from the operating system, not from
+the seed. The threshold is ``max(80, ulimit -n - 40)`` directories, or 2500
+when ``ulimit -n`` is unlimited.
+
+A run with a seed raises ``ulimit -n`` to the hard limit while MadGraph is
+active (:class:`omphjc.programs.RaisedOpenFileLimit`). Only a run with at
+least the raised limit minus 40 channel directories is then not reproducible.
+
+A working directory holds the runs of one process. It carries a stamp
+(:mod:`omphjc.stamps`) that names the process.
+
+A run seals its artifacts when it ends. The stamp then records them. Only a
+hard kill ends a run before it seals them. The artifacts are:
+
+- the process directory,
+- the model copy,
+- the scripts,
+- the log.
+
+A later run of the process deletes an artifact only when the artifact was
+sealed and nothing in it has changed since. A process directory must also hold
+MadGraph's process card to be deleted. Every other artifact is moved into
+``omphjc-set-aside/`` with its contents. This happens, for example, to an
+artifact left by a run that was killed before it could seal its artifacts.
+
+A run touches nothing else in the directory.
 """
 
 import dataclasses
@@ -122,17 +140,19 @@ class MadGraphError(ProgramError):
 class MadGraphRun(ProgramRun):
     """The output of one MadGraph run.
 
-    The log, the usage and the folder set aside are
-    :class:`omphjc.workspace.ProgramRun`'s.
+    The log, the usage and the folder that holds what was set aside are
+    fields of :class:`omphjc.workspace.ProgramRun`.
 
     Parameters
     ----------
     process_dir : Path
         MadGraph's process directory.
     output_path : Path
-        The gzipped LHE file of the sample; after MadSpin, the decayed one.
+        The gzipped LHE file of the sample. After MadSpin, it is the file of
+        the decayed events.
     banner : Banner
-        The banner of `output_path`: version, event count, cross section, run card.
+        The banner of `output_path`. It holds the version, the event count,
+        the cross section and the run card.
     n_cores : int
         Number of cores MadGraph ran its jobs on.
     """
@@ -156,9 +176,9 @@ def generate_events(
 ) -> MadGraphRun:
     """Generate parton-level events for `spec` with MadGraph.
 
-    MadGraph writes the process directory from the process script, then
-    generates the events from the launch script, with MadSpin when the
-    process names a MadSpin card.
+    MadGraph first writes the process directory from the process script. It
+    then generates the events from the launch script. The launch uses MadSpin
+    when the process names a MadSpin card.
 
     Parameters
     ----------
@@ -166,33 +186,39 @@ def generate_events(
         The process to generate.
     workdir : Path
         Directory of the runs of `spec`, created when missing. Its path must
-        not contain whitespace, which MadGraph does not support, and it must
-        not hold a run of another process. Every call writes the scripts, the
-        log and the model copy in it anew.
+        not contain whitespace, because MadGraph does not support it. The
+        directory must not hold a run of another process. Every call writes
+        the scripts, the log and the model copy in it anew.
     n_events : int
         Number of events to generate.
     seed : int or None
-        MadGraph's ``iseed`` and ``python_seed``; ``None`` lets MadGraph choose
-        ``iseed`` and leaves the Python generator seeded from the system.
+        The value of MadGraph's ``iseed`` and ``python_seed``. With ``None``,
+        MadGraph chooses ``iseed`` and the Python generator is seeded from the
+        system.
     n_cores : int or None, optional
-        Number of cores MadGraph runs its jobs on; by default every CPU this
-        process may use (:func:`omphjc.programs.available_cores`).
+        Number of cores MadGraph runs its jobs on. The default is every CPU
+        that the current Python process may use
+        (:func:`omphjc.programs.available_cores`).
     timeout : float or None, optional
-        Seconds the call may take; ``None`` sets no limit. At the limit,
+        Seconds the call may take. ``None`` sets no limit. At the limit,
         MadGraph and every process it started are stopped.
     overwrite : bool, optional
-        Whether to replace the process directory of an earlier run in
-        `workdir`. By default an existing one is an error, so that a run never
-        deletes results by accident. It is replaced only after every other
-        check has passed: deleted when the earlier run sealed it and nothing
-        in it changed since, otherwise, as after a run killed before sealing,
-        moved aside (see `MadGraphRun.set_aside`).
+        Whether to replace the process directory that an earlier run left in
+        `workdir`. By default an existing process directory is an error, so a
+        run never deletes results by accident.
+
+        The directory is replaced only after every other check has passed. It
+        is deleted when the earlier run sealed it and nothing in it has changed
+        since. Otherwise it is moved aside (see `MadGraphRun.set_aside`); this
+        happens, for example, when the earlier run was killed before it could
+        seal the directory.
     log_dir : Path or None, optional
-        An existing directory to write the log in. By default the log is in
-        `workdir` and a later run replaces it; one in another directory stays
-        there.
+        An existing directory to write the log in. By default the log is
+        written in `workdir`, and a later run replaces it. A log written in
+        another directory is not replaced.
     mg5_path : Path or None, optional
-        MadGraph's ``bin/mg5_aMC``; by default the one on PATH.
+        Path of MadGraph's ``bin/mg5_aMC``. By default the program is looked
+        up on PATH.
 
     Returns
     -------
@@ -203,23 +229,29 @@ def generate_events(
     Raises
     ------
     ValueError
-        If `n_events`, `n_cores` or `timeout` is not positive, `workdir` is a
-        filesystem root or its path contains whitespace, the model copy would
-        overlap the catalogue's model folder, or a file of an earlier run is a
-        symbolic link.
+        If one of these conditions holds:
+
+        - `n_events`, `n_cores` or `timeout` is not positive.
+        - `workdir` is a filesystem root, or its path contains whitespace.
+        - The model copy would overlap the catalogue's model folder.
+        - A file of an earlier run is a symbolic link.
     FileExistsError
         If `workdir` already holds a process directory for `spec` and
         `overwrite` is false.
     StampError
-        If `workdir` is stamped for another purpose or process, holds what a
-        run makes without carrying a stamp, or holds something other than a
-        stamp in the stamp's place. Nothing is changed in that case.
+        If `workdir` is in one of these states:
+
+        - it is stamped for another purpose or process;
+        - it holds artifacts of a run but carries no stamp;
+        - it holds something other than a stamp where the stamp belongs.
+
+        Nothing is changed in that case.
     FileNotFoundError
         If MadGraph cannot be found.
     MadGraphError
         If MadGraph exits with an error, is still running at the time limit,
-        or does not write the process directory or the event file; the
-        message ends with the last lines of its log.
+        or does not write the process directory or the event file. The
+        message ends with the last lines of MadGraph's log.
     """
     if n_cores is None:
         n_cores = available_cores()
@@ -268,11 +300,14 @@ def generate_events(
 class MadGraphWorkspace(ProgramWorkspace):
     """The working directory of one process's runs, and the steps a run takes in it.
 
-    :func:`generate_events` drives a workspace from start to finish; a caller
-    that needs the steps one at a time constructs one and, inside
-    ``with workspace.sealed_run():``, calls them in the same order:
-    :meth:`copy_model`, :meth:`run_script` for the process script,
-    :meth:`write_cards`, then :meth:`run_script` for the launch script.
+    :func:`generate_events` drives a workspace from start to finish. A caller
+    that needs the steps one at a time constructs a workspace and calls the
+    steps inside ``with workspace.sealed_run():``, in this order:
+
+    - :meth:`copy_model`,
+    - :meth:`run_script` for the process script,
+    - :meth:`write_cards`,
+    - :meth:`run_script` for the launch script.
 
     Parameters
     ----------
@@ -280,14 +315,17 @@ class MadGraphWorkspace(ProgramWorkspace):
         The process whose runs the directory holds.
     workdir : Path
         The working directory, created when missing. Its path must not contain
-        whitespace, which MadGraph does not support, and must not be a
-        filesystem root.
+        whitespace, because MadGraph does not support it. The directory must
+        not be a filesystem root.
     mg5_path : Path or None, optional
-        MadGraph's ``bin/mg5_aMC``; by default the one on PATH.
+        Path of MadGraph's ``bin/mg5_aMC``. By default the program is looked
+        up on PATH.
     timeout : float or None, optional
-        Seconds the run may take from now; ``None`` sets no limit.
+        Seconds the run may take, counted from the creation of the workspace.
+        ``None`` sets no limit.
     log_dir : Path or None, optional
-        As :class:`~omphjc.workspace.ProgramWorkspace`.
+        See the `log_dir` parameter of
+        :class:`~omphjc.workspace.ProgramWorkspace`.
 
     Attributes
     ----------
@@ -305,7 +343,8 @@ class MadGraphWorkspace(ProgramWorkspace):
         If `timeout` is not positive, `workdir` is a filesystem root or its
         path contains whitespace.
     FileNotFoundError
-        If `mg5_path` is not a file, or none is given and PATH has no ``mg5_aMC``.
+        If `mg5_path` is not a file, or if `mg5_path` is not given and PATH
+        has no ``mg5_aMC``.
     """
 
     purpose = _RUN_PURPOSE
@@ -338,7 +377,10 @@ class MadGraphWorkspace(ProgramWorkspace):
 
     @property
     def model_copy_dir(self) -> Path | None:
-        """Where the catalogue's model is copied for the run; ``None`` without one."""
+        """The directory that the catalogue's model is copied to for the run.
+
+        The value is ``None`` when the catalogue does not include the model.
+        """
         if self.spec.model_dir is None:
             return None
         return inside(self.workdir, _MODELS_DIR, self.spec.model_base)
@@ -352,17 +394,25 @@ class MadGraphWorkspace(ProgramWorkspace):
 
     @property
     def output_path(self) -> Path:
-        """The event file MadGraph writes: the decayed sample after MadSpin."""
+        """The event file MadGraph writes.
+
+        After MadSpin, it is the file of the decayed sample.
+        """
         run = _DECAYED_RUN if self.spec.uses_madspin else _FIRST_RUN
         return self.process_dir / "Events" / run / _EVENT_FILE
 
     def clear_earlier_run(self, *, unconfirmed: Iterable[str] = ()) -> Path | None:
         """Clear what an earlier run left in the directory, and nothing else.
 
-        A process directory without MadGraph's process card is not what a run
-        leaves, so it is moved aside however it was sealed, as is anything
-        named in `unconfirmed`. Returns the folder holding what was moved aside,
-        ``None`` when nothing was.
+        A process directory without MadGraph's process card is not one that a
+        run leaves. It is therefore moved aside, whether or not it was sealed.
+        Everything named in `unconfirmed` is moved aside as well.
+
+        Returns
+        -------
+        Path or None
+            The folder that holds what was moved aside, or ``None`` when
+            nothing was moved aside.
 
         Raises
         ------
@@ -389,7 +439,12 @@ class MadGraphWorkspace(ProgramWorkspace):
         return super().clear_earlier_run(unconfirmed=unconfirmed)
 
     def copy_model(self) -> ProcessSpec:
-        """Return the spec importing a copy of its model made in the directory."""
+        """Copy the model into the directory.
+
+        The returned spec imports the copy. When the catalogue does not
+        include the model of the process, nothing is copied and the spec is
+        returned unchanged.
+        """
         copy_dir = self.model_copy_dir
         if self.spec.model_dir is None or copy_dir is None:
             return self.spec
@@ -417,7 +472,10 @@ class MadGraphWorkspace(ProgramWorkspace):
         )
 
     def write_cards(self, n_cores: int) -> None:
-        """Append the core count to MadGraph's configuration; write the MadSpin card.
+        """Write the core count and the MadSpin card.
+
+        The core count is appended to MadGraph's configuration. The MadSpin
+        card is written only for a process that uses MadSpin.
 
         Raises
         ------

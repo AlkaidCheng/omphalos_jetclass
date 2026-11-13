@@ -1,10 +1,14 @@
-"""The stages of a job, one module each; a stage is a function of a :class:`Job`.
+"""The stages of a job, one module each.
 
-A stage takes the job and its own arguments, builds the parameters it runs
-with, and hands :meth:`omphjc.jobs.Job.run_task` a body that returns what it
-made. MadGraph generation (:mod:`omphjc.jobs.stages.generate`), the Pythia
-shower (:mod:`omphjc.jobs.stages.shower`) and the Delphes simulation
-(:mod:`omphjc.jobs.stages.simulate`) are the stages so far.
+A stage is a function that takes a :class:`Job` and its own arguments. It
+builds the parameters of its task and passes :meth:`omphjc.jobs.Job.run_task`
+a body that returns what the task made.
+
+The stages so far:
+
+- MadGraph generation (:mod:`omphjc.jobs.stages.generate`);
+- the Pythia shower (:mod:`omphjc.jobs.stages.shower`);
+- the Delphes simulation (:mod:`omphjc.jobs.stages.simulate`).
 """
 
 from omphjc.jobs.stages.generate import GENERATE, generate

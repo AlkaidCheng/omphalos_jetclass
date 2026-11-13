@@ -2,15 +2,21 @@
 
 A record holds the fields of :data:`FIELDS` that its file carries. Event fields
 are scalars. Particle fields are lists named ``part_*``, with one entry per
-particle of the event. The units are those Delphes stores, except
-``part_t``, which is in mm (c t) as Pythia and HepMC3 write it. The dtypes
-follow Delphes's ``GenParticle`` and ``HepMCEvent`` (Delphes 3.5.1,
-https://github.com/delphes/delphes/blob/3.5.1/classes/DelphesClasses.h), except
-``part_status`` and ``part_charge``, which int16 holds. The mother and daughter
-indices follow Pythia's conventions, under which a particle's daughters are not
-always a range
-(https://pythia8.web.cern.ch/manuals/pythia8318/ParticleProperties.html), and
-are one lower than Pythia's since Delphes leaves out its entry 0.
+particle of the event.
+
+The units are the ones that Delphes stores. The exception is ``part_t``, which
+is in mm (c t), as Pythia and HepMC3 write it.
+
+The dtypes follow Delphes's ``GenParticle`` and ``HepMCEvent`` (Delphes 3.5.1,
+https://github.com/delphes/delphes/blob/3.5.1/classes/DelphesClasses.h). The
+exceptions are ``part_status`` and ``part_charge``: the record stores them as
+int16, which holds their values.
+
+The mother and daughter indices follow Pythia's conventions
+(https://pythia8.web.cern.ch/manuals/pythia8318/ParticleProperties.html).
+Under these conventions the daughters of a particle are not always a range.
+Each index is one lower than Pythia's, because Delphes leaves out Pythia's
+entry 0.
 """
 
 from collections.abc import Mapping
@@ -93,11 +99,12 @@ def build_record(columns: Mapping[str, ak.Array], *, downcast: bool) -> ak.Array
     Parameters
     ----------
     columns : Mapping[str, ak.Array]
-        One array per field of :data:`FIELDS` the record holds: event fields
-        with one value per event, particle fields with one list per event.
+        One array for each field of :data:`FIELDS` that the record holds. An
+        event field has one value per event. A particle field has one list
+        per event.
     downcast : bool
-        Whether to cast every field to the schema's dtype; otherwise each keeps
-        the dtype it has.
+        Whether to cast every field to the dtype of the schema. Without the
+        cast, each field keeps the dtype it has.
 
     Returns
     -------
@@ -107,8 +114,8 @@ def build_record(columns: Mapping[str, ak.Array], *, downcast: bool) -> ak.Array
     Raises
     ------
     ValueError
-        If `columns` has a field the schema does not know, or, when
-        downcasting, if a field holds a value its dtype cannot hold.
+        If `columns` has a field that the schema does not know. When
+        downcasting, also if a field holds a value that its dtype cannot hold.
     """
     unknown = sorted(set(columns) - {field.name for field in FIELDS})
     if unknown:
@@ -128,9 +135,10 @@ def build_record(columns: Mapping[str, ak.Array], *, downcast: bool) -> ak.Array
 def _cast(field: RecordField, column: ak.Array) -> ak.Array:
     """Return `column` cast to `field`'s dtype.
 
-    A float is cast as it is. An integer cast to a narrower dtype is refused
-    when a value lies outside it, and so is any other cast that can change a
-    value, such as from a float to an integer.
+    A float is cast to another float dtype without a check. A cast of an
+    integer to a narrower integer dtype is refused when a value lies outside
+    the narrower dtype. Any other cast that can change a value, such as a cast
+    from a float to an integer, is refused too.
     """
     target = np.dtype(field.dtype)
     source = _value_dtype(column)

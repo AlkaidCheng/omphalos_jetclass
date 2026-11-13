@@ -1,12 +1,19 @@
 """The process catalogue.
 
-Processes are defined as data in a YAML file, ``config/jetclass.yaml`` for the
-ten JetClass classes. Each entry records the MadGraph model, the process
-definitions, the run-card and Pythia settings, the MadSpin card when the heavy
-resonances are decayed, whether the sample is MLM-matched, the seed offset and,
-optionally, the reference cards ``omphjc check-cards`` compares it with. A
-``common`` block holds the settings shared by every entry and names the Delphes
-card. Paths are absolute or relative to the catalogue file.
+Processes are defined as data in a YAML file. The file for the ten JetClass
+classes is ``config/jetclass.yaml``. Each entry records:
+
+- the MadGraph model;
+- the process definitions;
+- the run-card and Pythia settings;
+- the MadSpin card, when the heavy resonances are decayed;
+- whether the sample is MLM-matched;
+- the seed offset;
+- optionally, the reference cards that ``omphjc check-cards`` compares the
+  entry with.
+
+A ``common`` block holds the settings shared by every entry and names the
+Delphes card. Paths are absolute or relative to the catalogue file.
 """
 
 import re
@@ -65,48 +72,52 @@ class ProcessSpec:
     Parameters
     ----------
     name : str
-        Catalogue name, for example ``"HToBB"``; a plain name
-        (:func:`omphjc.safe_paths.require_plain_name`), since it names directories.
+        Catalogue name, for example ``"HToBB"``. It must be a plain name
+        (:func:`omphjc.safe_paths.require_plain_name`), because it names
+        directories.
     label : str
         Class name of the sample, the suffix of the ``label_*`` column.
     description : str
         Human-readable description of the physics.
     model : str
         MadGraph model name, optionally with a ``-restriction`` suffix, for
-        example ``"heft-ckm"``; both parts are letters, digits and ``_``.
+        example ``"heft-ckm"``. Both parts consist of letters, digits and
+        ``_``.
     definitions : tuple[str, ...]
         Multiparticle definitions in MadGraph syntax, without the leading
-        ``define``: the catalogue's common definitions followed by the entry's
-        own, so that an entry can redefine a common name.
+        ``define``. The common definitions of the catalogue come first and
+        the entry's own follow, so an entry can redefine a common name.
     processes : tuple[str, ...]
-        Process definitions; the first becomes ``generate`` and the rest
-        ``add process``.
+        Process definitions. The first becomes ``generate`` and each of the
+        others becomes ``add process``.
     run_card : Mapping[str, RunCardValue]
-        Run-card settings applied at launch: the catalogue's common settings
-        with the entry's own merged in (the entry wins).
+        Run-card settings applied at launch. They are the common settings of
+        the catalogue with the entry's own settings merged in. Where both
+        set a value, the entry's value is used.
     pythia : Mapping[str, SettingValue]
-        Pythia settings written for every run of the process: the
-        catalogue's common ``pythia`` block with the process's own entries
-        merged in.
+        Pythia settings written for every run of the process. They are the
+        common ``pythia`` block of the catalogue with the process's own
+        entries merged in.
     pythia_matching : Mapping[str, SettingValue]
         Pythia settings added when the process is MLM-matched.
     matching : bool
         Whether the sample is MLM-matched (``ickkw = 1``).
     seed_offset : int
-        Offset added to every job seed of the process; 0 unless the entry
-        sets one.
+        Offset added to every job seed of the process. It is 0 unless the
+        entry sets one.
     model_dir : Path or None
-        Directory of the model when the catalogue includes it; ``None``
+        Directory of the model when the catalogue includes it. ``None``
         leaves the model to MadGraph.
     madspin_card : Path or None
-        MadSpin card decaying the heavy resonances; ``None`` for no MadSpin.
+        MadSpin card that decays the heavy resonances. It is ``None`` when
+        MadSpin is not used.
     delphes_card : Path or None
-        Delphes card of the detector simulation, named once for the whole
-        catalogue in its ``common`` block; ``None`` when the catalogue names
-        none.
+        Delphes card of the detector simulation. The catalogue names it once
+        for every process, in its ``common`` block. It is ``None`` when the
+        catalogue names no card.
     reference_cards : Path or None
-        Directory of the MadGraph cards ``omphjc check-cards`` compares the
-        entry with; ``None`` for an entry that is not compared.
+        Directory of the MadGraph cards that ``omphjc check-cards`` compares
+        the entry with. It is ``None`` for an entry that is not compared.
     """
 
     name: str
@@ -150,7 +161,10 @@ class ProcessSpec:
 
 
 class CatalogueError(ValueError):
-    """A catalogue file whose content is not a valid catalogue; the message names it."""
+    """The content of a catalogue file is not a valid catalogue.
+
+    The message names the file.
+    """
 
 
 def process_names() -> tuple[str, ...]:
@@ -191,31 +205,44 @@ def read_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
     Parameters
     ----------
     path : Path
-        YAML file with an optional ``common`` block (``definitions``,
-        ``run_card`` and ``pythia`` settings shared by every process,
-        ``pythia_matching`` settings for the matched ones, the
-        ``delphes_card`` and the ``models_dir``, by default ``models``) and a
-        ``processes`` mapping. Relative paths inside are resolved against the
-        file's directory; absolute paths are used as they are.
+        YAML file with a ``processes`` mapping and an optional ``common``
+        block. The ``common`` block may hold:
+
+        - ``definitions``, ``run_card`` and ``pythia`` settings, shared by
+          every process;
+        - ``pythia_matching`` settings, for the matched processes;
+        - the ``delphes_card``;
+        - the ``models_dir``, by default ``models``.
+
+        Relative paths in the file are resolved against the directory of the
+        file. Absolute paths are used unchanged.
 
     Returns
     -------
     Mapping[str, ProcessSpec]
-        Specifications in file order, with the common definitions, run-card
-        and Pythia settings merged into each entry (the entry's values win).
+        Specifications in file order. The common definitions, run-card
+        settings and Pythia settings are merged into each entry, and the
+        entry's values take precedence.
 
     Raises
     ------
     CatalogueError
-        If the file is not UTF-8 YAML holding a ``processes`` mapping, the
-        ``common`` block, an entry or a settings block is not a mapping,
-        ``definitions`` or an entry's ``processes`` is not a list of strings,
-        an entry's ``matching`` is not a boolean, the file, the ``common``
-        block or an entry holds an unknown key, an entry lacks
-        a required key, has a malformed process or model name or holds a
-        value of the wrong type, a named file does not exist, two entries
-        share a label, or an entry is matched while ``common.pythia_matching``
-        sets no ``JetMatching:merge``. The message names the file.
+        If one of the following holds. The message names the file.
+
+        - The file is not UTF-8 YAML that holds a ``processes`` mapping.
+        - The ``common`` block, an entry or a settings block is not a
+          mapping.
+        - ``definitions`` or the ``processes`` of an entry is not a list of
+          strings.
+        - The ``matching`` of an entry is not a boolean.
+        - The file, the ``common`` block or an entry holds an unknown key.
+        - An entry lacks a required key.
+        - An entry has a malformed process name or model name.
+        - An entry holds a value of the wrong type.
+        - A named file does not exist.
+        - Two entries share a label.
+        - An entry is matched while ``common.pythia_matching`` sets no
+          ``JetMatching:merge``.
     """
     try:
         with path.open(encoding="utf-8") as stream:

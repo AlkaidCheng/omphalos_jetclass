@@ -15,9 +15,10 @@ CHANGES_MOVE_CTIME = sys.platform != "win32"
 def latest_change_ns(path: Path) -> int:
     """Return the latest ``ctime`` of `path` and of every folder in it, in ns.
 
-    Adding, removing or renaming an entry changes the folder holding it, so
-    the folders alone show such changes; editing a file in place changes only
-    the file, which is not read. Symbolic links are not followed.
+    Adding, removing or renaming an entry changes the folder that holds it,
+    so the folders alone show such changes. Editing a file in place changes
+    only the file, and the function does not read the files. Symbolic links
+    are not followed.
     """
     latest = path.lstat().st_ctime_ns
     if path.is_symlink() or not path.is_dir():

@@ -1,9 +1,9 @@
 """Run external programs such as MadGraph and DelphesPythia8.
 
-A program runs with its input closed and its output appended to a log file, in
-a process group of its own, so that stopping it at a time limit or on an
-interrupt also stops every process it started, such as MadGraph's parallel
-jobs.
+A program is started with its input closed, and its output is appended to a
+log file. The program leads a process group of its own. Stopping the program
+at a time limit or on an interrupt therefore also stops every process that it
+started, such as MadGraph's parallel jobs.
 """
 
 import contextlib
@@ -44,9 +44,9 @@ class ProgramError(RuntimeError):
 def available_cores() -> int:
     """Return the number of CPUs this process may run on.
 
-    On Linux this is the CPU affinity of the process, which a batch system such
-    as Slurm restricts to the job's allocation; elsewhere it is every CPU of the
-    machine.
+    On Linux this is the CPU affinity of the process. A batch system such as
+    Slurm restricts the affinity to the allocation of the job. On other
+    platforms the number counts every CPU of the machine.
     """
     if sys.platform == "linux":
         return len(os.sched_getaffinity(0))
@@ -56,16 +56,21 @@ def available_cores() -> int:
 class RaisedOpenFileLimit:
     """Raise the soft limit on open files to the hard limit within a ``with`` block.
 
-    Programs started in the block inherit the raised limit. Under an unlimited
-    hard limit the soft limit becomes 10240, macOS's ``OPEN_MAX``. The limit
-    stays as it is when the soft limit is already that high or unlimited, when
-    the system refuses the change, and on a platform without resource limits.
+    Programs started in the block inherit the raised limit. When the hard
+    limit is unlimited, the soft limit becomes 10240, which is macOS's
+    ``OPEN_MAX``.
+
+    The limit is left unchanged in these cases:
+
+    - The soft limit is already that high or unlimited.
+    - The system refuses the change.
+    - The platform has no resource limits.
 
     Parameters
     ----------
     enabled : bool, optional
-        Whether to raise the limit; when false, the block runs with the limit
-        as it is.
+        Whether to raise the limit. When false, the limit is left unchanged
+        in the block.
     """
 
     def __init__(self, *, enabled: bool = True) -> None:
@@ -122,20 +127,21 @@ def find_program(program: str, program_path: Path | None, *, description: str) -
 
 @dataclass(frozen=True)
 class ProgramUsage:
-    """What a run of an external program took.
+    """The time and memory that one run of an external program took.
 
     Parameters
     ----------
     wall_seconds : float
         Time from the program's start to its exit.
     cpu_seconds : float or None
-        User and system CPU time of the program and of every process it
-        waited for, so MadGraph's parallel jobs count; ``None`` where the
-        platform does not report it.
+        User and system CPU time of the program and of every process that
+        the program waited for. MadGraph's parallel jobs are therefore
+        counted. It is ``None`` on a platform that does not report it.
     peak_memory_mib : float or None
-        Peak resident memory, in MiB, of the largest process this Python
-        process has waited for so far, this program's or an earlier one's;
-        ``None`` where the platform does not report it.
+        Peak resident memory, in MiB, of the largest process that this Python
+        process has waited for so far. That process may belong to this
+        program or to a program started earlier. It is ``None`` on a
+        platform that does not report it.
     """
 
     wall_seconds: float
@@ -159,7 +165,10 @@ class ProgramUsage:
         )
 
     def as_record(self) -> dict[str, float]:
-        """Return the CPU time and peak memory as values for a record, the unknown left out."""
+        """Return the CPU time and peak memory as values for a record.
+
+        A value that is unknown is left out.
+        """
         record = {}
         if self.cpu_seconds is not None:
             record["cpu_seconds"] = round(self.cpu_seconds, 3)
@@ -169,7 +178,10 @@ class ProgramUsage:
 
 
 def _children_usage() -> tuple[float, int] | None:
-    """Return the CPU seconds and peak resident size of the processes waited for so far."""
+    """Return the CPU seconds and the peak resident size of the child processes.
+
+    The values cover every process that this process has waited for so far.
+    """
     if resource is None:
         return None
     usage = resource.getrusage(resource.RUSAGE_CHILDREN)
@@ -183,7 +195,9 @@ def run_program(
     log_path: Path,
     timeout: float | None = None,
 ) -> ProgramUsage:
-    """Run `command` in `cwd`, appending a line naming it and its output to `log_path`.
+    """Run `command` in `cwd` and append its output to `log_path`.
+
+    A line that names the command is appended to the log before the output.
 
     Parameters
     ----------
@@ -194,8 +208,8 @@ def run_program(
     log_path : Path
         File that receives the program's standard output and error.
     timeout : float or None, optional
-        Seconds the program may run; ``None`` sets no limit. At the limit, the
-        program and every process it started are stopped.
+        Seconds the program may take. ``None`` sets no limit. At the limit,
+        the program and every process it started are stopped.
 
     Returns
     -------
@@ -207,8 +221,8 @@ def run_program(
     ValueError
         If `timeout` is negative.
     ProgramError
-        If the program exits with a failing status or is still running at the
-        time limit; the message ends with the last lines of `log_path`.
+        If the program exits with a failing status or is still active at the
+        time limit. The message ends with the last lines of `log_path`.
     """
     if timeout is not None and timeout < 0:
         raise ValueError(f"timeout must not be negative, got {timeout}")
@@ -253,10 +267,12 @@ def run_program(
 
 
 def stop_process(process: subprocess.Popen[Any]) -> None:
-    """Kill `process`, with every process of its group when it leads one, and reap it.
+    """Kill `process` and reap it.
 
-    A process started with ``start_new_session=True``, as :func:`run_program`
-    starts one, leads its own group, which holds the processes it started.
+    When `process` leads a process group, every process of the group is
+    killed too. A process started with ``start_new_session=True`` leads its
+    own group, and the group holds the processes that it started.
+    :func:`run_program` starts its program in this way.
     """
     # A group whose ID is the PID of a living process is that process's own.
     with contextlib.suppress(ProcessLookupError):

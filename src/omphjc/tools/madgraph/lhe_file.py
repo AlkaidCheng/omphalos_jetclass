@@ -75,10 +75,13 @@ class LHEFile(DataFile):
         Raises
         ------
         ValueError
-            If the file has no ``<init>`` block, if it does not end with the
-            line ``</LesHouchesEvents>``, if its gzip data is cut short or
-            damaged, or if its header is missing a part that MadGraph always
-            writes (see :meth:`Banner.from_text`).
+            If one of these conditions holds:
+
+            - The file has no ``<init>`` block.
+            - The file does not end with the line ``</LesHouchesEvents>``.
+            - The gzip data of the file is cut short or damaged.
+            - The header is missing a part that MadGraph always writes (see
+              :meth:`Banner.from_text`).
         """
         banner_lines = []
         events = hashlib.sha256()

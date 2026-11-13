@@ -35,15 +35,20 @@ def simulate(
 ) -> TaskRecord:
     """Simulate the detector on the showered events of `job` with Delphes.
 
-    Runs :func:`omphjc.tools.delphes.driver.simulate_events` in the job's ``simulate/``
-    directory on the file the shower stage made, with the job's seed. The
-    stage's parameters are the seed, the SHA-256 of the detector card chosen
-    and the fingerprint of the event file read, so a shower run again with
-    the same events keeps its simulation, and another card is refused unless
-    `force` is set. Its events are the ROOT file with the number of entries
-    in its tree and the fingerprint of its content
-    (:class:`omphjc.events.delphes_root.DelphesROOTFile`), and its metadata
-    the SHA-256 of the card as run.
+    The stage runs :func:`omphjc.tools.delphes.driver.simulate_events` in the
+    job's ``simulate/`` directory. It reads the file the shower stage made and
+    uses the job's seed.
+
+    Its parameters are the seed, the SHA-256 of the chosen detector card and
+    the fingerprint of the event file it reads. A shower that is repeated with
+    the same events therefore keeps its simulation. Another card is refused
+    unless `force` is set.
+
+    Its events are the ROOT file, recorded with the number of entries in its
+    tree and the fingerprint of its content
+    (:class:`omphjc.events.delphes_root.DelphesROOTFile`).
+
+    Its metadata holds the SHA-256 of the card as run.
 
     Parameters
     ----------

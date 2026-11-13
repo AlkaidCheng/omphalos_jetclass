@@ -283,11 +283,18 @@ def _run_stage_command(
 ) -> None:
     """Run `stage` of one job of `spec` through `run` and print its report.
 
-    The report starts with `title`, which names the stage, and the ID of the
-    task's latest run; `lines` gives the rows between the ID and what that run
-    took. A stage kept for other events of `upstream_stage`, the stage whose events
-    it reads, than those it ran on gets a row that says so. A task with more
-    than one run also gets a row with their number and the status of each.
+    The report holds, in order:
+
+    - the job and its directory;
+    - `title`, which names the stage, and whether the result was kept;
+    - the ID of the task's latest run;
+    - the rows that `lines` gives;
+    - an ``input`` row, when the stage was kept for other events than those
+      it read (`upstream_stage` is the stage whose events it reads);
+    - the number of runs and the status of each, when the task has more than
+      one run;
+    - what the latest run took.
+
     An error in :data:`_STAGE_ERRORS` becomes a :class:`click.ClickException`.
     """
     try:
@@ -314,10 +321,10 @@ def _run_stage_command(
 
 
 def _report_accepted_input(job: Job, record: TaskRecord, upstream_stage: str) -> None:
-    """Print the input the task was accepted for, while it differs from the one it ran on.
+    """Print the ``input`` row of a task that was kept for another input.
 
     The row is printed when the record holds an accepted input and the events
-    of `upstream_stage` are no longer those the task ran on.
+    of `upstream_stage` are not the ones the task read.
     """
     accepted_input = record.accepted_input
     input_fingerprint = record.parameters[INPUT_FINGERPRINT_PARAMETER]

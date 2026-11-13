@@ -1,27 +1,44 @@
-"""Parnassus's input: the final state of the shower's events as a HepMC3 file.
+"""Write the final state of the shower's events as a HepMC3 file for Parnassus.
 
-Parnassus's generate pipeline picks its dataset by the input file's suffix,
-lower-cased, and reads HepMC3 ASCII only from a ``.hepmc`` file, which it opens
-uncompressed (``build_dataset`` in ``src/parnassus/data/__init__.py`` at
-c9f8bd9e4c, https://github.com/parnassus-hep/parnassus). Of each particle it
-reads the PDG id, status, momentum, generated mass and production position, and
-of each event its number; it never follows mother or daughter links. The file
-therefore holds the smallest valid record of each event: the two beams; every
-final particle, with status 1, promoted long-lived particles among them; and,
-once, the mother of each final particle produced away from the origin, with
-its own status.
+Parnassus's generate pipeline picks its dataset by the suffix of the input
+file, compared in lower case. It reads HepMC3 ASCII only from a ``.hepmc``
+file, and it opens that file uncompressed (``build_dataset`` in
+``src/parnassus/data/__init__.py`` at c9f8bd9e4c,
+https://github.com/parnassus-hep/parnassus).
 
-Parnassus finds a particle's production position only as the position of the
-vertex line the particle names as its parent; a particle whose parent is
-another particle's number is read at the origin without a warning
-(``_assign_vertices_and_events`` in ``src/parnassus/data/hepmc.py`` at
-c9f8bd9e4c). A displaced final particle therefore takes its mother as its
-parent, which makes the mother's end a vertex at the daughters' common
-position, and every other particle takes the beams, whose vertex is the origin.
+Parnassus reads the following values:
 
-The text is what HepMC3's own ``WriterAscii`` of HepMC3 3.3.1 writes for these
-events (``src/WriterAscii.cc`` at 3.3.1, https://gitlab.cern.ch/hepmc/HepMC3),
-in GeV and mm, with the vertices numbered in the order they appear.
+- of each particle, the PDG id, status, momentum, generated mass and
+  production position;
+- of each event, its number.
+
+It never follows mother or daughter links. The file therefore holds the
+smallest valid record of each event:
+
+- the two beams;
+- every final particle, with status 1. The final particles include the
+  promoted ones, which are long-lived particles that the shower decayed and
+  that the stable-particle definition marks as final;
+- the mother of each final particle produced away from the origin, written
+  once, with its own status.
+
+In a HepMC3 file each particle names a parent. The parent is either a vertex
+line or the number of another particle. Parnassus takes the production
+position of a particle only from the vertex line that the particle names as
+its parent. It reads a particle whose parent is another particle's number at
+the origin, without a warning (``_assign_vertices_and_events`` in
+``src/parnassus/data/hepmc.py`` at c9f8bd9e4c).
+
+For this reason a displaced final particle, which is a final particle
+produced away from the origin, takes its mother as its parent. The end of the
+mother then becomes a vertex at the common position of the daughters. Every
+other particle takes the beams as its parents, and the vertex of the beams
+is the origin.
+
+The text is identical to what ``WriterAscii`` of HepMC3 3.3.1 writes for
+these events (``src/WriterAscii.cc`` at 3.3.1,
+https://gitlab.cern.ch/hepmc/HepMC3). The units are GeV and mm. The vertices
+are numbered in the order they appear.
 """
 
 from collections.abc import Iterable, Iterator, Sequence
@@ -76,9 +93,10 @@ PARTICLE_COLUMNS = (*_INTEGER_COLUMNS, "part_final", *_REAL_COLUMNS)
 class HepevtArrays(NamedTuple):
     """One event's record as HEPEVT arrays.
 
-    The two beams come first. Indices count from 0, and ``parents`` holds the
-    first and last parent of each particle, ``(-1, -1)`` for none. Momenta and
-    masses are in GeV, positions in mm, the time as c t.
+    The two beams come first. Indices count from 0. ``parents`` holds the
+    first and last parent of each particle, or ``(-1, -1)`` when the particle
+    has no parent. Momenta and masses are in GeV. Positions are in mm, and
+    the time is given as c t.
     """
 
     event_number: int
@@ -100,8 +118,11 @@ _Reals = npt.NDArray[np.float32] | npt.NDArray[np.float64]
 
 
 class _Columns(NamedTuple):
-    """A chunk's particle count and event number of each event, and its particle
-    columns, flat, as the extension takes them."""
+    """The columns of one chunk in the form the extension takes.
+
+    The fields are the particle count and the event number of each event,
+    followed by the particle columns as flat arrays.
+    """
 
     particle_counts: npt.NDArray[np.int64]
     event_numbers: npt.NDArray[np.int64]
@@ -137,13 +158,13 @@ def write_hepmc_input(
         :meth:`omphjc.events.stable_particles.StableParticleDefinition.apply`
         adds. The chunks are written in turn, so a record can be streamed.
     path : Path
-        The file to write; it must end in ``.hepmc``, and an existing file is
-        replaced.
+        The file to write. Its name must end in ``.hepmc``. An existing file
+        is replaced.
     precision : int, optional
         Digits after the decimal point of each number, from 2 to 24.
     threads : int, optional
-        Threads that build and write the events of each chunk; the file does
-        not depend on their number.
+        Number of threads that build and write the events of each chunk. The
+        content of the file does not depend on this number.
 
     Returns
     -------
@@ -155,11 +176,17 @@ def write_hepmc_input(
     TypeError
         If `precision` or `threads` is not an integer.
     ValueError
-        If `path` does not end in ``.hepmc``, in any case, `precision` lies
-        outside 2 to 24, `threads` is below 1, or as :func:`iterate_hepevt_arrays`
-        does for an event;
-        the events before that one are then in the file, which ends as a HepMC3
-        file does.
+        In any of these cases:
+
+        - `path` does not end in ``.hepmc``, compared without regard to case;
+        - `precision` lies outside 2 to 24;
+        - `threads` is below 1;
+        - an event is invalid, under the conditions listed for
+          :func:`iterate_hepevt_arrays`.
+
+        When an event is invalid, the events before it are already in the
+        file, and the file still ends with the closing lines of a HepMC3
+        file.
     """
     if path.suffix.lower() != HEPMC_SUFFIX:
         raise ValueError(
@@ -194,10 +221,14 @@ def iterate_hepevt_arrays(particles: ak.Array) -> Iterator[HepevtArrays]:
     """Yield the record Parnassus reads of each event, as HEPEVT arrays.
 
     The event number is the event's ``event_index``. A final particle takes
-    status 1. A final particle at the origin takes the beams as its parents; one
-    produced elsewhere takes its mother ``part_m1``, which joins the record
-    with its own status, the beams as its parents and its decay at the
-    daughters' position. Every other particle is left out.
+    status 1.
+
+    A final particle at the origin takes the beams as its parents. A final
+    particle produced elsewhere takes its mother ``part_m1`` as its parent.
+    The mother then joins the record with its own status, with the beams as
+    its parents, and with its decay at the position of the daughters.
+
+    Every other particle is left out.
 
     Parameters
     ----------
@@ -214,12 +245,18 @@ def iterate_hepevt_arrays(particles: ak.Array) -> Iterator[HepevtArrays]:
     Raises
     ------
     ValueError
-        If the record lacks a field, an event's ``event_index`` does not fit an
-        int, or an event has other than two beams (status 4) or holds a final
-        particle away from the origin whose position is not finite, whose
-        mother is missing, outside the event or a beam, or whose displaced
-        siblings lie at another position. The events before that one are
-        yielded first.
+        In any of these cases:
+
+        - the record lacks a field;
+        - the ``event_index`` of an event does not fit an int;
+        - an event does not have exactly two beams (status 4);
+        - an event holds a final particle away from the origin, and the
+          position of that particle is not finite;
+        - the mother of such a particle is missing, lies outside the event
+          or is a beam;
+        - the displaced siblings of such a particle lie at another position.
+
+        The events before the invalid event are yielded first.
     """
     columns = _columns(particles)
     arrays = _hepmc_ascii.to_hepevt(*columns)
@@ -250,11 +287,15 @@ def iterate_hepevt_arrays(particles: ak.Array) -> Iterator[HepevtArrays]:
 
 
 def _columns(particles: ak.Array) -> _Columns:
-    """Return each event's particle count and event number, and the particle
-    columns, flat.
+    """Return the columns of `particles` in the form the extension takes.
 
-    The integers are passed as int32 and the flags as bool; the real numbers
-    stay float32 when every one of them is, and are float64 otherwise.
+    The result holds the particle count and the event number of each event,
+    followed by the particle columns as flat arrays.
+
+    The particle counts and the event numbers are passed as int64. The integer
+    particle columns are passed as int32, and the flags as bool. The real
+    numbers stay float32 when every one of them is float32, and are passed as
+    float64 otherwise.
     """
     _check_fields(particles.fields)
     particle_counts = ak.to_numpy(ak.num(particles["part_pid"], axis=1)).astype(

@@ -1,18 +1,23 @@
 """Read, compare and adapt Delphes cards.
 
-A Delphes card is a Tcl script: ``set`` assigns top-level variables such as
-``ExecutionPath`` or ``RandomSeed``, and each ``module Type Name { ... }`` block
-assigns the module's parameters with ``set`` and ``add``, sometimes through
-loops that build calorimeter binnings. Delphes reads the card with a Tcl
-interpreter, so this module does the same, through the Tcl interpreter that
-comes with Python, and exposes the evaluated configuration as keys and values.
-Two cards that differ only in whitespace, comments, loop spelling or the order
-of definitions therefore compare equal.
+A Delphes card is a Tcl script. At the top level, ``set`` assigns variables
+such as ``ExecutionPath`` or ``RandomSeed``. Each
+``module Type Name { ... }`` block assigns the parameters of one module with
+``set`` and ``add``. Some blocks assign them in loops that build calorimeter
+binnings.
 
-The official JetClass card is the CMS card distributed with Delphes
-(``cards/delphes_card_CMS.tcl``, identical from Delphes 3.4.2 to 3.5.1 and
-included as ``config/references/delphes/delphes_card_CMS.tcl``) adapted to jet
-tagging, as section 2 of the JetClass paper describes
+Delphes reads the card with a Tcl interpreter. This module does the same
+with the Tcl interpreter that comes with Python, and returns the evaluated
+configuration as keys and values. Two cards therefore compare equal when
+they differ only in whitespace, comments, loop spelling or the order of
+definitions.
+
+The official JetClass card is the CMS card distributed with Delphes, adapted
+to jet tagging. The CMS card is ``cards/delphes_card_CMS.tcl`` in Delphes. It
+is identical from Delphes 3.4.2 to 3.5.1 and is included here as
+``config/references/delphes/delphes_card_CMS.tcl``.
+
+Section 2 of the JetClass paper describes the adaptation
 (https://arxiv.org/abs/2202.03772):
 
 - the propagation, tracking, calorimeter and particle-flow modules are the CMS
@@ -26,7 +31,8 @@ tagging, as section 2 of the JetClass paper describes
   the particle-flow candidates and the two jet collections.
 
 The JetClass card is kept under ``config/references/jetclass/`` as the
-default reference for comparisons; a run uses the card the catalogue names.
+default reference for comparisons. A run uses the card that the catalogue
+names.
 """
 
 import math
@@ -42,8 +48,8 @@ from omphjc.data_files import Card
 ParameterValue = tuple[str, ...]
 """A Delphes parameter as the list of Tcl elements it evaluates to.
 
-Scalars are one-element tuples; lists built with ``add`` and braced blocks such
-as formulas are their whitespace-separated elements.
+A scalar is a one-element tuple. A list built with ``add``, or a braced block
+such as a formula, is the tuple of its whitespace-separated elements.
 """
 
 _READER_PROCEDURES = r"""
@@ -79,7 +85,8 @@ class DelphesCard(Card):
     execution_path : tuple[str, ...]
         Module names in execution order.
     modules : Mapping[str, ModuleConfig]
-        Every defined module, in definition order, executed or not.
+        Every defined module in definition order, whether or not it is
+        executed.
     settings : Mapping[str, ParameterValue]
         Top-level variables other than ``ExecutionPath``, for example
         ``RandomSeed`` or ``MaxEvents``.
@@ -271,12 +278,16 @@ module TreeWriter TreeWriter {
 def particles_card_text() -> str:
     """Return the Delphes card that keeps the generator record and simulates nothing.
 
-    Run through ``DelphesPythia8``, it turns the program into Pythia's event
-    loop with a ROOT writer behind it: the output holds the ``Particle``
-    branch, the complete generator record of every event, and the ``Event``,
-    ``Weight``, ``EventLHEF`` and ``WeightLHEF`` branches the program writes
-    itself, the last two because its input is an LHE file; no detector module
-    runs. ``DelphesROOT`` reads such a file to run a detector card on it later.
+    With this card, ``DelphesPythia8`` acts as Pythia's event loop followed by
+    a ROOT writer. No detector module is executed. The output holds these
+    branches:
+
+    - ``Particle``, the complete generator record of every event;
+    - ``Event`` and ``Weight``, which the program writes itself;
+    - ``EventLHEF`` and ``WeightLHEF``, which the program also writes itself
+      because its input is an LHE file.
+
+    ``DelphesROOT`` reads such a file later to apply a detector card to it.
     """
     return _PARTICLES_CARD
 

@@ -9,10 +9,12 @@
         task.json        what the task ran with and what came out (omphjc.jobs.task)
         runs/<run_id>/   one directory per run of the task, with that run's log
 
-The job number fixes the seed of every program the job runs
-(:func:`job_seed`); ``docs/reproducibility.md`` lists what else a rerun's
-events depend on. Paths are built from screened names (:mod:`omphjc.safe_paths`), so a
-process name from a catalogue cannot place a job outside `outdir`.
+The job number fixes the seed of every program in the job
+(:func:`job_seed`). ``docs/reproducibility.md`` lists what else the events of
+a repeated job depend on.
+
+Paths are built from screened names (:mod:`omphjc.safe_paths`). A process
+name from a catalogue therefore cannot place a job outside `outdir`.
 """
 
 import hashlib
@@ -103,8 +105,8 @@ class Job:
     spec : ProcessSpec
     job_id : int
     root_dir : Path
-        The job directory, ``<outdir>/<process>/job_<n>``; created by the
-        first stage that runs.
+        The job directory, ``<outdir>/<process>/job_<n>``. The first stage
+        that runs creates it.
     seed : int
         The seed of every program the job runs. A stage that uses it records
         it among its parameters.
@@ -115,9 +117,9 @@ class Job:
     Raises
     ------
     ValueError
-        If `job_id` is not positive, the seed exceeds Pythia's limit, `outdir`
-        is a filesystem root, or the directory holds the ``job.json`` of
-        another job.
+        If `job_id` is not positive. If the seed exceeds Pythia's limit. If
+        `outdir` is a filesystem root. If the directory holds the
+        ``job.json`` of another job.
     """
 
     def __init__(self, spec: ProcessSpec, outdir: Path, job_id: int) -> None:
@@ -181,11 +183,11 @@ class Job:
         return sorted(record_path.parent.name for record_path in record_paths)
 
     def task(self, name: str) -> Task:
-        """Return the task `name` as it stands, by its record and its output files.
+        """Return task `name` with its status, judged from its record and its files.
 
         The size of each output of a task recorded as done is compared with
-        the size in the record. An output of another size is reported before
-        a missing one.
+        the size in the record. When one output has another size and another
+        output is missing, the task is reported as changed.
         """
         record = self.task_record(name)
         if record is None or not record.is_done:
@@ -212,9 +214,11 @@ class Job:
         Raises
         ------
         ValueError
-            If the task is not done or an output is missing; the message names
-            the command to run first. If an output has another size than
-            recorded; the message names the file, both sizes and ``--force``.
+            If the task is not done or an output is missing. The message
+            names the command to run first.
+
+            If an output has another size than recorded. The message names
+            the file, both sizes and ``--force``.
         """
         task = self.task(name)
         if task.status is TaskStatus.CHANGED:
@@ -254,33 +258,41 @@ class Job:
     ) -> TaskRecord:
         """Run task `name` through `body` unless its result can be kept; record it.
 
-        A task recorded as done, with its outputs present and the same
-        `parameters`, is kept. One recorded as done with other parameters, or
-        with an output of another size than recorded, is refused unless `force`
-        is set. With `accept_input`, a task recorded as done with its outputs
-        present is also kept when `parameters` differ from those it ran with in
-        the fingerprint of its input alone
-        (:data:`~omphjc.jobs.task.INPUT_FINGERPRINT_PARAMETER`): the record
-        keeps the fingerprint of the input the task read among its parameters
-        and holds the accepted one, with the time, as its ``accepted_input``,
-        which replaces an earlier one, and gains no run. The task is then kept
-        for either input, without `accept_input` too.
+        **A task recorded as done.**
 
-        One that failed, was interrupted or lost an output runs again, and the
-        run is added to its record when `parameters` are the same; with other
-        parameters, or under `force`, it runs as a new task with a new record.
-        Either way `body` is told to replace what the earlier run left. The
-        first task that runs creates the job directory with its ``job.json``.
+        - It is kept when its outputs are present and `parameters` are the
+          same.
+        - It is refused when `parameters` differ, or when an output has
+          another size than recorded. `force` overrides the refusal.
+        - With `accept_input`, it is also kept when its outputs are present
+          and `parameters` differ only in the fingerprint of its input
+          (:data:`~omphjc.jobs.task.INPUT_FINGERPRINT_PARAMETER`). The record
+          then stores that fingerprint and the time as its
+          ``accepted_input``, which replaces an earlier one. Its parameters
+          keep the fingerprint of the input the task read, and it gains no
+          run. From then on the task is kept for either input, without
+          `accept_input` too.
 
-        Each run gets a run ID and a directory,
-        ``<root>/<name>/runs/<run_id>``, that `body` receives for the program's
-        log. The record of the task, ``task.json`` in its directory, is written
-        before `body` runs and after it returns or raises, so a failed or
-        interrupted run records how far it got and where its log is. A run that
-        ``SIGTERM`` or a keyboard interrupt ended is recorded as interrupted,
-        and one that raised anything else as failed. How a run ended is written
-        only while it is still the latest run in the record on disk. The
-        manifest is written again after each of these writes.
+        **A task that is not kept.** A task without a record runs. A task
+        that failed, was interrupted or lost an output runs again. The new
+        run is added to the record when `parameters` are the same. With
+        other parameters, or under `force`, the task starts a new record. In
+        both cases `body` is told to replace what the earlier run left.
+
+        **What is written.** The first task of a job creates the job
+        directory with its ``job.json``. Each run gets a run ID and a
+        directory, ``<root>/<name>/runs/<run_id>``, which `body` receives for
+        the program's log.
+
+        The record, ``task.json`` in the task's directory, is written before
+        `body` is called and again after it returns or raises. A failed or
+        interrupted run therefore records how far it got and where its log
+        is. The manifest is written again after each of these writes.
+
+        A run that ``SIGTERM`` or a keyboard interrupt ended is recorded as
+        interrupted, and a run that raised anything else as failed. The end
+        of a run is written only while that run is still the latest one in
+        the record on disk.
 
         Parameters
         ----------
@@ -366,8 +378,9 @@ class Job:
     ) -> TaskRecord | None:
         """Return the record of `task` when its result is kept for `parameters`.
 
-        It is ``None`` for a task to run: one without a record, one that is
-        not done, and one that lost an output and has the same parameters.
+        Return ``None`` when the task has to run. That is the case for a
+        task without a record, for a task that is not done, and for a task
+        that lost an output and has the same parameters.
 
         Raises
         ------
@@ -422,10 +435,14 @@ class Job:
     def set_aside_folders(self) -> list[SetAsideFolder]:
         """Return what earlier runs of the job's tasks set aside, oldest first.
 
-        A run that cannot confirm an artifact an earlier run left, as after a
-        kill before sealing, moves it into ``<stage>/omphjc-set-aside/``
-        rather than deleting it (:mod:`omphjc.stamps`). The folders stay until
-        :meth:`clear_set_aside_folders` or the user deletes them.
+        A run does not delete an artifact that it cannot confirm as an
+        earlier run's own. It moves the artifact into
+        ``<stage>/omphjc-set-aside/`` (:mod:`omphjc.stamps`). This happens,
+        for example, when the earlier run was killed before it sealed its
+        artifacts.
+
+        The folders stay until :meth:`clear_set_aside_folders` or the user
+        deletes them.
         """
         found = [
             folder
@@ -476,8 +493,9 @@ class Job:
     ) -> None:
         """Refuse `parameters` when task `name` ran with other ones.
 
-        The message names each parameter that differs, a nested one by the
-        dotted path of its keys, with the value the task ran with as expected.
+        The message names each parameter that differs. A nested parameter
+        is named by the dotted path of its keys. The value the task ran with
+        is shown as the expected one.
         """
         if parameters == recorded:
             return
@@ -542,10 +560,10 @@ class Job:
 def exception_on_termination() -> Iterator[None]:
     """Raise :class:`TerminationError` on ``SIGTERM`` while the block runs.
 
-    A batch system ends a job that exceeds its time limit with ``SIGTERM``,
-    which would otherwise end the process without running any ``finally``;
-    as an exception it stops the program, records the run as interrupted
-    and leaves the run's files sealed.
+    A batch system ends a job that exceeds its time limit with ``SIGTERM``.
+    By default the signal ends the process without executing any ``finally``
+    block. Raised as an exception, it stops the program, records the run as
+    interrupted and leaves the run's files sealed.
     """
 
     def raise_terminated(signum: int, frame: FrameType | None) -> None:

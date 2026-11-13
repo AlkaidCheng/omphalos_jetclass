@@ -1,25 +1,39 @@
 """Stamp the directories omphjc works in, so that later runs can recognise them.
 
-A stamp is a small JSON file, ``omphjc-stamp.json``, certifying that omphjc
-works in a directory and for what: a purpose, such as MadGraph event
-generation, and details such as the process. It also seals the artifacts a
-procedure leaves there, the files and folders it made, each by the latest
-status-change time (``ctime``) found in it when the procedure finished.
+A stamp is a small JSON file, ``omphjc-stamp.json``. It certifies that omphjc
+works in a directory, and it states what for: a purpose, such as MadGraph
+event generation, and details, such as the process.
 
-Adding, removing or renaming anything in a folder moves that folder's ``ctime``
-forward, and no ordinary tool can set it back. A later run therefore reads the
-``ctime`` of an artifact and of the folders in it, without keeping a list of
-files, and learns whether anything was added, removed or renamed since the
-seal. Editing a file in place inside a folder changes the file alone and is not
-detected. On Windows, where ``st_ctime`` is the creation time, no change can be
-seen, so no artifact counts as unchanged. An artifact that was sealed and shows
-no such change is deleted; one the run cannot confirm as its own, such as one
-left by a run killed before sealing, is moved into ``omphjc-set-aside/``
-instead, with its contents. Nothing else in the directory is ever touched. What
-was set aside stays until someone deletes it: :func:`set_aside_folders` shows
-the folders with their sizes and :func:`clear_set_aside_folders` deletes them.
-Stamps guard against mistakes, such as a mistyped path or a user's file left in
-a run's folder; anyone who can write to a directory can also edit its stamp.
+A stamp also seals the artifacts that a procedure leaves in the directory. An
+artifact is a file or folder that the procedure made. The seal of an artifact
+is the latest status-change time (``ctime``) found in it when the procedure
+finished.
+
+Adding, removing or renaming anything in a folder moves the ``ctime`` of that
+folder forward, and no ordinary tool can set it back. A later run therefore
+reads the ``ctime`` of an artifact and of the folders in it. This tells the
+run whether anything was added, removed or renamed since the seal, and no list
+of files has to be kept.
+
+Editing a file in place inside a folder changes the file alone, so the edit is
+not detected. On Windows ``st_ctime`` is the creation time, so no change can
+be seen there and no artifact counts as unchanged.
+
+A later run clears the artifacts in this way:
+
+- An artifact that was sealed and shows no such change is deleted.
+- An artifact that the run cannot confirm as its own is moved into
+  ``omphjc-set-aside/`` instead, with its contents. An example is an artifact
+  left by a run that was killed before it could seal the directory.
+- Nothing else in the directory is ever touched.
+
+What was set aside stays until someone deletes it. :func:`set_aside_folders`
+shows the folders with their sizes, and :func:`clear_set_aside_folders`
+deletes them.
+
+Stamps guard against mistakes, such as a mistyped path or a file that a user
+left in the folder of a run. Anyone who can write to a directory can also edit
+its stamp.
 """
 
 import json
@@ -65,8 +79,9 @@ class Stamp:
     created : str
         When the directory was stamped, in ISO 8601 format (UTC).
     artifacts : Mapping[str, int]
-        Each sealed artifact, by its POSIX path relative to the directory,
-        with the latest ``ctime`` in it at sealing, in nanoseconds.
+        The sealed artifacts. A key is the POSIX path of an artifact relative
+        to the directory. A value is the latest ``ctime`` found in the
+        artifact at sealing, in nanoseconds.
     """
 
     purpose: str
@@ -149,7 +164,10 @@ def require_stamp(
 
 
 def seal(directory: Path, artifacts: Iterable[str]) -> Stamp:
-    """Seal the `artifacts` now in the stamped `directory`; forget the others.
+    """Seal the `artifacts` that exist in the stamped `directory`.
+
+    The stamp then records these artifacts only. Any other artifact that the
+    stamp recorded is dropped from it.
 
     Each artifact is a POSIX path relative to `directory` whose components
     are plain names (:func:`omphjc.safe_paths.require_plain_name`).
@@ -185,39 +203,56 @@ def clear_artifacts(
     """Clear the `artifacts` an earlier run left in `directory`, and nothing else.
 
     `directory` must carry the stamp for `purpose` and `details`. An artifact
-    that was sealed and shows no change since is deleted. Any other artifact
-    present, unsealed (as after a run killed before sealing), changed since
-    sealing, a symbolic link, or named in `unconfirmed`, is moved with its
-    contents into a new folder under ``omphjc-set-aside/`` in `directory`, as is
-    every artifact on Windows, where a change cannot be seen.
-    Every check runs before anything is moved or deleted, and the stamp
-    forgets the cleared artifacts.
+    that was sealed and shows no change since the seal is deleted.
+
+    Any other artifact that is present is moved, with its contents, into a new
+    folder under ``omphjc-set-aside/`` in `directory`. This applies to an
+    artifact that:
+
+    - is unsealed, for example because the earlier run was killed before it
+      could seal the directory;
+    - changed since it was sealed;
+    - is a symbolic link;
+    - is named in `unconfirmed`.
+
+    On Windows a change cannot be seen, so every artifact that is present is
+    moved into this folder.
+
+    Every check is made before anything is moved or deleted. The stamp drops
+    the cleared artifacts from its record.
 
     Parameters
     ----------
     directory : Path
         The stamped directory.
     artifacts : iterable of str
-        What a run makes in `directory`: POSIX paths relative to it whose
-        components are plain names (:func:`omphjc.safe_paths.require_plain_name`).
+        What a run makes in `directory`. Each artifact is a POSIX path
+        relative to `directory` whose components are plain names
+        (:func:`omphjc.safe_paths.require_plain_name`).
     purpose : str
         The purpose the stamp must record.
     details : Mapping[str, str] or None, optional
         Details the stamp must record.
     unconfirmed : iterable of str, optional
-        Artifacts to set aside even when sealed and unchanged, for example
-        because they lack a sign the caller expects.
+        Artifacts to set aside even when they are sealed and unchanged, for
+        example because they lack a sign that the caller expects.
 
     Returns
     -------
     Path or None
-        The folder holding the artifacts set aside, ``None`` when none were.
+        The folder that holds the artifacts set aside, or ``None`` when no
+        artifact was set aside.
 
     Raises
     ------
     StampError
-        If an artifact is present while `directory` has no stamp, or the stamp
-        records another purpose or other details; nothing is changed then.
+        If `directory` is in one of these states:
+
+        - it holds an artifact but carries no stamp;
+        - its stamp records another purpose or other details;
+        - it holds something other than a stamp where the stamp belongs.
+
+        Nothing is changed in that case.
     ValueError
         If an artifact is not a relative path of plain names.
     """
@@ -299,8 +334,9 @@ class SetAsideFolder:
 def set_aside_folders(directory: Path) -> list[SetAsideFolder]:
     """Return the folders set aside in `directory`, oldest first.
 
-    Only folders named as :func:`clear_artifacts` names them count; anything
-    else under ``omphjc-set-aside/`` is left out.
+    A folder counts only when its name has the form that
+    :func:`clear_artifacts` gives. Anything else under ``omphjc-set-aside/``
+    is left out.
     """
     set_aside_dir = directory / SET_ASIDE_DIR
     if set_aside_dir.is_symlink() or not set_aside_dir.is_dir():
@@ -321,16 +357,16 @@ def set_aside_folders(directory: Path) -> list[SetAsideFolder]:
 
 
 def clear_set_aside_folders(directory: Path) -> list[SetAsideFolder]:
-    """Delete the folders set aside in `directory`; return what was deleted.
+    """Delete the folders set aside in `directory` and return them.
 
-    Only the folders :func:`set_aside_folders` lists are deleted;
-    ``omphjc-set-aside/`` itself goes once it is empty.
+    Only the folders that :func:`set_aside_folders` lists are deleted.
+    ``omphjc-set-aside/`` itself is deleted once it is empty.
 
     Raises
     ------
     StampError
-        If folders are set aside in `directory` while it has no stamp;
-        nothing is changed then.
+        If folders are set aside in `directory` while it has no stamp.
+        Nothing is changed in that case.
     """
     folders = set_aside_folders(directory)
     if not folders:

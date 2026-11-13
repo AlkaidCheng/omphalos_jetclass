@@ -1,11 +1,17 @@
 """The banner MadGraph writes at the top of its event files.
 
-The banner is the ``<header>`` of an LHE file: the MadGraph version, the
-process and run cards as used, the parameter card, the generation summary
-(event count and integrated cross section) and, after MadSpin, the MadSpin
-card. The event file continues with the ``<init>`` block, which carries the
-cross section and its statistical error per subprocess. MadGraph also stores
-the header alone as ``run_<n>_tag_<m>_banner.txt``.
+The banner is the ``<header>`` of an LHE file. It holds:
+
+- the MadGraph version,
+- the process card and the run card as MadGraph used them,
+- the parameter card,
+- the generation summary (event count and integrated cross section),
+- the MadSpin card, after MadSpin.
+
+The event file continues with the ``<init>`` block. That block carries the
+cross section and its statistical error for each subprocess.
+
+MadGraph also stores the header alone as ``run_<n>_tag_<m>_banner.txt``.
 """
 
 import gzip
@@ -67,8 +73,9 @@ class Banner:
     cross_section_pb : float
         Integrated cross section in pb, from the generation summary.
     cross_section_error_pb : float or None
-        Statistical error in pb, summed in quadrature over the subprocesses
-        of the ``<init>`` block; ``None`` when the text has no such block.
+        Statistical error of the cross section in pb. It is the sum in
+        quadrature of the errors of the subprocesses in the ``<init>`` block.
+        The value is ``None`` when the text has no ``<init>`` block.
     run_card : RunCard
         The run card as MadGraph used it.
     proc_card : ProcCard or None
@@ -129,8 +136,9 @@ class Banner:
         Raises
         ------
         ValueError
-            If `text` lacks the generation summary, its event count or weight,
-            the version or the run card.
+            If `text` lacks the generation summary, the event count or the
+            weight of that summary, the version, or the run card. If its
+            ``<init>`` block does not have the Les Houches layout.
         """
         summary = _capture(
             _GENERATION_INFO_BLOCK_PATTERN, text, missing="MGGenerationInfo block"
@@ -162,10 +170,13 @@ class Banner:
 def _open_text(path: Path) -> IO[str]:
     """Open `path` as text, decompressing a ``.gz`` file.
 
-    MadGraph gzips its event file (``Events/run_01/unweighted_events.lhe.gz``)
-    but writes the banner beside it (``run_01_tag_1_banner.txt``) as plain
-    text, and ``DelphesPythia8`` needs the event file uncompressed, so a
-    banner can come from either form.
+    A banner can come from a gzipped file or from a plain one:
+
+    - MadGraph gzips its event file
+      (``Events/run_01/unweighted_events.lhe.gz``).
+    - MadGraph writes the banner beside the event file as plain text
+      (``run_01_tag_1_banner.txt``).
+    - ``DelphesPythia8`` needs the event file uncompressed.
     """
     if path.suffix == ".gz":
         return gzip.open(path, "rt", encoding="utf-8", errors="replace")
@@ -185,8 +196,9 @@ def _capture(
 ) -> str | None:
     """Return the first group of `pattern` in `text`.
 
-    Without a match the result is ``None``, or a ``ValueError`` naming the
-    `missing` part when the caller requires it.
+    Without a match, the result is ``None`` when `missing` is not given. When
+    `missing` is given, a ``ValueError`` that names the `missing` part is
+    raised.
     """
     match = pattern.search(text)
     if match is not None:
@@ -200,10 +212,13 @@ def _init_error(block: str) -> float:
     """Return the cross-section error of an ``<init>`` block in pb.
 
     MadGraph's generation summary records the cross section without its
-    error, which the event file carries only in the ``<init>`` block, as the
-    ``XERRUP`` of each subprocess line. The errors of the subprocesses are
-    summed in quadrature, and the ``<generator>`` line MadGraph appends to the
-    block is skipped. A MadGraph block with one subprocess::
+    error. The event file carries the error only in the ``<init>`` block, as
+    the ``XERRUP`` value of each subprocess line.
+
+    The errors of the subprocesses are summed in quadrature. The
+    ``<generator>`` line that MadGraph appends to the block is skipped.
+
+    A MadGraph block with one subprocess::
 
         2212 2212 6.500000e+03 6.500000e+03 0 0 247000 247000 -4 1
          1.052824299417E+00 2.398374998897E-03 1.052824299417E+00 1

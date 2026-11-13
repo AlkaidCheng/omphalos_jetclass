@@ -32,17 +32,24 @@ def shower(
 ) -> TaskRecord:
     """Shower the generated events of `job` with Pythia 8.
 
-    Runs :func:`omphjc.tools.pythia.driver.shower_events` in the job's ``shower/``
-    directory on the event file the generate stage made, with the job's seed
-    and as many events as that stage recorded. The stage's parameters are the
-    event count, the seed, the Pythia overrides and the fingerprint of the
-    event file read, so a sample generated again with the same events keeps
-    its shower. Its events are the ROOT file with the count Pythia accepted
-    and the fingerprint of its content
-    (:class:`omphjc.events.delphes_root.DelphesROOTFile`), and its metadata
-    the Pythia version, the events read, the fraction kept by
-    matching for a matched process, and the SHA-256 of the command file and
-    the record-only card as run.
+    The stage runs :func:`omphjc.tools.pythia.driver.shower_events` in the job's
+    ``shower/`` directory. It reads the event file the generate stage made, and
+    uses the job's seed and the event count that stage recorded.
+
+    Its parameters are the event count, the seed, the Pythia overrides and the
+    fingerprint of the event file it reads. A sample that is generated again
+    with the same events therefore keeps its shower.
+
+    Its events are the ROOT file, recorded with the number of events Pythia
+    accepted and the fingerprint of its content
+    (:class:`omphjc.events.delphes_root.DelphesROOTFile`).
+
+    Its metadata holds:
+
+    - the Pythia version;
+    - the number of events read;
+    - the fraction of events kept by matching, for a matched process;
+    - the SHA-256 of the command file and of the record-only card as run.
 
     Parameters
     ----------

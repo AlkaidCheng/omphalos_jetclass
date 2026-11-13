@@ -19,17 +19,28 @@ name of the task::
       }
     }
 
-``process``, ``job_id`` and ``seed`` identify the job as ``job.json`` does
-(:mod:`omphjc.jobs.identity`), and ``omphjc_version`` is the version of omphjc
-that wrote the manifest. A task has the ``status`` and the ID of the latest
-run in its record (:mod:`omphjc.jobs.task`) and the number of runs in the
-record, ``n_runs``. ``record_path`` is the path of the
-record, relative to the job directory. :mod:`omphjc.jobs.record_file`
-describes ``schema``.
+The keys:
+
+``schema``
+    The layout version of the file (:mod:`omphjc.jobs.record_file`).
+``process``, ``job_id``, ``seed``
+    The identity of the job, as in ``job.json``
+    (:mod:`omphjc.jobs.identity`).
+``omphjc_version``
+    The version of omphjc that wrote the manifest.
+``tasks``
+    One entry for each task that has a record. An entry holds:
+
+    - ``status``: the status of the latest run in the task's record
+      (:mod:`omphjc.jobs.task`);
+    - ``latest_run_id``: the ID of that run;
+    - ``n_runs``: the number of runs in the record;
+    - ``record_path``: the path of the record, relative to the job
+      directory.
 
 The manifest is a summary of the records for a reader. A job writes it again
-from the records whenever it writes the record of a task, and reads the
-records themselves to decide what to run.
+from the records whenever it writes the record of a task. To decide what to
+run, a job reads the records themselves, not the manifest.
 """
 
 from dataclasses import asdict, dataclass, field
@@ -47,7 +58,7 @@ class TaskSummary:
     Parameters
     ----------
     status : str
-        The status of the task, that of the latest run in its record.
+        The status of the latest run in the task's record.
     latest_run_id : str
         The ID of that run, which begins with its start time.
     n_runs : int

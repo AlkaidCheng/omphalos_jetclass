@@ -1,9 +1,12 @@
 """Event files: the formats that carry events between stages, and their readers.
 
-The package exports the file contracts only and imports no array library.
-:func:`omphjc.events.readers.reader_for` returns the reader of a file's format;
-the particle record's schema is in :mod:`omphjc.events.particles` and the
-stable-particle definition in :mod:`omphjc.events.stable_particles`.
+The package exports the file contracts only and imports no array library. The
+rest is in these modules:
+
+- :func:`omphjc.events.readers.reader_for` returns the reader of a file's
+  format.
+- :mod:`omphjc.events.particles` holds the schema of the particle record.
+- :mod:`omphjc.events.stable_particles` holds the stable-particle definition.
 """
 
 from omphjc.events.formats import EventFile, EventFormat, EventReader
