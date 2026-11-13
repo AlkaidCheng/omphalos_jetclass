@@ -161,6 +161,10 @@
   `Job.task_record`, and `manifest.json` is an index of the stages;
   `Job.manifest` is removed and a job of an earlier version is run again
   from `omphjc generate --force`. (#65)
+- `omphjc generate`, `omphjc shower` and `omphjc simulate` refuse a task that
+  ran with other parameters by naming each parameter that differs, a nested
+  one by its dotted path, with the value it ran with and the current one.
+  (#66)
 
 ### Fixed
 
