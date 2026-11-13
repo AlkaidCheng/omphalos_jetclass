@@ -5,7 +5,7 @@ from pathlib import Path
 
 from omphjc.events.formats import EventFormat
 from omphjc.jobs.job import Job, sha256
-from omphjc.jobs.records import (
+from omphjc.jobs.task import (
     EVENTS_OUTPUT,
     EventOutput,
     TaskOutcome,

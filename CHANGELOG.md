@@ -154,6 +154,9 @@
   until the stage is run again with `--force`. (#59)
 - The record of a task and the types of its result live in
   `omphjc.jobs.records`. (#60)
+- `Job.check_stage`, `StageCheck` and `StageStatus` are renamed `Job.task`,
+  `Task` and `TaskStatus`, in `omphjc.jobs.task`, the former
+  `omphjc.jobs.records`. (#64)
 
 ### Fixed
 

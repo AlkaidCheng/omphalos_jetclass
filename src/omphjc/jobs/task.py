@@ -1,4 +1,4 @@
-"""The record of a task, and the types that hold what the task made.
+"""A task of a job: its record, what it made, and its status.
 
 A task is the work of one stage in a job. The manifest of the job
 (:mod:`omphjc.jobs.manifest`) holds one record per task, written as::
@@ -50,11 +50,17 @@ external program's processes where the platform reports them.
 records a task that has started, :meth:`TaskRecord.failed` one that raised,
 and :meth:`TaskRecord.done` one that returned a :class:`TaskOutcome`, whose
 result it holds unchanged.
+
+A record says how the last run of the task ended. Whether its result can be
+used also depends on its output files, which may have been deleted or changed
+since: :class:`Task` holds a task as found on disk, and its
+:class:`TaskStatus` takes both into account.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -239,6 +245,41 @@ class TaskRecord:
                 else relative(outcome.set_aside_dir)
             ),
         )
+
+
+class TaskStatus(Enum):
+    """How a task of a job stands, by its record and its output files."""
+
+    NOT_DONE = "not done"
+    """The task has no record, or its record does not say done."""
+    MISSING_OUTPUT = "missing output"
+    """The task is recorded as done and one of its outputs is not on disk."""
+    CHANGED = "changed"
+    """The task is recorded as done and one of its outputs has another size
+    than recorded."""
+    DONE = "done"
+    """The task is recorded as done and each output has its recorded size."""
+
+
+@dataclass(frozen=True)
+class Task:
+    """A task of a job, as found on disk when :meth:`omphjc.jobs.Job.task` looked.
+
+    Parameters
+    ----------
+    name : str
+        The name of the task, which is also the name of its directory.
+    status : TaskStatus
+        How the task stands, by its record and its output files.
+    detail : str
+        A clause that names the output that is missing, or the output of
+        another size with the size found and the size recorded. It is empty
+        for the other statuses.
+    """
+
+    name: str
+    status: TaskStatus
+    detail: str = ""
 
 
 def timestamp() -> str:

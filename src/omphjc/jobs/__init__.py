@@ -4,12 +4,18 @@ A job directory, ``<outdir>/<process>/job_<n>/``, holds ``job.json``,
 ``manifest.json`` and one directory per task, the work of one stage in the
 job. The job number fixes the seed of every program the job runs;
 ``docs/reproducibility.md`` lists what else a rerun's events depend on.
-:class:`Job` builds the directory, keeps the manifest and applies the rerun
-rules; :mod:`omphjc.jobs.identity` defines ``job.json``,
-:mod:`omphjc.jobs.manifest` the manifest and
-:mod:`omphjc.jobs.records` the record of a task; the functions in
-:mod:`omphjc.jobs.stages` run the stages: MadGraph generation, the Pythia
-shower, then the Delphes simulation.
+
+The modules, by what they hold::
+
+    job.py          Job: the job directory, its seed, and the rules that decide
+                    whether a task runs again (Job.run_task)
+    task.py         Task and TaskStatus, a task as found on disk; TaskRecord and
+                    what a task makes: TaskResult, TaskOutput, EventOutput,
+                    TaskOutcome
+    identity.py     JobIdentity, the content of job.json
+    manifest.py     Manifest, the content of manifest.json
+    record_file.py  RecordFile, the base class of the job's JSON files
+    stages/         one function per stage: generate, shower, simulate
 
 Each stage calls a driver, such as :func:`omphjc.tools.madgraph.driver.generate_events`,
 which returns a run record with absolute paths. The stage function builds a
@@ -24,26 +30,26 @@ parameters and stores them as a :class:`TaskRecord` in the job's
 from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.job import (
     Job,
-    StageCheck,
-    StageStatus,
     TerminationError,
     exception_on_termination,
     job_seed,
     sha256,
 )
 from omphjc.jobs.manifest import Manifest
-from omphjc.jobs.records import (
+from omphjc.jobs.stages import GENERATE, SHOWER, SIMULATE, generate, shower, simulate
+from omphjc.jobs.task import (
     DONE,
     EVENTS_OUTPUT,
     FAILED,
     RUNNING,
     EventOutput,
+    Task,
     TaskOutcome,
     TaskOutput,
     TaskRecord,
     TaskResult,
+    TaskStatus,
 )
-from omphjc.jobs.stages import GENERATE, SHOWER, SIMULATE, generate, shower, simulate
 
 __all__ = [
     "DONE",
@@ -57,12 +63,12 @@ __all__ = [
     "Job",
     "JobIdentity",
     "Manifest",
-    "StageCheck",
-    "StageStatus",
+    "Task",
     "TaskOutcome",
     "TaskOutput",
     "TaskRecord",
     "TaskResult",
+    "TaskStatus",
     "TerminationError",
     "exception_on_termination",
     "generate",

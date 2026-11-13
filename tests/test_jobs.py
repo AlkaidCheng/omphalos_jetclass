@@ -22,12 +22,12 @@ from omphjc.jobs import (
     Job,
     JobIdentity,
     Manifest,
-    StageCheck,
-    StageStatus,
+    Task,
     TaskOutcome,
     TaskOutput,
     TaskRecord,
     TaskResult,
+    TaskStatus,
     TerminationError,
     exception_on_termination,
     generate,
@@ -187,7 +187,7 @@ def test_a_stage_runs_once_and_its_result_is_kept(
     assert Manifest.read(job.manifest_path).stages["x"] == record
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.check_stage("x") == StageCheck(StageStatus.DONE)
+    assert job.task("x") == Task("x", TaskStatus.DONE)
     assert job.run_task("x", {"events": 10}, body) == record
     assert calls == [False]
 
@@ -221,13 +221,13 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.check_stage("x") == StageCheck(StageStatus.NOT_DONE)
+    assert job.task("x") == Task("x", TaskStatus.NOT_DONE)
     job.run_task("x", {}, body)
     output_path = job.root_dir / "x" / "out.txt"
     output_path.unlink()
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.check_stage("x") == StageCheck(
-        StageStatus.OUTPUT_MISSING, f"{output_path} is missing"
+    assert job.task("x") == Task(
+        "x", TaskStatus.MISSING_OUTPUT, f"{output_path} is missing"
     )
     job.run_task("x", {}, body)
     assert calls == [False, True]
@@ -268,7 +268,7 @@ def test_a_stage_whose_output_has_another_size_is_refused_unless_forced(
     output_path.write_text("made and changed")
     job = Job(specs["HToBB"], tmp_path, 1)
     detail = f"{output_path} holds 16 bytes, not the 4 the x stage recorded"
-    assert job.check_stage("x") == StageCheck(StageStatus.OUTPUT_SIZE_MISMATCH, detail)
+    assert job.task("x") == Task("x", TaskStatus.CHANGED, detail)
     refused = re.escape(f"{detail}; run omphjc x with --force to regenerate the file")
     with pytest.raises(ValueError, match=refused):
         job.require_done("x")
@@ -298,8 +298,9 @@ def test_an_output_of_another_size_is_reported_before_a_missing_one(
     job.run_task("x", {}, body)
     first_path.unlink()
     second_path.write_text("made and changed")
-    assert job.check_stage("x") == StageCheck(
-        StageStatus.OUTPUT_SIZE_MISMATCH,
+    assert job.task("x") == Task(
+        "x",
+        TaskStatus.CHANGED,
         f"{second_path} holds 16 bytes, not the 4 the x stage recorded",
     )
     with pytest.raises(ValueError, match="with --force to regenerate the file"):
@@ -709,7 +710,7 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
     assert job.clear_set_aside_folders() == folders
     assert job.set_aside_folders() == []
     assert not (job.task_dir("generate") / "omphjc-set-aside").exists()
-    assert job.check_stage("generate").status is StageStatus.DONE
+    assert job.task("generate").status is TaskStatus.DONE
 
 
 def test_simulate_needs_a_finished_shower_stage(
