@@ -292,3 +292,54 @@ def test_simulate_runs_after_shower_and_reports(
     again = CliRunner().invoke(cli, simulate)
     assert again.exit_code == 0, again.output
     assert "Delphes simulation: done, kept from an earlier run" in again.output
+
+
+def test_accept_input_keeps_a_shower_whose_events_changed(
+    mg5_path: Path,
+    delphes_pythia8_path: Path,
+    delphes_root_path: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = ["HToBB", "--job-id", "1", "--outdir", str(tmp_path)]
+    generate = ["generate", *job, "--events", "10", "--mg5", str(mg5_path)]
+    shower = ["shower", *job, "--delphes-pythia8", str(delphes_pythia8_path)]
+    simulate = ["simulate", *job, "--delphes-root", str(delphes_root_path)]
+    assert CliRunner().invoke(cli, generate).exit_code == 0
+    first = CliRunner().invoke(cli, [*shower, "--accept-input"])
+    assert first.exit_code == 0, first.output
+    assert first.output.splitlines()[1] == "Pythia shower: done"
+    assert "  input  " not in first.output
+    assert CliRunner().invoke(cli, simulate).exit_code == 0
+    monkeypatch.setenv("FAKE_MG5_EVENTS", "2")
+    assert CliRunner().invoke(cli, [*generate, "--force"]).exit_code == 0
+
+    refused = CliRunner().invoke(cli, shower)
+    assert refused.exit_code != 0
+    assert "input_fingerprint: expected lhe-v1:" in refused.output
+    conflicting = CliRunner().invoke(cli, [*shower, "--accept-input", "--force"])
+    assert conflicting.exit_code == 2
+    assert "--accept-input and --force cannot be used together." in conflicting.output
+
+    accepted = CliRunner().invoke(cli, [*shower, "--accept-input"])
+    assert accepted.exit_code == 0, accepted.output
+    assert "Pythia shower: done, kept from an earlier run" in accepted.output
+    input_row = re.compile(
+        r"  input             accepted \(ran on lhe-v1:[0-9a-f]{8}\.\.\., "
+        r"accepted for lhe-v1:[0-9a-f]{8}\.\.\.\)"
+    )
+    assert any(input_row.fullmatch(line) for line in accepted.output.splitlines())
+    again = CliRunner().invoke(cli, shower)
+    assert again.exit_code == 0, again.output
+    assert "  input             accepted (ran on" in again.output
+    kept = CliRunner().invoke(cli, simulate)
+    assert kept.exit_code == 0, kept.output
+    assert "Delphes simulation: done, kept from an earlier run" in kept.output
+    assert "  input  " not in kept.output
+
+    monkeypatch.delenv("FAKE_MG5_EVENTS")
+    assert CliRunner().invoke(cli, [*generate, "--force"]).exit_code == 0
+    original = CliRunner().invoke(cli, shower)
+    assert original.exit_code == 0, original.output
+    assert "Pythia shower: done, kept from an earlier run" in original.output
+    assert "  input  " not in original.output

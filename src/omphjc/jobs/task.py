@@ -48,7 +48,8 @@ A task is the work of one stage in a job. Its record is the file
           "set_aside": null,
           "error": null
         }
-      ]
+      ],
+      "accepted_input": null
     }
 
 :mod:`omphjc.jobs.record_file` describes ``schema``. ``parameters`` is what
@@ -84,9 +85,16 @@ when it moved nothing. ``usage`` is
 what the run took: its wall time, and the CPU time and peak memory (MiB) of
 the external program's processes where the platform reports them.
 
+``accepted_input`` is ``null`` unless the task was kept for another input than
+the one it read (:meth:`omphjc.jobs.Job.run_task`). It then holds the
+``fingerprint`` of that input and the time of the acceptance, ``accepted_at``,
+while ``parameters`` keep the fingerprint of the input the task read. A
+further run of the task clears it.
+
 :meth:`TaskRecord.running` starts the record of a task, and
 :meth:`TaskRecord.rerun` adds a run to it; :meth:`TaskRecord.with_log` names
-the log of that run. :meth:`TaskRecord.failed`, :meth:`TaskRecord.interrupted`
+the log of that run. :meth:`TaskRecord.with_accepted_input` records an
+acceptance. :meth:`TaskRecord.failed`, :meth:`TaskRecord.interrupted`
 and :meth:`TaskRecord.done` record how the latest run ended, the last with
 the result of the :class:`TaskOutcome` it returned, unchanged.
 
@@ -124,6 +132,8 @@ _RUN_ID_RANDOM_BYTES = 4
 
 EVENTS_OUTPUT = "events"
 """The name of the output that holds the events the next task reads."""
+INPUT_FINGERPRINT_PARAMETER = "input_fingerprint"
+"""The parameter that holds the fingerprint of the events a task reads."""
 
 
 @dataclass(frozen=True)
@@ -267,6 +277,22 @@ class TaskRun:
 
 
 @dataclass(frozen=True)
+class AcceptedInput:
+    """An input that a task was kept for, although it ran on another.
+
+    Parameters
+    ----------
+    fingerprint : str
+        The fingerprint of the events the task was kept for.
+    accepted_at : str
+        The time of the acceptance, in the format of :func:`timestamp`.
+    """
+
+    fingerprint: str
+    accepted_at: str
+
+
+@dataclass(frozen=True)
 class TaskRecord(RecordFile):
     """What one task did; the module docstring describes the fields.
 
@@ -274,7 +300,8 @@ class TaskRecord(RecordFile):
     ------
     ValueError
         If the record has no run, or holds a result while its latest
-        run is not done, or none while it is.
+        run is not done, or none while it is, or an accepted input while its
+        latest run is not done.
     """
 
     file_name: ClassVar[str] = "task.json"
@@ -282,6 +309,7 @@ class TaskRecord(RecordFile):
     parameters: dict[str, Any]
     runs: tuple[TaskRun, ...]
     result: TaskResult | None = None
+    accepted_input: AcceptedInput | None = None
 
     def __post_init__(self) -> None:
         if not self.runs:
@@ -294,6 +322,11 @@ class TaskRecord(RecordFile):
         if not self.is_done and self.result is not None:
             raise ValueError(
                 f"the latest run has status {status!r} but the record has a result"
+            )
+        if not self.is_done and self.accepted_input is not None:
+            raise ValueError(
+                f"the latest run has status {status!r} but the record has an "
+                "accepted input"
             )
 
     @property
@@ -343,11 +376,15 @@ class TaskRecord(RecordFile):
         return self._done_result().metadata
 
     def as_record(self) -> dict[str, Any]:
-        """Return the parameters, the result and the runs by name."""
+        """Return the parameters, the result, the runs and the accepted input by name."""
+        accepted_input = self.accepted_input
         return {
             "parameters": self.parameters,
             "result": None if self.result is None else asdict(self.result),
             "runs": [asdict(run) for run in self.runs],
+            "accepted_input": (
+                None if accepted_input is None else asdict(accepted_input)
+            ),
         }
 
     @classmethod
@@ -362,10 +399,14 @@ class TaskRecord(RecordFile):
         fields = dict(record)
         runs = tuple(TaskRun(**run) for run in fields.pop("runs"))
         result = fields.pop("result")
+        accepted_input = fields.pop("accepted_input")
         return cls(
             **fields,
             runs=runs,
             result=None if result is None else TaskResult.from_record(result, root_dir),
+            accepted_input=(
+                None if accepted_input is None else AcceptedInput(**accepted_input)
+            ),
         )
 
     @classmethod
@@ -378,12 +419,13 @@ class TaskRecord(RecordFile):
 
         A run still ``running``, left by a killed process, becomes
         ``interrupted``. The record holds no result until the new run is
-        done.
+        done, and no accepted input.
         """
         previous_runs = self.runs
         if self.latest_run.status == RUNNING:
             previous_runs = self._runs_with_latest(status=INTERRUPTED)
-        return replace(self, runs=(*previous_runs, TaskRun.started_now()), result=None)
+        runs = (*previous_runs, TaskRun.started_now())
+        return replace(self, runs=runs, result=None, accepted_input=None)
 
     def with_log(self, log: str) -> "TaskRecord":
         """Return the record with `log` as the log of its latest run.
@@ -391,6 +433,25 @@ class TaskRecord(RecordFile):
         `log` is the path of the file, relative to the job directory.
         """
         return replace(self, runs=self._runs_with_latest(log=log))
+
+    def with_accepted_input(self, fingerprint: str) -> "TaskRecord":
+        """Return the record with `fingerprint` as the input the task is kept for, from now."""
+        accepted_input = AcceptedInput(fingerprint, accepted_at=timestamp())
+        return replace(self, accepted_input=accepted_input)
+
+    def is_accepted_for(self, parameters: Mapping[str, Any]) -> bool:
+        """Whether the task was accepted for the input in `parameters`.
+
+        The other parameters must be those of the task. It is ``False`` for a
+        record without an accepted input.
+        """
+        if self.accepted_input is None:
+            return False
+        fingerprint = self.accepted_input.fingerprint
+        return parameters == {
+            **self.parameters,
+            INPUT_FINGERPRINT_PARAMETER: fingerprint,
+        }
 
     def failed(self, *, error: str) -> "TaskRecord":
         """Return the record with its latest run failed with `error`."""

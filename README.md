@@ -372,6 +372,7 @@ omphjc generate HToBB --job-id 1 --events 1000 --outdir runs/dev --cores 8 --tim
 omphjc shower HToBB --job-id 1 --outdir runs/dev
 omphjc shower HToBB --job-id 1 --outdir runs/dev --set Main:timesAllowErrors=100
 omphjc shower HToBB --job-id 1 --outdir runs/dev --force    # run it again
+omphjc shower HToBB --job-id 1 --outdir runs/dev --accept-input  # keep it after its events changed
 omphjc simulate HToBB --job-id 1 --outdir runs/dev
 omphjc simulate HToBB --job-id 1 --outdir runs/dev --card my_detector.tcl --force
 omphjc clean HToBB --job-id 1 --outdir runs/dev --set-aside  # drop what reruns set aside
@@ -434,7 +435,14 @@ seed, the SHA-256 of the detector card chosen and the fingerprint of the
 showered events, and the metadata the SHA-256 of the card as run; its number of
 events is counted in `delphes.root`. A stage run again with the same events
 therefore keeps the stages after it, and a stage whose input events changed is
-refused unless `--force` is given.
+refused unless `--force` is given. `--accept-input`, on `omphjc shower` and
+`omphjc simulate`, keeps the result of such a stage without running it, when
+nothing but its input events differs; a stage that has not finished runs as it
+does without the option. The record then keeps the fingerprint of the events
+the stage ran on among its parameters and adds `accepted_input`, the
+fingerprint it was accepted for and the time, and the stage's report shows both
+in an `input` row. The stages after it stay as they are, since its output has
+not changed, and a further run of the stage drops the acceptance.
 
 `manifest.json` is an index of the job: the process, the job number, the seed
 and the omphjc version, and for each stage that has a record its status, the

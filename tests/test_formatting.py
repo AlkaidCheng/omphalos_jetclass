@@ -3,6 +3,7 @@ from pathlib import Path
 from omphjc.cli.formatting import (
     format_count,
     format_duration,
+    format_fingerprint,
     format_job_line,
     format_row,
     format_size,
@@ -25,6 +26,13 @@ def test_sizes_use_binary_units() -> None:
     assert format_size(3 * 2**20 + 2**19) == "3.5 MiB"
     assert format_size(2**30) == "1.0 GiB"
     assert format_size(2**41) == "2.0 TiB"
+
+
+def test_a_fingerprint_shows_the_first_digits_of_its_hash() -> None:
+    fingerprint = "lhe-v1:3f2a9c1e4b7d0000"
+    assert format_fingerprint(fingerprint) == "lhe-v1:3f2a9c1e..."
+    assert format_fingerprint("lhe-v1:3f2a9c1e") == "lhe-v1:3f2a9c1e"
+    assert format_fingerprint("abc") == "abc"
 
 
 def test_counts_take_the_plural() -> None:
