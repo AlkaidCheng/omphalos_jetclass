@@ -1,26 +1,36 @@
 """The Pythia 8 command file for showering MadGraph events in ``DelphesPythia8``.
 
-The official production showered through MadGraph's Pythia interface, which
-writes a command file from the run card. ``DelphesPythia8`` reads a command
-file of its own, so :meth:`PythiaCmnd.from_process` writes the equivalent one,
-in layers where a later layer overrides an earlier one:
+The official production showered its events through MadGraph's Pythia
+interface. That interface writes a command file from the run card.
+``DelphesPythia8`` reads a command file of its own, so
+:meth:`PythiaCmnd.from_process` writes an equivalent file.
 
-1. for an MLM-matched process, the values MadGraph derives from the run card:
-   ``JetMatching:qCut = 1.5 × xqcut``, ``JetMatching:nQmatch = maxjetflavor``
-   and ``JetMatching:nJetMax``, the most light jets in any process line
-   (``setup_Pythia8RunAndCard`` in ``madgraph/interface/madevent_interface.py``,
-   https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/madevent_interface.py#L4544-L4602),
-   then the catalogue's ``pythia_matching`` block;
-2. the catalogue's ``pythia`` settings, written for every process (what
-   MadGraph's interface injects into every run), with the entry's own;
-3. the run controls of one job: the LHE file, the event count and the seed;
-4. any overrides given by the caller.
+The file is built in four layers of settings. A later layer overrides an
+earlier one:
+
+1. For an MLM-matched process, the values that MadGraph derives from the run
+   card (``setup_Pythia8RunAndCard`` in
+   ``madgraph/interface/madevent_interface.py``,
+   https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/madevent_interface.py#L4544-L4602):
+
+   - ``JetMatching:qCut = 1.5 × xqcut``;
+   - ``JetMatching:nQmatch = maxjetflavor``;
+   - ``JetMatching:nJetMax``, the largest number of light jets in any process
+     line.
+
+   The catalogue's ``pythia_matching`` block follows these values.
+2. The catalogue's ``pythia`` settings. The settings written for every
+   process come first; they are what MadGraph's interface injects into every
+   run. The settings of the process's own entry follow.
+3. The run controls of one job: the LHE file, the event count and the seed.
+4. Any overrides given by the caller.
 
 MadGraph's interface also registers bookkeeping keys of its own
-(``HEPMCoutput:*``, ``SysCalc:*``, ``LHEFInputs:*``). They are not Pythia
-settings and ``DelphesPythia8`` refuses a file that contains them, so they
-never appear here; :data:`MADGRAPH_INTERFACE_PREFIXES` names them for
-comparisons against a card MadGraph wrote.
+(``HEPMCoutput:*``, ``SysCalc:*``, ``LHEFInputs:*``). These keys are not
+Pythia settings, and ``DelphesPythia8`` refuses a file that contains them.
+The command file written here therefore never contains them.
+:data:`MADGRAPH_INTERFACE_PREFIXES` names them, so that a comparison with a
+card that MadGraph wrote can leave them out.
 """
 
 import math
@@ -36,21 +46,27 @@ from omphjc.processes.catalogue import ProcessSpec, SettingValue
 MATCHING_SCALE_FACTOR = 1.5
 """``JetMatching:qCut`` as a multiple of the run card's ``xqcut``.
 
-MadGraph's rule when the Pythia card leaves ``qCut`` at -1:
+MadGraph applies this factor when the Pythia card leaves ``qCut`` at -1. The
+rule is the line
 ``PY8_Card.MadGraphSet('JetMatching:qCut', 1.5*self.run_card['xqcut'])`` in
-``setup_Pythia8RunAndCard``,
-https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/madevent_interface.py#L4544
-(the same line in MadGraph 3.1.1 gave the official ``qCut = 45`` for
-``xqcut = 30``). A ``JetMatching:qCut`` written in the catalogue replaces it.
+``setup_Pythia8RunAndCard``
+(https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/interface/madevent_interface.py#L4544).
+
+The same line in MadGraph 3.1.1 gave the official ``qCut = 45`` for
+``xqcut = 30``. A ``JetMatching:qCut`` written in the catalogue replaces the
+derived value.
 """
 
 PYTHIA_SEED_LIMIT = 900_000_000
 """Largest value Pythia accepts for ``Random:seed``.
 
+The limit is the ``max`` attribute of
 ``<modeopen name="Random:seed" default="-1" max="900000000">`` in Pythia's
-settings database, ``share/Pythia8/xmldoc/RandomNumberSeed.xml`` (8.312);
-documented at https://pythia.org/latest-manual/RandomNumberSeed.html. Seed 0
-draws the seed from the clock.
+settings database, ``share/Pythia8/xmldoc/RandomNumberSeed.xml`` (8.312). The
+setting is documented at
+https://pythia.org/latest-manual/RandomNumberSeed.html.
+
+With seed 0, Pythia draws the seed from the clock.
 """
 
 MADGRAPH_INTERFACE_PREFIXES: frozenset[str] = frozenset(
@@ -125,26 +141,27 @@ class PythiaCmnd(Card):
         Parameters
         ----------
         spec : ProcessSpec
-            The process whose events are showered; its ``pythia`` and
+            The process whose events are showered. Its ``pythia`` and
             ``pythia_matching`` settings come from the catalogue.
         lhe_path : Path
             Uncompressed LHE file. ``DelphesPythia8`` also reads it as text
             for its ``EventLHEF`` branch, so a gzipped file cannot be used.
         n_events : int
-            Upper bound on the number of showered events; the event loop also
+            Upper bound on the number of showered events. The event loop also
             stops at the end of the LHE file.
         seed : int or None
-            ``Random:seed`` between 1 and :data:`PYTHIA_SEED_LIMIT`. ``None``
-            draws the seed from the clock (Pythia's built-in default is one
-            fixed seed).
+            The value of ``Random:seed``, between 1 and
+            :data:`PYTHIA_SEED_LIMIT`. With ``None``, Pythia draws the seed
+            from the clock. Pythia's built-in default is different: it is one
+            fixed seed.
         overrides : Mapping[str, SettingValue] or None
             Settings applied last, over every other layer.
 
         Returns
         -------
         PythiaCmnd
-            The settings in the order of the layer that first sets them, each
-            value written with :func:`format_setting`.
+            The settings, ordered by the layer that first sets each of them.
+            Each value is written with :func:`format_setting`.
 
         Raises
         ------
@@ -185,23 +202,28 @@ class PythiaCmnd(Card):
     def content_record(self) -> dict[str, bool | float | str]:
         """Return the settings as Pythia reads them.
 
-        Each key is in lower case. A value is a boolean for one of the words
-        ``on``, ``off``, ``true``, ``false``, ``yes`` and ``no``, a number
-        for a number, and the text for anything else.
+        Each key is in lower case. Each value is converted as follows:
+
+        - one of the words ``on``, ``off``, ``true``, ``false``, ``yes`` and
+          ``no`` becomes a boolean;
+        - a number becomes a number;
+        - anything else stays text.
         """
         return {key.lower(): _normalise(value) for key, value in self.settings.items()}
 
     def differences(
         self, reference: "PythiaCmnd", *, ignore: Iterable[str] = ()
     ) -> list[Difference]:
-        """Return one difference for each setting with another value.
+        """Return one difference for each setting that differs from `reference`.
 
-        Keys are compared without regard to case, and values as Pythia reads
-        them: the words for ``on`` and ``off`` as booleans, numbers as
-        numbers, and anything else as text. The differences come in the order
-        of the keys in lower case. A difference names its setting by the key
-        as `reference` spells it, or as this card spells it when `reference`
-        lacks the setting.
+        Keys are compared without regard to case. Values are compared as
+        Pythia reads them: the words for ``on`` and ``off`` are booleans,
+        numbers are numbers, and anything else is text.
+
+        The differences are sorted by the key in lower case. Each difference
+        names its setting by the key as `reference` spells it. When
+        `reference` lacks the setting, the key is spelled as this card spells
+        it.
 
         Parameters
         ----------
@@ -209,7 +231,8 @@ class PythiaCmnd(Card):
             The command file to compare with.
         ignore : Iterable[str], optional
             Settings left out of the comparison. An entry is a key in lower
-            case, or the start of keys in lower case when it ends in ``:``.
+            case. An entry that ends in ``:`` is a prefix in lower case, and
+            it leaves out every key that starts with it.
         """
         ignored_keys = {entry for entry in ignore if not entry.endswith(":")}
         ignored_prefixes = tuple(entry for entry in ignore if entry.endswith(":"))
@@ -253,16 +276,22 @@ def matching_scale(spec: ProcessSpec) -> float:
 def max_matched_jets(spec: ProcessSpec) -> int:
     """Return ``JetMatching:nJetMax``: the most jets any process line asks for.
 
-    A jet is a ``j`` in the final state of a process line, MadGraph's
-    multiparticle label for a light parton: a gluon or a light quark, and a b
-    quark where the catalogue's ``definitions`` add it. Only the hard process
-    counts, the part before any decay chain, so ``p p > ve ve~ j j @1`` asks
-    for 2. MadGraph's own ``max_n_matched_jets`` is the smaller of the highest
-    QCD order of the diagrams and the most massless coloured final-state
-    partons of a process (``madgraph/iolibs/export_v4.py``, MadGraph 3.8.1,
+    A jet is a ``j`` in the final state of a process line. ``j`` is MadGraph's
+    multiparticle label for a light parton: a gluon or a light quark, and
+    also a b quark where the catalogue's ``definitions`` add it.
+
+    Only the hard process is counted, which is the part of the line before
+    any decay chain. For example, ``p p > ve ve~ j j @1`` asks for 2 jets.
+
+    MadGraph computes its own ``max_n_matched_jets`` differently
+    (``madgraph/iolibs/export_v4.py``, MadGraph 3.8.1,
     https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/iolibs/export_v4.py#L5907-L5921).
-    The two differ when a process line names a parton directly, such as ``g``
-    instead of ``j``.
+    It takes the smaller of two numbers: the highest QCD order of the
+    diagrams, and the largest number of massless coloured final-state partons
+    of a process.
+
+    The two results differ when a process line names a parton directly, such
+    as ``g`` instead of ``j``.
     """
     return max(_jet_count(process) for process in spec.processes)
 

@@ -1,21 +1,25 @@
 """The stable-particle definition: which particles a simulator receives as final.
 
-Pythia decays every species whose nominal c*tau is below 1000 mm and that has
-decay channels (``MAXTAU0FORDECAY``,
-https://gitlab.com/Pythia8/releases/-/raw/pythia8312/src/ParticleData.cc),
-while Parnassus expects the CMS convention, ``ParticleDecays:limitTau0 = on``
-with ``tau0Max = 10`` mm, under which longer-lived hadrons stay final
-(https://github.com/parnassus-hep/parnassus). A
-:class:`StableParticleDefinition` counts a species as stable when its nominal
-c*tau exceeds a threshold, and :meth:`~StableParticleDefinition.apply` undoes
-the decays the shower made of such particles: it marks each as final and none
-of its descendants.
+Pythia decays every species that has decay channels and a nominal c*tau below
+1000 mm (``MAXTAU0FORDECAY``,
+https://gitlab.com/Pythia8/releases/-/raw/pythia8312/src/ParticleData.cc).
+Parnassus expects the CMS convention instead: ``ParticleDecays:limitTau0 = on``
+with ``tau0Max = 10`` mm (https://github.com/parnassus-hep/parnassus). Under
+the CMS convention, hadrons with a longer lifetime stay final.
 
-The definition acts on a species table, as ``limitTau0`` does on the species'
-nominal lifetimes, not on each particle's decay length. Only listed species can
-count as long-lived, so the table must hold every species with decay channels
-above the threshold; a table with none above it leaves the shower's status-1
-particles as the final state.
+A :class:`StableParticleDefinition` counts a species as stable when its nominal
+c*tau exceeds a threshold. :meth:`~StableParticleDefinition.apply` undoes the
+decays that the shower made of such particles. It marks each such particle as
+final, and it marks none of the descendants of the particle as final.
+
+The definition acts on a table of species, in the way ``limitTau0`` acts on
+the nominal lifetimes of the species. It does not act on the decay length of
+each particle.
+
+Only a listed species can count as long-lived, so the table must hold every
+species that has decay channels and a nominal c*tau above the threshold. With
+a table that holds no species above the threshold, the status-1 particles of
+the shower remain the final state.
 """
 
 from collections.abc import Mapping
@@ -54,15 +58,15 @@ _BELOW_NONE_ADVICE = (
 
 @dataclass(frozen=True)
 class StableParticleDefinition:
-    """Counts as stable the listed species whose nominal c*tau exceeds a threshold.
+    """Counts a listed species as stable when its nominal c*tau exceeds a threshold.
 
     Attributes
     ----------
     ctau_min_mm : float
         The nominal c*tau, in mm, above which a listed species is long-lived.
     ctau_mm : Mapping[int, float]
-        The nominal c*tau, in mm, of each species by its absolute PDG id;
-        antiparticles share their particle's entry.
+        The nominal c*tau, in mm, of each species, keyed by its absolute PDG
+        id. An antiparticle shares the entry of its particle.
 
     Raises
     ------
@@ -115,25 +119,38 @@ class StableParticleDefinition:
     def apply(self, particles: "ak.Array") -> "ak.Array":
         """Return `particles` marked with ``part_final`` and ``part_promoted``.
 
-        A candidate is a particle of a long-lived species that decayed, with
-        HepMC status 2, has a daughter and is not copied into one: of a chain
-        of copies, the last one, which carries the momentum after any recoil
+        A candidate is a particle that meets all of these conditions:
+
+        - Its species is long-lived.
+        - It has HepMC status 2, which means that it decayed.
+        - It has a daughter.
+        - It is not copied into its daughter.
+
+        The last condition selects the last particle of a chain of copies.
+        That particle carries the momentum after any recoil
         (``ParticleProperties``,
         https://pythia8.web.cern.ch/manuals/pythia8318/ParticleProperties.html).
-        A listed particle the shower branched instead, such as a muon that
-        radiated a photon, keeps its shower status and is left as it is, so
-        its last copy and the photon stay final.
-        Every descendant of a candidate, every particle whose mother links lead
-        back to it, is dropped, and a candidate that is not itself dropped is
-        promoted, so of the cascade Xi- -> Lambda pi- only the Xi- is. The
-        final state is the status-1 particles and the promoted ones, without
-        the dropped ones. A record whose long-lived species the shower left
-        undecayed keeps its status-1 particles as the final state, and
-        applying the definition to the output again gives the same marks.
 
-        Apply the definition to whole events, before any particle is removed:
-        a removed particle leaves the indices of the others unchanged, so they
-        point at the wrong particles or past the end of their event.
+        A particle of a listed species that the shower branched is not a
+        candidate. An example is a muon that radiated a photon. Such a
+        particle keeps its shower status and is left unchanged, so its last
+        copy and the photon stay final.
+
+        A descendant of a candidate is a particle whose mother links lead back
+        to the candidate. Every descendant is dropped. A candidate that is not
+        itself dropped is promoted. In the cascade Xi- -> Lambda pi-, for
+        example, only the Xi- is promoted.
+
+        The final state consists of the status-1 particles and the promoted
+        particles, without the dropped particles. When the shower left the
+        long-lived species of a record undecayed, the record keeps its
+        status-1 particles as the final state. Applying the definition to the
+        output again gives the same marks.
+
+        Apply the definition to whole events, before any particle is removed.
+        Removing a particle leaves the indices of the other particles
+        unchanged. These indices then point at the wrong particles or past the
+        end of their event.
 
         Parameters
         ----------
@@ -150,9 +167,9 @@ class StableParticleDefinition:
         Raises
         ------
         ValueError
-            If a mother or daughter index points outside its event, as one can
-            in a record cut after its indices were written or in indices
-            counted from 1.
+            If a mother or daughter index points outside its event. This can
+            happen when particles were cut from the record after its indices
+            were written, or when the indices count from 1.
         """
         # Imported here so that building a definition loads no array library.
         import awkward as ak
@@ -221,19 +238,28 @@ def _check_links(
 ) -> None:
     """Refuse a mother or daughter index that points outside its event.
 
-    The indices are positions in the particle's own event, -1 for none, as
-    Delphes writes them (``GenParticle.M1``: Pythia's ``mother1()`` minus 1).
-    A lookup with an index past its event's end would read a particle of the
-    next event, or fail in the last event of a chunk, so such an index is
-    refused. It comes from a record whose particles were removed after the
-    indices were written: by a cut on the particle lists, or by a Delphes card
-    that writes a filtered array, such as a ``StatusPidFilter`` output, whose
-    links still count positions in ``Delphes/allParticles`` (``TreeWriter``
-    copies them unchanged). It also comes from indices counted from 1, as in
-    HEPEVT, LHE files and Pythia's own record, once one of them reaches the
-    event's size. An index below -1, which none of these sources writes, is
-    refused too, since the walk would take it for none. An index that stays
-    in range but points at the wrong particle cannot be seen here.
+    An index is a position in the particle's own event, or -1 for none.
+    Delphes writes the indices in this way (``GenParticle.M1`` is Pythia's
+    ``mother1()`` minus 1).
+
+    An index past the end of its event is refused. A lookup with such an index
+    would read a particle of the next event, or fail in the last event of a
+    chunk. Such an index has one of two sources:
+
+    - Particles were removed from the record after the indices were written.
+      A cut on the particle lists does this. So does a Delphes card that
+      writes a filtered array, such as a ``StatusPidFilter`` output. The
+      links of the filtered array still count positions in
+      ``Delphes/allParticles``, because ``TreeWriter`` copies them unchanged.
+    - The indices count from 1, as in HEPEVT, LHE files and Pythia's own
+      record. Such indices are refused once one of them reaches the size of
+      the event.
+
+    An index below -1 is refused too, because the walk over the mother links
+    would treat it as none. Neither of the two sources writes such an index.
+
+    An index that stays in range but points at the wrong particle cannot be
+    detected here.
     """
     import numpy as np
 

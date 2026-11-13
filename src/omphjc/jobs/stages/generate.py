@@ -39,14 +39,23 @@ def generate(
 ) -> TaskRecord:
     """Generate the parton-level events of `job` with MadGraph.
 
-    Runs :func:`omphjc.tools.madgraph.driver.generate_events` in the job's ``generate/``
-    directory and copies the cards MadGraph ran with into ``generate/cards/``.
-    The stage's parameters are the event count and the job's seed, so a
-    changed seed is refused like any other change unless `force` is set. Its
-    events are the LHE file with the count in its banner and the fingerprint
-    of its content (:class:`omphjc.tools.madgraph.lhe_file.LHEFile`), and its
-    metadata the MadGraph version, the cross section with its error in pb,
-    the cores MadGraph ran on, and the SHA-256 of each card by path.
+    The stage runs :func:`omphjc.tools.madgraph.driver.generate_events` in the
+    job's ``generate/`` directory. It then copies the cards MadGraph ran with
+    into ``generate/cards/``.
+
+    Its parameters are the event count and the job's seed. A changed seed is
+    therefore refused like any other change unless `force` is set.
+
+    Its events are the LHE file, recorded with the event count in its banner
+    and the fingerprint of its content
+    (:class:`omphjc.tools.madgraph.lhe_file.LHEFile`).
+
+    Its metadata holds:
+
+    - the MadGraph version;
+    - the cross section and its error, in pb;
+    - the number of cores MadGraph ran on;
+    - the SHA-256 of each card, by path.
 
     Parameters
     ----------

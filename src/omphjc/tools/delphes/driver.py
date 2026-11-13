@@ -1,30 +1,36 @@
-"""Run ``DelphesROOT``: the Delphes simulation of showered events kept in a ROOT file.
+"""Run ``DelphesROOT`` to simulate the detector on showered events in a ROOT file.
 
 Each run has a working directory of its own::
 
     <workdir>/
       omphjc-stamp.json   stamp: the process and the sealed artifacts of its run
-      delphes_card.tcl    the detector card, with the run's seed prepended
+      delphes_card.tcl    the detector card, with the run's seed appended
       delphes.root        DelphesROOT's output
       simulate.log        DelphesROOT's output
 
-``DelphesROOT`` takes the card, the output file and the input file, in that
-order (``readers/DelphesROOT.cpp`` in Delphes 3.5.1,
-https://github.com/delphes/delphes/blob/3.5.1/readers/DelphesROOT.cpp). It
-reads the ``Particle`` and ``Event`` branches of the input, a Delphes ROOT
-file such as the shower stage writes (:mod:`omphjc.tools.pythia.driver`), fills
-Delphes's ``allParticles``, ``stableParticles`` and ``partons`` arrays from
-them exactly as ``DelphesPythia8`` does from a Pythia event, and runs the
-card's modules on every event. It opens the output with ROOT's ``CREATE``
-mode, so an existing output file is an error, and exits with status 1 when it
-cannot open a file and 0 otherwise, so a run is judged by its exit status and
-by the output it leaves. The ``Event`` branch is copied into the output; the
-``Weight`` branch is not, which the program's source marks as still to be
-done. The input is read where it is, not copied.
+``DelphesROOT`` takes three arguments in this order: the card, the output
+file and the input file (``readers/DelphesROOT.cpp`` in Delphes 3.5.1,
+https://github.com/delphes/delphes/blob/3.5.1/readers/DelphesROOT.cpp).
 
-A working directory carries a stamp (:mod:`omphjc.stamps`) naming the process,
-and a run seals its artifacts when it ends; :class:`omphjc.workspace.Workspace`
-describes what a later run may delete.
+The input is a Delphes ROOT file such as the shower stage writes
+(:mod:`omphjc.tools.pythia.driver`). The program reads the ``Particle`` and
+``Event`` branches of the input. From them it fills Delphes's
+``allParticles``, ``stableParticles`` and ``partons`` arrays, exactly as
+``DelphesPythia8`` does from a Pythia event. It then applies the card's
+modules to every event. The input is read where it is and is not copied.
+
+The program opens the output with ROOT's ``CREATE`` mode, so an existing
+output file is an error. It exits with status 1 when it cannot open a file
+and with status 0 otherwise. A run is therefore judged by its exit status and
+by the output it leaves.
+
+The program copies the ``Event`` branch into the output. It does not copy the
+``Weight`` branch; the program's source marks this as still to be done.
+
+A working directory carries a stamp (:mod:`omphjc.stamps`) that names the
+process. A run seals its artifacts when it ends, which records them in the
+stamp. :class:`omphjc.workspace.Workspace` describes what a later run may
+delete.
 """
 
 from dataclasses import dataclass
@@ -55,15 +61,15 @@ class SimulationError(ProgramError):
 class SimulationRun(ProgramRun):
     """The output of one ``DelphesROOT`` run.
 
-    The log, the usage and the folder set aside are
-    :class:`omphjc.workspace.ProgramRun`'s.
+    The log, the usage and the folder that holds what was set aside are
+    fields of :class:`omphjc.workspace.ProgramRun`.
 
     Parameters
     ----------
     output_path : Path
         The Delphes ROOT file.
     card_path : Path
-        The detector card as run.
+        The detector card that the run used.
     """
 
     card_path: Path
@@ -75,9 +81,10 @@ def detector_card_text(spec: ProcessSpec, card_path: Path | None = None) -> str:
     Parameters
     ----------
     spec : ProcessSpec
-        The process; its catalogue names the card to use by default.
+        The process. Its catalogue names the card to use by default. When it
+        names none, the official JetClass card is used.
     card_path : Path or None, optional
-        A card to run instead of the process's.
+        A card to use instead of the card of the process.
 
     Raises
     ------
@@ -109,39 +116,44 @@ def simulate_events(
     Parameters
     ----------
     spec : ProcessSpec
-        The process the events belong to; its catalogue names the detector
+        The process the events belong to. Its catalogue names the detector
         card used by default.
     events_path : Path
-        The showered events: a Delphes ROOT file holding the generator record
-        of every event in its ``Particle`` branch, as the shower writes it.
+        The showered events. This is a Delphes ROOT file that holds the
+        generator record of every event in its ``Particle`` branch, as the
+        shower writes it.
     workdir : Path
-        Directory of the run, created when missing; it must not hold a run of
-        another process. Every call writes the card and the log in it anew.
+        Directory of the run. It is created when missing, and it must not
+        hold a run of another process. Every call writes the card and the log
+        in it anew.
     seed : int or None
-        Delphes's seed, prepended to the card; ``None`` leaves Delphes to seed
+        Delphes's seed, appended to the card. With ``None``, Delphes seeds
         itself from the clock.
     card_path : Path or None, optional
-        The detector card to run instead of the process's.
+        The detector card to use instead of the card of the process.
     timeout : float or None, optional
-        Seconds the run may take; ``None`` sets no limit. At the limit,
+        Seconds the run may take. ``None`` sets no limit. At the limit,
         ``DelphesROOT`` and every process it started are stopped.
     overwrite : bool, optional
-        Whether to replace the output of an earlier run in `workdir`. By
-        default an existing output is an error, so that a run never deletes
-        results by accident. It is replaced only after every other check has
-        passed: deleted when the earlier run sealed it and nothing in it
-        changed since, otherwise moved aside (see `SimulationRun.set_aside`).
+        Whether to replace the output that an earlier run left in `workdir`.
+        By default an existing output is an error, so a run never deletes
+        results by accident.
+
+        The output is replaced only after every other check has passed. It is
+        deleted when the earlier run sealed it and nothing in it has changed
+        since. Otherwise it is moved aside (see `SimulationRun.set_aside`).
     log_dir : Path or None, optional
-        An existing directory to write the log in. By default the log is in
-        `workdir` and a later run replaces it; one in another directory stays
-        there.
+        An existing directory to write the log in. By default the log is
+        written in `workdir`, and a later run replaces it. A log written in
+        another directory is not replaced.
     delphes_root_path : Path or None, optional
-        Delphes's ``DelphesROOT``; by default the one on PATH.
+        Path of Delphes's ``DelphesROOT``. By default the program is looked
+        up on PATH.
 
     Returns
     -------
     SimulationRun
-        The output file, the card as run and the log.
+        The output file, the card that the run used and the log.
 
     Raises
     ------
@@ -154,13 +166,17 @@ def simulate_events(
     FileExistsError
         If `workdir` already holds an output file and `overwrite` is false.
     StampError
-        If `workdir` is stamped for another purpose or process, holds what a
-        run makes without carrying a stamp, or holds something other than a
-        stamp in the stamp's place. Nothing is changed in that case.
+        If `workdir` is in one of these states:
+
+        - it is stamped for another purpose or process;
+        - it holds artifacts of a run but carries no stamp;
+        - it holds something other than a stamp where the stamp belongs.
+
+        Nothing is changed in that case.
     SimulationError
         If ``DelphesROOT`` exits with an error, is still running at the time
-        limit, or writes no output; the message ends with the last lines of
-        its log.
+        limit, or writes no output. The message ends with the last lines of
+        the log.
     """
     require_file(events_path, what="Showered events")
     workspace = SimulationWorkspace(
@@ -198,23 +214,27 @@ def simulate_events(
 class SimulationWorkspace(ProgramWorkspace):
     """The working directory of one process's ``DelphesROOT`` runs, and the steps of a run.
 
-    :func:`simulate_events` drives a workspace from start to finish; a caller
-    that needs the steps one at a time constructs one and, inside
-    ``with workspace.sealed_run():``, calls :meth:`write_card` then
-    :meth:`run_simulation`.
+    :func:`simulate_events` drives a workspace from start to finish. A caller
+    that needs the steps one at a time constructs a workspace and opens a
+    ``with workspace.sealed_run():`` block. Inside the block it calls
+    :meth:`write_card` and then :meth:`run_simulation`.
 
     Parameters
     ----------
     spec : ProcessSpec
         The process whose runs the directory holds.
     workdir : Path
-        The working directory, created when missing; not a filesystem root.
+        The working directory. It is created when missing, and it must not
+        be a filesystem root.
     delphes_root_path : Path or None, optional
-        Delphes's ``DelphesROOT``; by default the one on PATH.
+        Path of Delphes's ``DelphesROOT``. By default the program is looked
+        up on PATH.
     timeout : float or None, optional
-        Seconds the run may take from now; ``None`` sets no limit.
+        Seconds the run may take, counted from the creation of the workspace.
+        ``None`` sets no limit.
     log_dir : Path or None, optional
-        As :class:`~omphjc.workspace.ProgramWorkspace`.
+        See the `log_dir` parameter of
+        :class:`~omphjc.workspace.ProgramWorkspace`.
 
     Raises
     ------

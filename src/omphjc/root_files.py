@@ -69,11 +69,14 @@ class SampledLeaf:
         ``float[]``.
     sha256_by_buffer : dict[str, str]
         The SHA-256 hashes, in hexadecimal, of the values in each hashed
-        entry range. awkward keeps the values of a range in one or more
-        arrays of numbers, called buffers. A leaf with a list in each entry
-        has one buffer with the place where each list ends and one with the
-        values. A key is the range and the name awkward gives the buffer, as
-        in ``0-10:node1-data``, and the bytes of a buffer are hashed in
+        entry range.
+
+        awkward keeps the values of a range in one or more arrays of numbers,
+        called buffers. A leaf with a list in each entry has one buffer with
+        the place where each list ends and one with the values.
+
+        A key is the range and the name awkward gives the buffer, as in
+        ``0-10:node1-data``. The bytes of a buffer are hashed in
         little-endian order.
     """
 
@@ -103,11 +106,14 @@ class ROOTFile(DataFile):
     excluded_fields : frozenset[str]
         The fields that are left out of the content. A field is the last part
         of the name of a leaf, after the last ``.`` or ``/``, and it is left
-        out on every branch. A format names the fields whose values differ
-        between two runs that give the same events, such as the time a
-        program took. The field ``fBits`` is left out in every format. It
-        holds the status bits that ROOT keeps for each object, and they are
-        no part of an event.
+        out on every branch.
+
+        A format names the fields whose values differ between two runs that
+        give the same events, such as the time a program took.
+
+        The field ``fBits`` is left out in every format. It holds the status
+        bits that ROOT keeps for each object, and they are no part of an
+        event.
     """
 
     record_version: ClassVar[int] = 1
@@ -173,10 +179,11 @@ def sampled_ranges(n_entries: int) -> list[tuple[int, int]]:
     Each range holds :data:`RANGE_SHARE` of the `n_entries` entries of a tree,
     rounded up to a whole number of entries. One range starts at the first
     entry and one ends at the last entry. :data:`N_RANDOM_RANGES` more ranges
-    lie between those two, and they may overlap each other. The start of each
-    comes from the SHA-256 hash of :data:`SAMPLE_SEED`, `n_entries` and the
-    number of the range, so two trees with the same number of entries have
-    the same ranges.
+    lie between those two, and they may overlap each other.
+
+    The start of each of these ranges comes from the SHA-256 hash of
+    :data:`SAMPLE_SEED`, `n_entries` and the number of the range. Two trees
+    with the same number of entries therefore have the same ranges.
 
     Returns
     -------

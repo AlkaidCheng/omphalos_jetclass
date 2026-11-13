@@ -52,58 +52,98 @@ A task is the work of one stage in a job. Its record is the file
       "accepted_input": null
     }
 
-:mod:`omphjc.jobs.record_file` describes ``schema``. ``parameters`` is what
-the task was asked for, the seed included where its stage uses one, and
-decides whether a later run may keep its result. ``result`` is what the task
-made (:class:`TaskResult`), ``null`` unless its latest run is done.
-``outputs`` holds its files under the names the stage gives them: each has
-its ``path`` and its size in bytes, ``n_bytes``, and an event file also its
-``format``, the number of events it holds and the ``fingerprint`` of its
-content; the next task reads the one named ``events``. ``metadata`` is what is
-known about the task and the sample it made; its keys are the stage's own.
+Every path in the record is relative to the job directory. The top-level
+keys are:
 
-``runs`` lists the runs of the task, oldest first. Running a task again with
-the same parameters, after a failure, an interruption or the loss of an
-output, adds a run; a run with other parameters, or under ``force``, starts a
-new task with one run. The ``status`` of a run says how it ended:
-``"running"``, ``"done"``, ``"failed"`` or ``"interrupted"``. A run is
-``"failed"`` when its program or omphjc failed, and ``"interrupted"`` when a
-signal ended it, with the signal as its ``error``. A run that a killed process
-left ``"running"`` is marked ``"interrupted"`` when the next one starts. What
-a rerun follows is the status of the run before it: a
-failure, an interruption, or, after a ``"done"`` run, a missing output.
+``schema``
+    The layout version of the file (:mod:`omphjc.jobs.record_file`).
+``parameters``
+    What the task was asked for, including the seed when its stage uses one.
+    A later run compares its own parameters with these to decide whether the
+    result can be kept.
+``result``
+    What the task made (:class:`TaskResult`). It is ``null`` unless the
+    latest run is done.
+``runs``
+    The runs of the task, oldest first.
+``accepted_input``
+    An input that the task was kept for although it read another one. It is
+    ``null`` when there is none.
 
-``run_id`` is the start time of a run in UTC and eight random hexadecimal
-digits, so the IDs of a task's runs sort by start time, and ``host`` is the
-name of the machine the run ran on. ``log`` is the file the run's program
-writes its log to, in the directory of the run (:mod:`omphjc.jobs.job`),
-``null`` for a task without a log; the file is missing when the run ended
-before its program started. Every path is relative to the job directory;
-``set_aside`` names the folder into which the run moved what an earlier run
-left and it could not confirm as that run's (:mod:`omphjc.stamps`), ``null``
-when it moved nothing. ``usage`` is
-what the run took: its wall time, and the CPU time and peak memory (MiB) of
-the external program's processes where the platform reports them.
+**The result.** ``outputs`` holds the files the task made, under the names
+the stage gives them. Each output has its ``path`` and its size in bytes,
+``n_bytes``. An event file also has its ``format``, the number of events it
+holds and the ``fingerprint`` of its content. The next task reads the output
+named ``events``.
 
-``accepted_input`` is ``null`` unless the task was kept for another input than
-the one it read (:meth:`omphjc.jobs.Job.run_task`). It then holds the
-``fingerprint`` of that input and the time of the acceptance, ``accepted_at``,
-while ``parameters`` keep the fingerprint of the input the task read. A
-further run of the task clears it.
+``metadata`` is what is known about the task and the sample it made. The
+stage chooses its keys.
 
-:meth:`TaskRecord.running` starts the record of a task, and
-:meth:`TaskRecord.rerun` adds a run to it; :meth:`TaskRecord.with_log` names
-the log of that run. :meth:`TaskRecord.with_accepted_input` records an
-acceptance. :meth:`TaskRecord.failed`, :meth:`TaskRecord.interrupted`
-and :meth:`TaskRecord.done` record how the latest run ended, the last with
-the result of the :class:`TaskOutcome` it returned, unchanged.
+**The runs.** Repeating a task with the same parameters adds a run to the
+record. This happens after a failure, an interruption or the loss of an
+output. A run with other parameters, or under ``force``, starts a new record
+with one run.
 
-A record says how each run of the task ended, nothing more. Whether the task
-is done now also depends on its output files, which may have been deleted or
-changed since: :class:`Task` holds a task as found on disk, and its
-:class:`TaskStatus` takes the record and the files into account. A task whose
-latest run is done has :attr:`TaskStatus.DONE` only while its outputs are
-intact.
+The record does not store why a task was repeated. The status of the
+previous run says it: that run failed, was interrupted, or was ``"done"`` and
+an output went missing afterwards.
+
+Each run has these keys:
+
+``run_id``
+    The start time of the run in UTC, followed by eight random hexadecimal
+    digits. The IDs of a task's runs therefore sort by start time.
+``status``
+    How the run ended: ``"running"``, ``"done"``, ``"failed"`` or
+    ``"interrupted"``. A run is ``"failed"`` when its program or omphjc
+    failed. It is ``"interrupted"`` when a signal ended it, and ``error``
+    then holds the signal. A run that a killed process left ``"running"`` is
+    marked ``"interrupted"`` when the next run starts.
+``started``, ``finished``
+    The times at which the run started and ended, in UTC. ``finished`` is
+    ``null`` for a run whose end was not recorded.
+``host``
+    The name of the machine the run was on.
+``usage``
+    What the run took: its wall time, and the CPU time and peak memory (MiB)
+    of the external program's processes where the platform reports them.
+``log``
+    The file that the run's program writes its log to. It is in the
+    directory of the run (:mod:`omphjc.jobs.job`). The value is ``null`` for
+    a task without a log. The file is missing when the run ended before its
+    program started.
+``set_aside``
+    The folder into which the run moved what an earlier run left and it
+    could not confirm as that run's (:mod:`omphjc.stamps`). The value is
+    ``null`` when the run moved nothing.
+``error``
+    The error of a failed run, or the signal that ended an interrupted one.
+    The value is ``null`` otherwise.
+
+**The accepted input.** ``accepted_input`` is set when the task was kept for
+another input than the one it read (:meth:`omphjc.jobs.Job.run_task`). It
+holds the ``fingerprint`` of that input and the time of the acceptance,
+``accepted_at``. ``parameters`` still hold the fingerprint of the input the
+task read. A further run of the task clears ``accepted_input``.
+
+**Making a record.** These methods of :class:`TaskRecord` return a new
+record:
+
+- :meth:`TaskRecord.running` starts the record of a task.
+- :meth:`TaskRecord.rerun` adds a run to it.
+- :meth:`TaskRecord.with_log` names the log of that run.
+- :meth:`TaskRecord.with_accepted_input` records an acceptance.
+- :meth:`TaskRecord.failed`, :meth:`TaskRecord.interrupted` and
+  :meth:`TaskRecord.done` record how the latest run ended. ``done`` also
+  stores the result of the :class:`TaskOutcome` that the stage returned,
+  unchanged.
+
+**Record and status.** A record only says how each run of the task ended.
+Whether the task is done at this moment also depends on its output files,
+because they may have been deleted or changed since. :class:`Task` holds a
+task as found on disk, and its :class:`TaskStatus` takes the record and the
+files into account. A task whose latest run is done has
+:attr:`TaskStatus.DONE` only while its outputs are intact.
 """
 
 import secrets
@@ -185,11 +225,11 @@ class TaskResult:
     ----------
     outputs : dict[str, TaskOutput]
         The task's outputs under the names its stage gives them. The next
-        task reads the :class:`EventOutput` named :data:`EVENTS_OUTPUT`; a
-        task that makes no events has none.
+        task reads the :class:`EventOutput` named :data:`EVENTS_OUTPUT`. A
+        task that makes no events has no such output.
     metadata : dict
-        What is known about the task and the sample it made, as JSON values;
-        the keys are the stage's own.
+        What is known about the task and the sample it made, as JSON values.
+        The stage chooses the keys.
     """
 
     outputs: dict[str, TaskOutput] = field(default_factory=dict)
@@ -227,11 +267,11 @@ class TaskOutcome:
         What the task made.
     usage : dict[str, float]
         Resources the task's program used, such as ``cpu_seconds`` and
-        ``peak_memory_mib``; the job adds ``wall_seconds``.
+        ``peak_memory_mib``. The job adds ``wall_seconds``.
     set_aside_dir : Path or None
-        The folder, inside the job directory, holding what an earlier run left
-        and this run could not confirm as that run's (:mod:`omphjc.stamps`);
-        ``None`` when nothing was moved.
+        The folder, inside the job directory, that holds what an earlier run
+        left and this run could not confirm as that run's
+        (:mod:`omphjc.stamps`). It is ``None`` when nothing was moved.
     """
 
     result: TaskResult
@@ -278,7 +318,7 @@ class TaskRun:
 
 @dataclass(frozen=True)
 class AcceptedInput:
-    """An input that a task was kept for, although it ran on another.
+    """An input that a task was kept for although it read another one.
 
     Parameters
     ----------
@@ -299,9 +339,9 @@ class TaskRecord(RecordFile):
     Raises
     ------
     ValueError
-        If the record has no run, or holds a result while its latest
-        run is not done, or none while it is, or an accepted input while its
-        latest run is not done.
+        If the record has no run. If it holds a result while its latest run
+        is not done, or no result while that run is done. If it holds an
+        accepted input while its latest run is not done.
     """
 
     file_name: ClassVar[str] = "task.json"
@@ -417,9 +457,9 @@ class TaskRecord(RecordFile):
     def rerun(self) -> "TaskRecord":
         """Return the record with a further run that starts now.
 
-        A run still ``running``, left by a killed process, becomes
-        ``interrupted``. The record holds no result until the new run is
-        done, and no accepted input.
+        A latest run that is still ``running`` was left by a killed process,
+        so it becomes ``interrupted``. The returned record has no result and
+        no accepted input.
         """
         previous_runs = self.runs
         if self.latest_run.status == RUNNING:
@@ -435,7 +475,7 @@ class TaskRecord(RecordFile):
         return replace(self, runs=self._runs_with_latest(log=log))
 
     def with_accepted_input(self, fingerprint: str) -> "TaskRecord":
-        """Return the record with `fingerprint` as the input the task is kept for, from now."""
+        """Return the record with `fingerprint` as its accepted input, dated now."""
         accepted_input = AcceptedInput(fingerprint, accepted_at=timestamp())
         return replace(self, accepted_input=accepted_input)
 
@@ -491,7 +531,7 @@ class TaskRecord(RecordFile):
         return (*self.runs[:-1], replace(self.latest_run, **changes))
 
     def _done_result(self) -> TaskResult:
-        """Return the result, which only a record whose latest run is done holds."""
+        """Return the result of a record whose latest run is done."""
         if self.result is None:
             raise ValueError(
                 "The task record has no result: its latest run has status "
@@ -501,7 +541,7 @@ class TaskRecord(RecordFile):
 
 
 class TaskStatus(Enum):
-    """How a task of a job stands, by its record and its output files."""
+    """The state of a task, judged from its record and its output files."""
 
     NOT_DONE = "not done"
     """The task has no record, or its record does not say done."""

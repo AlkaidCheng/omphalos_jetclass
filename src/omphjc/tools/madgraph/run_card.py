@@ -59,9 +59,13 @@ TRACKED_PARAMETERS: frozenset[str] = frozenset(
 )
 """Run-card parameters that carry physics and are compared with the reference cards.
 
-Parameters left out are MadGraph internals (run tag, event count, seed,
-integration strategy, event normalisation, bias modules, systematics program
-arguments) or cut maxima left at their disabled default in every official card.
+A parameter is left out for one of two reasons:
+
+- It is a MadGraph internal: run tag, event count, seed, integration
+  strategy, event normalisation, bias modules or systematics program
+  arguments.
+- It is a cut maximum that every official card leaves at its disabled
+  default.
 """
 
 DISABLED_DEFAULTS: dict[str, RunCardValue] = {
@@ -71,8 +75,9 @@ DISABLED_DEFAULTS: dict[str, RunCardValue] = {
 }
 """Values at which a tracked cut is switched off.
 
-The catalogue only lists active physics, so a tracked parameter that the
-reference card leaves at one of these values needs no catalogue entry.
+The catalogue lists only active physics. A tracked parameter that the
+reference card leaves at one of these values therefore needs no catalogue
+entry.
 """
 
 # The pattern of the names of the launch scripts among the official cards of a
@@ -120,7 +125,7 @@ class RunCard(InputCard):
 
     @classmethod
     def reference(cls, reference_dir: Path) -> "RunCard | None":
-        """Return the official run card as its launch scripts leave it.
+        """Return the official run card with the changes of its launch scripts.
 
         The launch scripts are the ``run_*.mg5`` files of `reference_dir`.
         Their ``set`` commands change settings of the run card. The result is
@@ -195,9 +200,12 @@ def parse_value(text: str) -> RunCardValue:
     Returns
     -------
     RunCardValue
-        ``True``/``False`` become booleans, integers and floats become
-        numbers, ``{pdg: cut}`` mappings become ``dict[int, float]`` and
-        everything else is returned as a stripped string.
+        The converted value:
+
+        - ``True``/``False`` become booleans.
+        - Integers and floats become numbers.
+        - ``{pdg: cut}`` mappings become ``dict[int, float]``.
+        - Everything else is returned as a stripped string.
 
     Raises
     ------
@@ -253,11 +261,13 @@ def _strip_comment(line: str) -> str:
 
 
 def _parse_pdg_mapping(text: str) -> dict[int, float] | None:
-    """Parse a ``{pdg: cut}`` mapping; ``None`` when the keys are not PDG codes.
+    """Parse a ``{pdg: cut}`` mapping.
 
-    Run cards written by MadGraph may spell the PDG keys as strings. Mappings
-    with other keys, such as ``{'default': False}``, are not PDG cuts and are
-    left to the caller as text.
+    Run cards written by MadGraph may spell the PDG keys as strings.
+
+    The result is ``None`` when the keys are not PDG codes. A mapping with
+    other keys, such as ``{'default': False}``, is not a PDG cut, and the
+    caller keeps it as text.
     """
     try:
         parsed = ast.literal_eval(text)

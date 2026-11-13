@@ -1,9 +1,10 @@
-"""The reader of an event file, whatever its format.
+"""The reader of an event file of any readable format.
 
-This is the one module that imports the module of every readable format, so
-that :func:`reader_for` can name each format's reader; the modules below it
-import none of them. The record and its fields are described in
-:mod:`omphjc.events.particles`.
+This module imports the module of every readable format, so that
+:func:`reader_for` can name the reader of each format. No other module does:
+the modules below this one import none of the format modules.
+
+The record and its fields are described in :mod:`omphjc.events.particles`.
 """
 
 from omphjc.events.delphes_root import DelphesRootReader

@@ -26,10 +26,12 @@ def require_number(
 ) -> Any:
     """Return `value` as a finite number of type `kind`, refusing any other value.
 
-    With `kind` int only an integer is accepted; with float an integer is
-    accepted too and returned as a float. A bool is refused either way, though
-    Python counts it as an int, so a YAML ``true`` is not read as 1. NumPy
-    scalars are accepted and returned as Python numbers.
+    When `kind` is int, only an integer is accepted. When `kind` is float, an
+    integer is accepted too and is returned as a float.
+
+    A bool is refused for both kinds, although Python counts it as an int. A
+    YAML ``true`` is therefore not read as 1. NumPy scalars are accepted and
+    returned as Python numbers.
 
     Parameters
     ----------

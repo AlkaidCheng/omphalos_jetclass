@@ -77,12 +77,14 @@ class Difference:
     ) -> list["Difference"]:
         """Return the differences between two nested mappings, value by value.
 
-        Where both mappings hold a mapping under one key, the two are compared
-        in turn, and a difference inside them is named by the dotted path of
-        its keys, such as ``pythia.Main:timesAllowErrors``. Otherwise a key is
-        compared as :meth:`between_mappings` compares it, values written with
-        :class:`str`. The differences come in the sorted order of the keys at
-        each level.
+        When both mappings hold a mapping under the same key, these two inner
+        mappings are compared in the same way. A difference inside them is
+        named by the dotted path of its keys, such as
+        ``pythia.Main:timesAllowErrors``.
+
+        Any other key is compared as :meth:`between_mappings` compares it, and
+        its values are written with :class:`str`. The differences come in the
+        sorted order of the keys at each level.
 
         Parameters
         ----------
@@ -121,10 +123,13 @@ class Difference:
     ) -> list["Difference"]:
         """Return one difference for each member that only one collection holds.
 
-        The members of `reference` alone come first, then the members of
-        `actual` alone, each group in the order of its collection. The value
-        of a difference is the member, on the side of the collection that
-        holds it.
+        The members that only `reference` holds come first, in the order of
+        `reference`. The members that only `actual` holds follow, in the order
+        of `actual`.
+
+        The value of a difference is the member. It is the expected value when
+        `reference` holds the member, and the actual value when `actual` holds
+        it.
 
         Parameters
         ----------
@@ -133,8 +138,8 @@ class Difference:
         reference : Collection[_MemberT]
             The reference members.
         item : str
-            The item name of every difference, which says what a member is,
-            such as ``"decay"``.
+            The item name of every difference. It says what a member is, such
+            as ``"decay"``.
         text : callable, optional
             Returns a member as a difference writes it. Defaults to
             :class:`str`.

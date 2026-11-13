@@ -1,10 +1,14 @@
 """The ROOT file that Delphes writes, and a reader of its generator record.
 
-Delphes writes the generator's particles to branch ``Particle``
-(``GenParticle``) and the event's header to branch ``Event`` (``HepMCEvent``)
-of tree ``Delphes``. DelphesPythia8's record of the shower and DelphesROOT's
-output both carry them (Delphes 3.5.1,
-https://github.com/delphes/delphes/blob/3.5.1/classes/DelphesClasses.h).
+Delphes writes the generator record to two branches of tree ``Delphes``
+(Delphes 3.5.1,
+https://github.com/delphes/delphes/blob/3.5.1/classes/DelphesClasses.h):
+
+- Branch ``Particle`` holds the generator's particles (``GenParticle``).
+- Branch ``Event`` holds the event's header (``HepMCEvent``).
+
+DelphesPythia8's record of the shower and DelphesROOT's output both carry
+these branches.
 """
 
 from collections.abc import Iterator
@@ -91,10 +95,14 @@ class DelphesROOTFile(ROOTFile):
 class DelphesRootReader(EventReader):
     """Reads the generator record of a Delphes ROOT file.
 
-    The reader refuses a file without tree ``Delphes`` or one of the branches
-    the record is read from, and an ``Event`` branch with other than one entry
-    per event. A memory step size counts the uncompressed bytes of the branches
-    read (:func:`omphjc.root_io.entries_per_step`).
+    The reader refuses a file in these cases:
+
+    - The file has no tree ``Delphes``.
+    - The tree lacks one of the branches that the record is read from.
+    - The ``Event`` branch does not hold exactly one entry per event.
+
+    A step size given as a memory size counts the uncompressed bytes of the
+    branches that are read (:func:`omphjc.root_io.entries_per_step`).
     """
 
     def count_events(self) -> int:
@@ -127,7 +135,10 @@ class DelphesRootReader(EventReader):
     def _record(
         self, arrays: ak.Array, entry_start: int, *, downcast: bool
     ) -> ak.Array:
-        """Return the particle record of the branches in `arrays`, the first being `entry_start`."""
+        """Return the particle record of the branches in `arrays`.
+
+        The first entry of `arrays` is entry `entry_start` of the tree.
+        """
         columns: dict[str, Any] = {
             "event_index": np.arange(
                 entry_start, entry_start + len(arrays), dtype=np.int64

@@ -1,16 +1,21 @@
 """Reading ROOT trees with uproot.
 
-:func:`open_tree` opens a tree after checking that it has the branches a read
-takes, and :func:`count_entries`, :func:`read_branches` and
-:func:`iterate_branches` count, read and iterate over its entries.
+The module has these functions:
+
+- :func:`open_tree` opens a tree after checking that it has the branches that
+  a read takes.
+- :func:`count_entries` counts the entries of a tree.
+- :func:`read_branches` reads the entries of a tree.
+- :func:`iterate_branches` iterates over the entries of a tree.
 
 Every uproot read in omphjc passes an entry count as its step size, never a
-memory size. uproot 5.7 turns a memory size into entries by inflating every
-basket of the selected branches, and then inflates them again to read them
-(``basket_uncompressed_bytes``,
+memory size. uproot 5.7 turns a memory size into an entry count by inflating
+every basket of the selected branches. It then inflates the baskets again to
+read them (``basket_uncompressed_bytes``,
 https://github.com/scikit-hep/uproot5/blob/v5.7.4/src/uproot/behaviors/TBranch.py#L2697-L2709).
-:func:`entries_per_step` reads the uncompressed size each branch records
-instead, which needs no basket.
+
+:func:`entries_per_step` makes the same conversion without reading a basket.
+It reads the uncompressed size that each branch records.
 """
 
 import re
@@ -107,7 +112,7 @@ def count_entries(path: Path, tree_name: str, branch_names: Sequence[str] = ()) 
     Raises
     ------
     ValueError
-        As :func:`open_tree` does.
+        For the reasons that :func:`open_tree` gives.
     """
     with open_tree(path, tree_name, branch_names) as tree:
         return int(tree.num_entries)
@@ -132,7 +137,7 @@ def read_branches(
     branch_names : Sequence[str]
         The branches to read.
     entry_start, entry_stop : int, int or None, optional
-        The entries to read; ``None`` reads to the end of the tree.
+        The entries to read. ``None`` reads to the end of the tree.
 
     Returns
     -------
@@ -142,8 +147,8 @@ def read_branches(
     Raises
     ------
     ValueError
-        If `branch_names` is empty, as :func:`open_tree` does, or if the range
-        lies outside the tree's entries.
+        If `branch_names` is empty, if the range lies outside the entries of
+        the tree, or for the reasons that :func:`open_tree` gives.
     """
     if not branch_names:
         raise ValueError("no branches to read")
@@ -176,20 +181,21 @@ def iterate_branches(
     branch_names : Sequence[str]
         The branches to read.
     step_size : int or str
-        Entries per step, or a memory size such as ``"100 MB"``, as
-        :func:`entries_per_step` takes them.
+        Entries per step, or a memory size such as ``"100 MB"``.
+        :func:`entries_per_step` takes the same values.
 
     Yields
     ------
     tuple[int, ak.Array]
-        The first entry of a step and its arrays, as :func:`read_branches`
-        returns them.
+        The first entry of a step and the arrays of the step. The arrays have
+        the form that :func:`read_branches` returns.
 
     Raises
     ------
     ValueError
-        If `branch_names` is empty, or as :func:`open_tree` and
-        :func:`entries_per_step` do, once the iteration starts.
+        If `branch_names` is empty, or for the reasons that :func:`open_tree`
+        and :func:`entries_per_step` give. The error is raised once the
+        iteration starts.
     """
     if not branch_names:
         raise ValueError("no branches to read")
@@ -213,9 +219,10 @@ def entries_per_step(
     branch_names : Sequence[str]
         The branches the read takes.
     step_size : int or str
-        Entries per step, returned unchanged, or a memory size such as
-        ``"100 MB"``, converted with the uncompressed bytes the branches record
-        (``fTotBytes``) and reading no basket.
+        Entries per step, or a memory size such as ``"100 MB"``. A number of
+        entries is returned unchanged. A memory size is converted with the
+        uncompressed bytes that the branches record (``fTotBytes``), and no
+        basket is read.
 
     Returns
     -------

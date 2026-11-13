@@ -1,10 +1,13 @@
 """The file conventions that carry events from one stage to the next.
 
-A format names how a file is opened and where its particle-level events are,
-not which reconstructed collections it carries: DelphesPythia8's record of the
-shower and DelphesROOT's output are both ``delphes-root`` files. Each readable
-format has a module with a subclass of :class:`EventReader`, the interface for
-reading a file's particle record, defined here with the formats it serves.
+A format names how a file is opened and where its particle-level events are.
+It does not name the reconstructed collections that the file carries. For
+example, DelphesPythia8's record of the shower and DelphesROOT's output are
+both ``delphes-root`` files.
+
+:class:`EventReader` is the interface for reading the particle record of a
+file. It is defined here, with the formats it serves. Each readable format has
+a module with a subclass of :class:`EventReader`.
 """
 
 from abc import ABC, abstractmethod
@@ -73,10 +76,11 @@ class EventReader(ABC):
         Parameters
         ----------
         entry_start, entry_stop : int, int or None, optional
-            The events to read; ``None`` reads to the end of the file.
+            The events to read. ``None`` reads to the end of the file.
         downcast : bool, optional
-            Whether to cast every field to the schema's dtype; otherwise each
-            keeps the dtype the file stores. Units are the schema's either way.
+            Whether to cast every field to the dtype of the schema. Without
+            the cast, each field keeps the dtype that the file stores. The
+            values are in the units of the schema in both cases.
 
         Returns
         -------
@@ -102,7 +106,7 @@ class EventReader(ABC):
         step_size : int or str, optional
             Events per step, or a memory size such as ``"100 MB"``.
         downcast : bool, optional
-            As for :meth:`read_particles`.
+            The same as for :meth:`read_particles`.
 
         Yields
         ------
@@ -112,5 +116,6 @@ class EventReader(ABC):
         Raises
         ------
         ValueError
-            As :meth:`read_particles` does, once the iteration starts.
+            For the reasons that :meth:`read_particles` gives. The error is
+            raised once the iteration starts.
         """

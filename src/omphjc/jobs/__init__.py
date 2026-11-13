@@ -1,10 +1,12 @@
 """Jobs: one process and one job number, run in a directory of their own.
 
 A job directory, ``<outdir>/<process>/job_<n>/``, holds ``job.json``,
-``manifest.json`` and one directory per task, the work of one stage in the
-job. A task directory holds the record of its task, ``task.json``. The job
-number fixes the seed of every program the job runs;
-``docs/reproducibility.md`` lists what else a rerun's events depend on.
+``manifest.json`` and one directory per task. A task is the work of one stage
+in the job, and its directory holds its record, ``task.json``.
+
+The job number fixes the seed of every program in the job.
+``docs/reproducibility.md`` lists what else the events of a repeated job
+depend on.
 
 The modules, by what they hold::
 
@@ -20,15 +22,19 @@ The modules, by what they hold::
     record_file.py  RecordFile, the base class of the job's JSON files
     stages/         one function per stage: generate, shower, simulate
 
-Each stage calls a driver, such as :func:`omphjc.tools.madgraph.driver.generate_events`,
-which returns a run record with absolute paths. The stage function builds a
-:class:`TaskOutcome` from it: the :class:`TaskResult`, which holds the task's
-outputs by name (a :class:`TaskOutput` each, an :class:`EventOutput` for an
-event file) and its metadata, with the log and usage of the run.
-:meth:`Job.run_task` records the run as a :class:`TaskRun`, with its
-status, start and finish times, log and usage, and writes it with the
-parameters and the result as a :class:`TaskRecord` to ``task.json``, with
-every path relative to the job directory.
+How a stage is recorded:
+
+1. The stage calls a driver, such as
+   :func:`omphjc.tools.madgraph.driver.generate_events`. The driver returns a
+   run record with absolute paths.
+2. The stage function builds a :class:`TaskOutcome` from it. The outcome holds
+   the :class:`TaskResult` and the usage of the run. The result holds the
+   task's outputs by name and its metadata. An output is a
+   :class:`TaskOutput`, or an :class:`EventOutput` for an event file.
+3. :meth:`Job.run_task` records the run as a :class:`TaskRun`, with its
+   status, start and finish times, log and usage. It writes the run, the
+   parameters and the result to ``task.json`` as a :class:`TaskRecord`, with
+   every path relative to the job directory.
 """
 
 from omphjc.jobs.identity import JobIdentity

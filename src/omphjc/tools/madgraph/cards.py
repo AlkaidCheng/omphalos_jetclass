@@ -1,9 +1,13 @@
 """Write the MadGraph inputs for one process.
 
-Two scripts drive MadGraph: the process script (``import model``, the
-multiparticle definitions, ``generate`` and ``output``) and the launch script
-(``launch`` with the run switches and the ``set`` lines that pin the run-card
-values). The MadSpin card is the file the catalogue names.
+Two scripts drive MadGraph:
+
+- The process script holds ``import model``, the multiparticle definitions,
+  ``generate`` and ``output``.
+- The launch script holds ``launch`` with the run switches, and the ``set``
+  lines that fix the run-card values.
+
+The MadSpin card is the file that the catalogue names.
 """
 
 from pathlib import Path
@@ -12,9 +16,10 @@ from omphjc.processes.catalogue import ProcessSpec
 from omphjc.tools.madgraph.run_card import format_value
 
 PYTHON_SEED_FROM_SYSTEM = -1
-"""``python_seed`` that leaves Python's generator seeded from the system.
+"""The ``python_seed`` that leaves Python's generator seeded from the system.
 
-"-1 means use default from random module" in the run card's comment,
+The run card's comment on this setting reads "-1 means use default from
+random module":
 https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/various/banner.py#L4425.
 """
 
@@ -22,8 +27,8 @@ https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/madgraph/various/banner.py#L4
 def model_import_target(spec: ProcessSpec) -> str:
     """Return the argument of ``import model`` for `spec`.
 
-    A model included with the catalogue is imported by path so that MadGraph
-    never downloads it; the restriction suffix, if any, is kept.
+    A model included with the catalogue is imported by its path, so MadGraph
+    never downloads it. The restriction suffix is kept when the model has one.
     """
     if spec.model_dir is None:
         return spec.model
@@ -66,17 +71,19 @@ def launch_commands(
     n_events : int
         Number of events to generate.
     seed : int or None
-        MadGraph's ``iseed`` and ``python_seed``, the seed of its Python
-        generator; ``None`` lets MadGraph choose ``iseed`` and leaves the Python
-        generator seeded from the system.
+        The value of MadGraph's ``iseed`` and of ``python_seed``, the seed of
+        MadGraph's Python generator. With ``None``, MadGraph chooses ``iseed``
+        and the Python generator is seeded from the system.
 
     Returns
     -------
     list[str]
         The ``launch`` command, its switches and the ``set`` lines of the run
-        card. Shower and detector simulation are switched off, since
-        ``DelphesPythia8`` runs them afterwards; MadSpin is on only for a
-        process that names a MadSpin card.
+        card.
+
+        Shower and detector simulation are switched off, because
+        ``DelphesPythia8`` runs them afterwards. MadSpin is switched on only
+        for a process that names a MadSpin card.
 
     Raises
     ------

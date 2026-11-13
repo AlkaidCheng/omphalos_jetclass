@@ -1,4 +1,4 @@
-"""Run ``DelphesPythia8`` as Pythia's event loop: the shower of one event file, no detector.
+"""Run ``DelphesPythia8`` to shower one event file, without detector simulation.
 
 Each run has a working directory of its own::
 
@@ -11,35 +11,50 @@ Each run has a working directory of its own::
                            and EventLHEF and WeightLHEF from the LHE file
       shower.log           DelphesPythia8's output, Pythia's banner and statistics included
 
-``DelphesPythia8`` combines Pythia 8 and Delphes in one program: Pythia reads
-the LHE file and showers each event, the program copies the event record into
-Delphes's ``allParticles`` array, and the modules of the card run on it
+``DelphesPythia8`` combines Pythia 8 and Delphes in one program
 (``readers/DelphesPythia8.cpp`` in Delphes 3.5.1,
 https://github.com/delphes/delphes/blob/3.5.1/readers/DelphesPythia8.cpp).
-Run with the card of :func:`omphjc.tools.delphes.card.particles_card_text`, whose
-only module is the TreeWriter, it showers, writes the generator record and
-simulates nothing; a detector card is run on that file afterwards with
-``DelphesROOT``. The MLM matching veto is Pythia's own user hook
-(``Pythia8Plugins/CombineMatchingInput.h``), installed by the program and
-active when the command file turns ``JetMatching:merge`` on.
+It handles each event in three steps:
 
-The program takes the card, the command file and the output file, in that
-order, and opens the output with ROOT's ``CREATE`` mode, so an existing
-output file is an error.
-Its event loop runs up to ``Main:numberOfEvents`` events and stops early at
-the end of the LHE file, with exit status 0; after ``Main:timesAllowErrors``
-failed events it gives up, prints that the generation was aborted prematurely
-and also exits with status 0, so a run is judged by its log, not by its exit
-status. The LHE file is opened as text for the ``EventLHEF`` branch, which is
-why the input is decompressed into the directory. At the end the program
-prints Pythia's event statistics (``ProcessLevel::statistics`` in Pythia's
-``src/ProcessLevel.cc``), whose ``sum`` line gives the events read, selected
-and accepted; the events the matching veto rejects are read but not accepted.
-Pythia's banner names its version (``Pythia::banner`` in ``src/Pythia.cc``).
+- Pythia reads the event from the LHE file and showers it;
+- the program copies the event record into Delphes's ``allParticles`` array;
+- the modules of the card process that array.
 
-A working directory carries a stamp (:mod:`omphjc.stamps`) naming the process,
-and a run seals its artifacts when it ends; :class:`omphjc.workspace.Workspace`
-describes what a later run may delete.
+This module gives the program the card of
+:func:`omphjc.tools.delphes.card.particles_card_text`. The only module of
+that card is the TreeWriter. The program therefore showers the events, writes
+the generator record and simulates nothing. The generator record is the
+complete list of the generator particles of each event. ``DelphesROOT``
+applies a detector card to that file afterwards.
+
+The MLM matching veto is Pythia's own user hook
+(``Pythia8Plugins/CombineMatchingInput.h``). The program installs the hook.
+The hook is active when the command file turns ``JetMatching:merge`` on.
+
+The program takes three arguments in this order: the card, the command file
+and the output file. It opens the output with ROOT's ``CREATE`` mode, so an
+existing output file is an error.
+
+The event loop processes up to ``Main:numberOfEvents`` events. It stops early
+at the end of the LHE file and exits with status 0. After
+``Main:timesAllowErrors`` failed events it gives up, prints that the
+generation was aborted prematurely, and also exits with status 0. A run is
+therefore judged by its log, not by its exit status.
+
+The program opens the LHE file as text to fill the ``EventLHEF`` branch. For
+this reason the input is copied into the working directory uncompressed.
+
+At the end the program prints Pythia's event statistics
+(``ProcessLevel::statistics`` in Pythia's ``src/ProcessLevel.cc``). The
+``sum`` line of the statistics gives the number of events read, selected and
+accepted. An event that the matching veto rejects is read but not accepted.
+Pythia's banner names the Pythia version (``Pythia::banner`` in
+``src/Pythia.cc``).
+
+A working directory carries a stamp (:mod:`omphjc.stamps`) that names the
+process. A run seals its artifacts when it ends, which records them in the
+stamp. :class:`omphjc.workspace.Workspace` describes what a later run may
+delete.
 """
 
 import gzip
@@ -94,8 +109,8 @@ class ShowerStatistics:
     events_selected : int
         Events that passed Pythia's own selection.
     events_accepted : int
-        Events that also passed the user hooks, the matching veto among them;
-        the events written to the output.
+        Events that also passed the user hooks, which include the matching
+        veto. These are the events written to the output.
     """
 
     pythia_version: str
@@ -108,18 +123,19 @@ class ShowerStatistics:
 class ShowerRun(ProgramRun):
     """The output of one ``DelphesPythia8`` run.
 
-    The log, the usage and the folder set aside are
-    :class:`omphjc.workspace.ProgramRun`'s.
+    The log, the usage and the folder that holds what was set aside are
+    fields of :class:`omphjc.workspace.ProgramRun`.
 
     Parameters
     ----------
     output_path : Path
-        The showered events: a Delphes ROOT file holding the generator record
-        of every event in its ``Particle`` branch.
+        The showered events. This is a Delphes ROOT file that holds the
+        generator record of every event in its ``Particle`` branch.
     cmnd_path : Path
-        The Pythia command file as run.
+        The Pythia command file that the run used.
     card_path : Path
-        The Delphes card as run, the one that writes the generator record.
+        The Delphes card that the run used. It is the card that writes the
+        generator record.
     statistics : ShowerStatistics
         Pythia's version and event counts, read from the log.
     """
@@ -135,8 +151,8 @@ def parse_statistics(log_text: str) -> ShowerStatistics:
     Raises
     ------
     ValueError
-        If the log holds no Pythia banner or no event statistics, as after a
-        run that did not finish.
+        If the log holds no Pythia banner or no event statistics. This
+        happens, for example, when the run did not finish.
     """
     version = _PYTHIA_VERSION.search(log_text)
     if version is None:
@@ -165,45 +181,53 @@ def shower_events(
     log_dir: Path | None = None,
     delphes_pythia8_path: Path | None = None,
 ) -> ShowerRun:
-    """Shower the events in `lhe_path` with Pythia 8 through ``DelphesPythia8``, simulating nothing.
+    """Shower the events in `lhe_path` with Pythia 8 through ``DelphesPythia8``.
+
+    No detector is simulated.
 
     Parameters
     ----------
     spec : ProcessSpec
-        The process the events belong to; its Pythia settings and matching
+        The process the events belong to. Its Pythia settings and matching
         block come from the catalogue.
     lhe_path : Path
-        The LHE file, gzipped or plain; it is decompressed into `workdir`.
+        The LHE file, gzipped or plain. It is copied into `workdir`, and
+        decompressed when it is gzipped.
     workdir : Path
-        Directory of the run, created when missing; it must not hold a run of
-        another process. Every call writes the inputs and the log in it anew.
+        Directory of the run. It is created when missing, and it must not
+        hold a run of another process. Every call writes the inputs and the
+        log in it anew.
     n_events : int
-        Upper bound on the events showered; the run also stops at the end of
-        the LHE file.
+        Upper bound on the number of events showered. The run also stops at
+        the end of the LHE file.
     seed : int or None
-        Pythia's seed; ``None`` leaves Pythia to seed itself from the clock.
+        Pythia's seed. With ``None``, Pythia seeds itself from the clock.
     overrides : Mapping[str, SettingValue] or None, optional
-        Pythia settings applied over the catalogue's.
+        Pythia settings applied over the settings from the catalogue.
     timeout : float or None, optional
-        Seconds the run may take; ``None`` sets no limit. At the limit,
+        Seconds the run may take. ``None`` sets no limit. At the limit,
         ``DelphesPythia8`` and every process it started are stopped.
     overwrite : bool, optional
-        Whether to replace the output of an earlier run in `workdir`. By
-        default an existing output is an error, so that a run never deletes
-        results by accident. It is replaced only after every other check has
-        passed: deleted when the earlier run sealed it and nothing in it
-        changed since, otherwise moved aside (see `ShowerRun.set_aside`).
+        Whether to replace the output that an earlier run left in `workdir`.
+        By default an existing output is an error, so a run never deletes
+        results by accident.
+
+        The output is replaced only after every other check has passed. It is
+        deleted when the earlier run sealed it and nothing in it has changed
+        since. Otherwise it is moved aside (see `ShowerRun.set_aside`).
     log_dir : Path or None, optional
-        An existing directory to write the log in. By default the log is in
-        `workdir` and a later run replaces it; one in another directory stays
-        there.
+        An existing directory to write the log in. By default the log is
+        written in `workdir`, and a later run replaces it. A log written in
+        another directory is not replaced.
     delphes_pythia8_path : Path or None, optional
-        Delphes's ``DelphesPythia8``; by default the one on PATH.
+        Path of Delphes's ``DelphesPythia8``. By default the program is
+        looked up on PATH.
 
     Returns
     -------
     ShowerRun
-        The showered events, the inputs as run, the log and Pythia's statistics.
+        The showered events, the inputs that the run used, the log and
+        Pythia's statistics.
 
     Raises
     ------
@@ -216,13 +240,17 @@ def shower_events(
     FileExistsError
         If `workdir` already holds an output file and `overwrite` is false.
     StampError
-        If `workdir` is stamped for another purpose or process, holds what a
-        run makes without carrying a stamp, or holds something other than a
-        stamp in the stamp's place. Nothing is changed in that case.
+        If `workdir` is in one of these states:
+
+        - it is stamped for another purpose or process;
+        - it holds artifacts of a run but carries no stamp;
+        - it holds something other than a stamp where the stamp belongs.
+
+        Nothing is changed in that case.
     ShowerError
         If ``DelphesPythia8`` exits with an error, gives up after too many
         failed events, is still running at the time limit, or writes no
-        output; the message ends with the last lines of its log.
+        output. The message ends with the last lines of the log.
     """
     require_file(lhe_path, what="Event file")
     workspace = ShowerWorkspace(
@@ -275,23 +303,27 @@ def shower_events(
 class ShowerWorkspace(ProgramWorkspace):
     """The working directory of one process's shower runs, and the steps of a run.
 
-    :func:`shower_events` drives a workspace from start to finish; a caller
-    that needs the steps one at a time constructs one and, inside
-    ``with workspace.sealed_run():``, calls :meth:`write_inputs` then
-    :meth:`run_shower`.
+    :func:`shower_events` drives a workspace from start to finish. A caller
+    that needs the steps one at a time constructs a workspace and opens a
+    ``with workspace.sealed_run():`` block. Inside the block it calls
+    :meth:`write_inputs` and then :meth:`run_shower`.
 
     Parameters
     ----------
     spec : ProcessSpec
         The process whose runs the directory holds.
     workdir : Path
-        The working directory, created when missing; not a filesystem root.
+        The working directory. It is created when missing, and it must not
+        be a filesystem root.
     delphes_pythia8_path : Path or None, optional
-        Delphes's ``DelphesPythia8``; by default the one on PATH.
+        Path of Delphes's ``DelphesPythia8``. By default the program is
+        looked up on PATH.
     timeout : float or None, optional
-        Seconds the run may take from now; ``None`` sets no limit.
+        Seconds the run may take, counted from the creation of the workspace.
+        ``None`` sets no limit.
     log_dir : Path or None, optional
-        As :class:`~omphjc.workspace.ProgramWorkspace`.
+        See the `log_dir` parameter of
+        :class:`~omphjc.workspace.ProgramWorkspace`.
 
     Raises
     ------

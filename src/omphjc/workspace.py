@@ -1,21 +1,32 @@
-"""A directory a run works in, and the care every run takes there.
+"""A directory that a run works in, and how every run clears and seals it.
 
-A workspace carries a stamp (:mod:`omphjc.stamps`) naming its purpose and the
-process it serves. When a run ends, short of a hard kill, it seals its
-artifacts. A later run deletes an artifact only when it was sealed and nothing
-in it changed since; anything else a run may have left, as after a kill before
-sealing, is moved into ``omphjc-set-aside/`` with its contents. Nothing else in
-the directory is ever touched.
+A workspace carries a stamp (:mod:`omphjc.stamps`). The stamp names the
+purpose of the workspace and the process it serves.
 
-:class:`Workspace` is that care alone: a subclass names its purpose and what a
-run makes, and adds the steps of its run. :class:`ProgramWorkspace` adds an
-external program, named in class attributes too: the program file, the time
-its runs may take, the log they append to and what they took.
-:class:`omphjc.tools.madgraph.driver.MadGraphWorkspace` is one.
+When a run ends, it seals its artifacts. Only a hard kill prevents the seal.
+A later run deletes an artifact only when the artifact was sealed and nothing
+in it has changed since. Anything else that a run may have left is moved into
+``omphjc-set-aside/`` with its contents. This happens, for example, when a run
+was killed before it could seal its artifacts. Nothing else in the directory
+is ever touched.
 
-A run returns a record deriving from :class:`Run`, or from :class:`ProgramRun`
-when an external program ran, which carry the fields every run shares; a
-driver's record adds its own.
+:class:`Workspace` implements these rules and nothing more. A subclass names
+its purpose and what a run makes, and it adds the steps of its run.
+
+:class:`ProgramWorkspace` adds an external program, which a subclass also
+names in class attributes. The class holds:
+
+- the program file;
+- the time that the runs of the program may take;
+- the log that the runs append to;
+- what the runs took.
+
+:class:`omphjc.tools.madgraph.driver.MadGraphWorkspace` is one such subclass.
+
+A run returns a record. The record derives from :class:`Run`, or from
+:class:`ProgramRun` when the run is of an external program. These two classes
+carry the fields that every run shares, and the record of a driver adds its
+own fields.
 """
 
 import os
@@ -42,17 +53,18 @@ from omphjc.stamps import clear_artifacts, read_stamp, seal, write_stamp
 class Run:
     """The output of one run: the file it is for and what it set aside.
 
-    A driver's run record derives from this class, or from :class:`ProgramRun`
-    when the run is of an external program, and adds its own fields.
+    The run record of a driver derives from this class and adds its own
+    fields. When the run is of an external program, the record derives from
+    :class:`ProgramRun` instead.
 
     Parameters
     ----------
     output_path : Path
         The file the run is for.
     set_aside : Path or None
-        Folder in the working directory holding what an earlier run left and
-        this run could not confirm as its own, moved there rather than deleted;
-        ``None`` when nothing was set aside.
+        Folder in the working directory that holds what an earlier run left
+        and this run could not confirm as its own. This run moved it there
+        instead of deleting it. It is ``None`` when nothing was set aside.
     """
 
     output_path: Path
@@ -77,19 +89,23 @@ class ProgramRun(Run):
 
 
 class Workspace(ABC):
-    """The directory of one process's runs for one purpose: stamped, cleared and sealed.
+    """The directory of one process's runs for one purpose.
 
-    A subclass names its purpose in the class attribute below, lists what a
-    run makes in :attr:`artifacts` and adds the steps of its run, each inside
-    ``with workspace.sealed_run():``.
+    The directory is stamped, cleared and sealed. A subclass does the
+    following:
+
+    - It names its purpose in the class attribute below.
+    - It lists what a run makes in :attr:`artifacts`.
+    - It adds the steps of its run, each inside
+      ``with workspace.sealed_run():``.
 
     Parameters
     ----------
     process_name : str
-        The process whose runs the directory holds, named in the stamp.
+        The process whose runs the directory holds. The stamp names it.
     workdir : Path
-        The working directory, created by :meth:`sealed_run` when missing; it
-        must not be a filesystem root.
+        The working directory. :meth:`sealed_run` creates it when it is
+        missing. It must not be a filesystem root.
 
     Attributes
     ----------
@@ -122,24 +138,33 @@ class Workspace(ABC):
     def sealed_run(self) -> Iterator[Path | None]:
         """Make the directory ready for the run in the block, and seal it after.
 
-        On entry, clears what an earlier run left (:meth:`clear_earlier_run`)
-        first, so that a directory the run must not touch is refused before
-        anything is created; then creates the directory when it is missing
-        and stamps it when it carries no stamp. On exit, however the block
-        ended, records in the stamp what the run made, so that a later run can
-        tell whether anyone changed it since. Anything the caller can refuse,
-        an occupied output or an invalid request, belongs before the block,
-        since entering it removes what an earlier run left.
+        On entry, the method does the following, in this order:
+
+        - It clears what an earlier run left (:meth:`clear_earlier_run`).
+          This comes first, so that a directory the run must not touch is
+          refused before anything is created.
+        - It creates the directory when the directory is missing.
+        - It stamps the directory when the directory carries no stamp.
+
+        On exit, the method records in the stamp what the run made. It does
+        so whether the block ended normally or with an exception. A later run
+        can then tell whether anyone has changed these artifacts since.
+
+        Entering the block removes what an earlier run left. Anything that
+        the caller can refuse, such as an occupied output or an invalid
+        request, therefore belongs before the block.
 
         Yields
         ------
         Path or None
-            The folder holding what was moved aside, ``None`` when nothing was.
+            The folder that holds what was moved aside, or ``None`` when
+            nothing was moved aside.
 
         Raises
         ------
         StampError
-            As :meth:`clear_earlier_run`; nothing is created in that case.
+            For the reasons that :meth:`clear_earlier_run` gives. Nothing is
+            created in that case.
         """
         set_aside = self.clear_earlier_run()
         self.workdir.mkdir(parents=True, exist_ok=True)
@@ -156,20 +181,25 @@ class Workspace(ABC):
         Parameters
         ----------
         unconfirmed : iterable of str, optional
-            Artifacts to move aside however they were sealed, because they
-            lack a sign the run leaves.
+            Artifacts to move aside even when they are sealed and unchanged,
+            because they lack a sign that the run leaves.
 
         Returns
         -------
         Path or None
-            The folder holding what was moved aside, ``None`` when nothing was.
+            The folder that holds what was moved aside, or ``None`` when
+            nothing was moved aside.
 
         Raises
         ------
         StampError
-            If the directory is stamped for another purpose or details, holds
-            what a run makes without a stamp, or holds something other than a
-            stamp in the stamp's place. Nothing is changed in that case.
+            If the directory is in one of these states:
+
+            - it is stamped for another purpose or other details;
+            - it holds artifacts of a run but carries no stamp;
+            - it holds something other than a stamp where the stamp belongs.
+
+            Nothing is changed in that case.
         """
         return clear_artifacts(
             self.workdir,
@@ -183,22 +213,25 @@ class Workspace(ABC):
 class ProgramWorkspace(Workspace):
     """The directory of one process's runs of one external program.
 
-    A subclass names its program in the class attributes below, as it names
-    its purpose for :class:`Workspace`, and adds what its run makes to
-    :attr:`artifacts`.
+    A subclass names its program in the class attributes below, in the way it
+    names its purpose for :class:`Workspace`. It also adds what its run makes
+    to :attr:`artifacts`.
 
     Parameters
     ----------
     process_name, workdir
-        As :class:`Workspace`.
+        The same as for :class:`Workspace`.
     program_path : Path or None
-        The program file to run instead of the one on PATH.
+        The program file to use instead of the one on PATH.
     timeout : float or None
-        Seconds the run may take from now; ``None`` sets no limit.
+        Seconds the run may take, counted from the creation of the workspace.
+        ``None`` sets no limit.
     log_dir : Path or None, optional
-        An existing directory for the log. ``None``, the default, keeps the
-        log in `workdir` as one of the run's artifacts; a log elsewhere is
-        not an artifact, so a later run in `workdir` leaves it in place.
+        An existing directory for the log. With ``None``, the default, the
+        log is kept in `workdir` and is one of the artifacts of the run.
+
+        A log in another directory is not an artifact, so a later run in
+        `workdir` leaves it in place.
 
     Attributes
     ----------
@@ -268,19 +301,20 @@ class ProgramWorkspace(Workspace):
         command : sequence of str or path-like
             The program and its arguments.
         failure_message : str
-            How a failure is described, for example ``"MadGraph failed
-            running launch.mg5"``; the program's error follows it.
+            How a failure is described, for example
+            ``"MadGraph failed running launch.mg5"``. The error of the
+            program follows it.
 
         Returns
         -------
         ProgramUsage
-            What this run took; `usage` accumulates it.
+            What this run took. It is also added to `usage`.
 
         Raises
         ------
         ProgramError
-            Of the workspace's `error_type`, if the program exits with a
-            failing status or is still running at the deadline.
+            If the program exits with a failing status or is still active at
+            the deadline. The error is of the workspace's `error_type`.
         """
         timeout = (
             None
@@ -300,5 +334,5 @@ class ProgramWorkspace(Workspace):
         return usage
 
     def make_error(self, message: str) -> ProgramError:
-        """Return an error of the workspace's type carrying `message` and the log's end."""
+        """Return an error of the workspace's type with `message` and the log's end."""
         return self.error_type(f"{message}\n{log_tail(self.log_path)}")
