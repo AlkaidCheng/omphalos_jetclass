@@ -234,11 +234,35 @@ def test_other_parameters_need_force_and_force_replaces(
     job = Job(specs["HToBB"], tmp_path, 1)
     job.run_task("x", {"events": 10}, body)
     job = Job(specs["HToBB"], tmp_path, 1)
-    with pytest.raises(ValueError, match="ran with {'events': 10}"):
+    with pytest.raises(ValueError) as refusal:
         job.run_task("x", {"events": 20}, body)
+    assert str(refusal.value) == (
+        "The current parameters are inconsistent with those of the existing x "
+        f"task in {job.root_dir} (x/task.json):\n"
+        "  events: expected 10, got 20\n"
+        "Rerun with the parameters the task ran with, or run omphjc x with "
+        "--force to replace its result."
+    )
     forced = job.run_task("x", {"events": 20}, body, force=True)
     assert forced.parameters == {"events": 20}
     assert calls == [False, True]
+
+
+def test_a_refusal_names_only_the_parameters_that_differ(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    pythia = {"Main:timesAllowErrors": 5, "Tune:pp": 14}
+    job.run_task("x", {"events": 10, "pythia": pythia}, lambda _: _make_output(job))
+    changed = {**pythia, "Main:timesAllowErrors": 7, "Next:numberCount": 0}
+    with pytest.raises(ValueError) as refusal:
+        job.run_task(
+            "x", {"events": 10, "pythia": changed}, lambda _: _make_output(job)
+        )
+    assert str(refusal.value).splitlines()[1:-1] == [
+        "  pythia.Main:timesAllowErrors: expected 5, got 7",
+        "  unexpected pythia.Next:numberCount: 0",
+    ]
 
 
 def test_a_stage_with_missing_outputs_or_left_running_runs_again(
@@ -649,7 +673,7 @@ def test_generate_keeps_a_finished_run_unless_forced(
         == first
     )
     assert log.read_text().count("$ ") == runs
-    with pytest.raises(ValueError, match="ran with"):
+    with pytest.raises(ValueError, match="events: expected 10, got 20"):
         generate(Job(specs["HToBB"], tmp_path, 1), n_events=20, mg5_path=mg5_path)
     shifted = replace(specs["HToBB"], seed_offset=20_000_000)
     with pytest.raises(ValueError, match="seed: expected 10000001, got 20000001"):
@@ -739,7 +763,8 @@ def test_shower_records_what_it_made_and_keeps_it(
     )
     assert kept == record
     overrides = {"Main:timesAllowErrors": 5}
-    with pytest.raises(ValueError, match="ran with"):
+    added = re.escape("unexpected pythia.Main:timesAllowErrors: 5")
+    with pytest.raises(ValueError, match=added):
         shower(
             Job(specs["HToBB"], tmp_path, 1),
             overrides=overrides,
@@ -872,14 +897,14 @@ def test_a_stage_whose_input_events_changed_is_refused_unless_forced(
     generate(job, n_events=10, mg5_path=mg5_path, force=True)
     lhe_fingerprint = job.require_events("generate").fingerprint
     assert lhe_fingerprint != generated.result.outputs[EVENTS_OUTPUT].fingerprint
-    with pytest.raises(ValueError, match="ran with .*'input_fingerprint': 'lhe-v1:"):
+    with pytest.raises(ValueError, match="input_fingerprint: expected lhe-v1:"):
         shower(job, delphes_pythia8_path=delphes_pythia8_path)
     forced = shower(job, delphes_pythia8_path=delphes_pythia8_path, force=True)
     assert forced.parameters["input_fingerprint"] == lhe_fingerprint
     root_fingerprint = forced.result.outputs[EVENTS_OUTPUT].fingerprint
     assert root_fingerprint != showered.result.outputs[EVENTS_OUTPUT].fingerprint
     with pytest.raises(
-        ValueError, match="ran with .*'input_fingerprint': 'delphes_root-v1:"
+        ValueError, match="input_fingerprint: expected delphes_root-v1:"
     ):
         simulate(job, delphes_root_path=delphes_root_path)
     forced = simulate(job, delphes_root_path=delphes_root_path, force=True)
@@ -969,7 +994,7 @@ def test_simulate_records_what_it_made_and_keeps_it(
     assert kept == record
     other = tmp_path / "other.tcl"
     other.write_text("set ExecutionPath {\n  TreeWriter\n}\n")
-    with pytest.raises(ValueError, match="ran with"):
+    with pytest.raises(ValueError, match="card: expected "):
         simulate(
             Job(specs["HToBB"], tmp_path, 1),
             card_path=other,

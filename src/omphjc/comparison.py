@@ -1,9 +1,9 @@
 """Reporting of configuration differences."""
 
 import operator
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Any, TypeVar
 
 _ValueT = TypeVar("_ValueT")
 _MemberT = TypeVar("_MemberT")
@@ -70,6 +70,45 @@ class Difference:
             )
             differences.append(cls(name(key), expected, found))
         return differences
+
+    @classmethod
+    def between_nested_mappings(
+        cls, actual: Mapping[str, Any], reference: Mapping[str, Any]
+    ) -> list["Difference"]:
+        """Return the differences between two nested mappings, value by value.
+
+        Where both mappings hold a mapping under one key, the two are compared
+        in turn, and a difference inside them is named by the dotted path of
+        its keys, such as ``pythia.Main:timesAllowErrors``. Otherwise a key is
+        compared as :meth:`between_mappings` compares it, values written with
+        :class:`str`. The differences come in the sorted order of the keys at
+        each level.
+
+        Parameters
+        ----------
+        actual : Mapping[str, Any]
+            The values found, by key.
+        reference : Mapping[str, Any]
+            The reference values, by key.
+        """
+
+        def compare(
+            found: Mapping[str, Any], expected: Mapping[str, Any], prefix: str
+        ) -> Iterator[Difference]:
+            for key in sorted(found.keys() | expected.keys()):
+                path = f"{prefix}{key}"
+                if key not in found:
+                    yield cls(path, str(expected[key]), None)
+                elif key not in expected:
+                    yield cls(path, None, str(found[key]))
+                elif isinstance(found[key], Mapping) and isinstance(
+                    expected[key], Mapping
+                ):
+                    yield from compare(found[key], expected[key], f"{path}.")
+                elif found[key] != expected[key]:
+                    yield cls(path, str(expected[key]), str(found[key]))
+
+        return list(compare(actual, reference, ""))
 
     @classmethod
     def between_collections(

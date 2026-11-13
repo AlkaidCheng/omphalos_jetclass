@@ -51,3 +51,16 @@ def test_a_member_is_written_by_the_given_function() -> None:
 def test_equal_mappings_and_equal_collections_have_no_differences() -> None:
     assert Difference.between_mappings({"ptj": 20}, {"ptj": 20}) == []
     assert Difference.between_collections(["a", "b"], ["b", "a"], item="letter") == []
+
+
+def test_nested_mappings_differ_by_the_dotted_path_of_each_value() -> None:
+    differences = Difference.between_nested_mappings(
+        {"events": 10, "pythia": {"a": 1, "b": 3, "c": 4}, "card": {"x.tcl": "h"}},
+        {"events": 10, "pythia": {"a": 1, "b": 2}, "card": "h", "seed": 1},
+    )
+    assert [str(difference) for difference in differences] == [
+        "card: expected h, got {'x.tcl': 'h'}",
+        "pythia.b: expected 2, got 3",
+        "unexpected pythia.c: 4",
+        "missing seed: 1",
+    ]

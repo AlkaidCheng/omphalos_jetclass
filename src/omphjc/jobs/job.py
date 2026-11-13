@@ -23,6 +23,7 @@ from pathlib import Path
 from types import FrameType
 from typing import Any
 
+from omphjc.comparison import Difference
 from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.task import (
@@ -266,9 +267,10 @@ class Job:
         ------
         ValueError
             If the task is recorded as done with other parameters, or with an
-            output of another size than recorded, and `force` is not set. If
-            the ``job.json`` of the directory identifies another job. If the
-            ``task.json`` of a task of the job cannot be read as a record.
+            output of another size than recorded, and `force` is not set; the
+            message names each parameter that differs. If the ``job.json`` of
+            the directory identifies another job. If the ``task.json`` of a
+            task of the job cannot be read as a record.
         FileNotFoundError
             If the ``job.json`` of the directory was removed while the task
             ran. The task is then not recorded.
@@ -278,11 +280,7 @@ class Job:
         task = self.task(name)
         earlier = task.record
         if earlier is not None and earlier.status == DONE and not force:
-            if earlier.parameters != parameters:
-                raise ValueError(
-                    f"{name} in {self.root_dir} ran with {earlier.parameters}; "
-                    f"pass force to run it with {parameters}"
-                )
+            self._check_parameters(name, earlier.parameters, parameters)
             if task.status is TaskStatus.DONE:
                 return earlier
             if task.status is TaskStatus.CHANGED:
@@ -368,6 +366,26 @@ class Job:
                 + "\nRerun with the configuration the job was created with, or "
                 "choose another output directory."
             )
+
+    def _check_parameters(
+        self, name: str, recorded: dict[str, Any], parameters: dict[str, Any]
+    ) -> None:
+        """Refuse `parameters` when task `name` ran with other ones.
+
+        The message names each parameter that differs, a nested one by the
+        dotted path of its keys, with the value the task ran with as expected.
+        """
+        if parameters == recorded:
+            return
+        differences = Difference.between_nested_mappings(parameters, recorded)
+        record_path = self.relative_path(self.task_record_path(name))
+        raise ValueError(
+            "The current parameters are inconsistent with those of the existing "
+            f"{name} task in {self.root_dir} ({record_path}):"
+            + "".join(f"\n  {difference}" for difference in differences)
+            + "\nRerun with the parameters the task ran with, or run omphjc "
+            f"{name} with --force to replace its result."
+        )
 
     def _write_record(self, name: str, record: TaskRecord) -> None:
         """Write `record` as the record of task `name`, then the manifest.
