@@ -25,6 +25,7 @@ from omphjc.jobs import (
     Job,
     JobIdentity,
     Manifest,
+    ReplacedRunError,
     Task,
     TaskOutcome,
     TaskOutput,
@@ -609,6 +610,96 @@ def test_a_run_whose_directory_cannot_be_made_is_recorded_as_failed(
     assert record is not None
     assert record.latest_run.status == "failed"
     assert record.latest_run.error == "no run directory"
+
+
+@pytest.mark.parametrize(
+    ("error", "recorded_error"),
+    [
+        (TerminationError("terminated by signal 15"), "terminated by signal 15"),
+        (KeyboardInterrupt(), "KeyboardInterrupt"),
+    ],
+    ids=["sigterm", "keyboard"],
+)
+def test_a_run_that_a_signal_ended_is_recorded_as_interrupted(
+    specs: Mapping[str, ProcessSpec],
+    tmp_path: Path,
+    error: BaseException,
+    recorded_error: str,
+) -> None:
+    def stop(overwrite: bool, run_dir: Path) -> TaskOutcome:
+        raise error
+
+    job = Job(specs["HToBB"], tmp_path, 1)
+    with pytest.raises(type(error)):
+        job.run_task("x", {}, stop)
+    record = job.task_record("x")
+    assert record is not None
+    interrupted_run = record.latest_run
+    assert interrupted_run.status == "interrupted"
+    assert interrupted_run.error == recorded_error
+    assert interrupted_run.finished is not None
+    rerun = job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job))
+    assert [run.status for run in rerun.runs] == ["interrupted", "done"]
+
+
+def test_a_failure_without_a_message_is_recorded_by_its_type(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    def fail_without_message(overwrite: bool, run_dir: Path) -> TaskOutcome:
+        raise AssertionError
+
+    job = Job(specs["HToBB"], tmp_path, 1)
+    with pytest.raises(AssertionError):
+        job.run_task("x", {}, fail_without_message)
+    record = job.task_record("x")
+    assert record is not None
+    assert record.latest_run.status == "failed"
+    assert record.latest_run.error == "AssertionError"
+
+
+@pytest.mark.parametrize("fails", [False, True], ids=["finishes", "fails"])
+def test_a_run_replaced_by_a_newer_run_leaves_that_runs_record(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path, fails: bool
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    replaced_run_ids: list[str] = []
+    newer_records: list[TaskRecord] = []
+
+    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+        replaced_run_ids.append(run_dir.name)
+        newer_record = TaskRecord.running({"events": 20})
+        newer_record.write(job.task_record_path("x"), root_dir=job.root_dir)
+        newer_records.append(newer_record)
+        if fails:
+            raise RuntimeError("boom")
+        return _make_output(job)
+
+    with pytest.raises(ReplacedRunError) as refusal:
+        job.run_task("x", {"events": 10}, body)
+    (replaced_run_id,) = replaced_run_ids
+    (newer_record,) = newer_records
+    assert job.task_record("x") == newer_record
+    status = "failed" if fails else "done"
+    assert str(refusal.value) == (
+        f"Run {replaced_run_id!r} of the x task in {job.root_dir} is not recorded "
+        f"as {status}: run {newer_record.latest_run.run_id!r} of the task started "
+        "before it ended"
+    )
+    assert isinstance(refusal.value.__context__, RuntimeError) is fails
+
+
+def test_a_run_whose_record_was_deleted_records_its_end(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+
+    def delete_record_then_finish(overwrite: bool, run_dir: Path) -> TaskOutcome:
+        job.task_record_path("x").unlink()
+        return _make_output(job)
+
+    record = job.run_task("x", {}, delete_record_then_finish)
+    assert record.is_done
+    assert job.task_record("x") == record
 
 
 def test_two_jobs_opened_on_one_directory_keep_the_records_of_both_tasks(

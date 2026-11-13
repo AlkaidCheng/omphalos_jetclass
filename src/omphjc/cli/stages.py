@@ -26,6 +26,7 @@ from omphjc.jobs import (
     SHOWER,
     SIMULATE,
     Job,
+    ReplacedRunError,
     TaskRecord,
     TerminationError,
     exception_on_termination,
@@ -45,6 +46,7 @@ _STAGE_ERRORS = (
     StampError,
     ProgramError,
     TerminationError,
+    ReplacedRunError,
 )
 
 

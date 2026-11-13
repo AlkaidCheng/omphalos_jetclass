@@ -455,7 +455,11 @@ its `job.json`. A stage with an output that no
 longer has the size in the stage's record, as after a truncated copy, is
 refused, and so is the stage that reads it, until it is run again with
 `--force`. A job that receives `SIGTERM`, as from a batch system's time limit,
-stops its running program and records the failure before it exits. A rerun deletes only what it can recognise as the
+or is stopped with Ctrl-C stops its program and records the run as
+interrupted before it exits; a failed run is one whose program or omphjc
+failed. When a stage is started again while an earlier run of it is still
+going, the earlier run reports that it was replaced and leaves the record of
+the newer run in place. A rerun deletes only what it can recognise as the
 earlier run's: anything else in the earlier run's place, as after a hard kill
 or a change made to the files since, is moved into `<stage>/omphjc-set-aside/`
 instead and stays there. A file a system tool writes into one of the run's

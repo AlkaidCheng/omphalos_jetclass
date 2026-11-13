@@ -34,6 +34,7 @@ every path relative to the job directory.
 from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.job import (
     Job,
+    ReplacedRunError,
     TerminationError,
     exception_on_termination,
     job_seed,
@@ -78,6 +79,7 @@ __all__ = [
     "TaskResult",
     "TaskStatus",
     "TaskSummary",
+    "ReplacedRunError",
     "TerminationError",
     "exception_on_termination",
     "generate",
