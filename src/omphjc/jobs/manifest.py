@@ -15,7 +15,7 @@ job, under the stage's name::
     }
 
 :mod:`omphjc.jobs.record_file` describes ``schema`` and
-:mod:`omphjc.jobs.records` the record of a task. The file is replaced in one
+:mod:`omphjc.jobs.task` the record of a task. The file is replaced in one
 step whenever it changes, so a crash never leaves a half-written manifest.
 """
 
@@ -25,7 +25,7 @@ from typing import Any, ClassVar
 
 from omphjc import __version__
 from omphjc.jobs.record_file import RecordFile
-from omphjc.jobs.records import TaskRecord, TaskResult
+from omphjc.jobs.task import TaskRecord, TaskResult
 
 
 @dataclass

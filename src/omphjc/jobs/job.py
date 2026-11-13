@@ -18,20 +18,20 @@ import signal
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 from types import FrameType
 from typing import Any
 
 from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.manifest import Manifest
-from omphjc.jobs.records import (
+from omphjc.jobs.task import (
     DONE,
     EVENTS_OUTPUT,
     EventOutput,
+    Task,
     TaskOutcome,
     TaskRecord,
+    TaskStatus,
     timestamp,
 )
 from omphjc.processes.catalogue import ProcessSpec
@@ -48,38 +48,6 @@ class TerminationError(RuntimeError):
 
 TaskBody = Callable[[bool], TaskOutcome]
 """Runs a task; the argument says whether to replace what an earlier run left."""
-
-
-class StageStatus(Enum):
-    """How a stage of a job stands, by the manifest and the output files."""
-
-    NOT_DONE = "not done"
-    """The manifest does not record the stage as done."""
-    OUTPUT_MISSING = "output missing"
-    """The stage is recorded as done and one of its outputs is not on disk."""
-    OUTPUT_SIZE_MISMATCH = "output size mismatch"
-    """The stage is recorded as done and one of its outputs has another size
-    than the manifest records."""
-    DONE = "done"
-    """The stage is recorded as done and each output has its recorded size."""
-
-
-@dataclass(frozen=True)
-class StageCheck:
-    """What :meth:`Job.check_stage` found.
-
-    Parameters
-    ----------
-    status : StageStatus
-        How the stage stands.
-    detail : str
-        A clause that names the output that is missing, or the output of
-        another size with the size found and the size recorded. It is empty
-        for the other statuses.
-    """
-
-    status: StageStatus
-    detail: str = ""
 
 
 def sha256(path: Path) -> str:
@@ -162,87 +130,88 @@ class Job:
     def manifest_path(self) -> Path:
         return self.root_dir / Manifest.file_name
 
-    def task_dir(self, stage: str) -> Path:
-        """Return the directory of the `stage` task, ``<root>/<stage>``."""
-        return inside(self.root_dir, stage)
+    def task_dir(self, name: str) -> Path:
+        """Return the directory of the task `name`, ``<root>/<name>``."""
+        return inside(self.root_dir, name)
 
     def relative_path(self, path: Path) -> str:
         """Return `path` as a POSIX path relative to the job directory."""
         return path.relative_to(self.root_dir).as_posix()
 
-    def check_stage(self, stage: str) -> StageCheck:
-        """Return how `stage` stands, by the manifest and its output files.
+    def task(self, name: str) -> Task:
+        """Return the task `name` as it stands, by the manifest and its output files.
 
-        The size of each output of a stage recorded as done is compared with
+        The size of each output of a task recorded as done is compared with
         the size in the manifest. An output of another size is reported
         before a missing one.
         """
-        record = self.manifest.stages.get(stage)
+        record = self.manifest.stages.get(name)
         if record is None or record.status != DONE:
-            return StageCheck(StageStatus.NOT_DONE)
-        check = StageCheck(StageStatus.DONE)
+            return Task(name, TaskStatus.NOT_DONE)
+        task = Task(name, TaskStatus.DONE)
         for output in record.result.outputs.values():
             try:
                 n_bytes = output.path.stat().st_size
             except FileNotFoundError:
-                check = StageCheck(
-                    StageStatus.OUTPUT_MISSING, f"{output.path} is missing"
+                task = Task(
+                    name, TaskStatus.MISSING_OUTPUT, f"{output.path} is missing"
                 )
                 continue
             if n_bytes != output.n_bytes:
-                return StageCheck(
-                    StageStatus.OUTPUT_SIZE_MISMATCH,
+                return Task(
+                    name,
+                    TaskStatus.CHANGED,
                     f"{output.path} holds {n_bytes} bytes, not the "
-                    f"{output.n_bytes} the {stage} stage recorded",
+                    f"{output.n_bytes} the {name} stage recorded",
                 )
-        return check
+        return task
 
-    def require_done(self, stage: str) -> TaskRecord:
-        """Return the record of `stage`, which must be done with its outputs as recorded.
+    def require_done(self, name: str) -> TaskRecord:
+        """Return the record of task `name`, which must be done with its outputs intact.
 
         Raises
         ------
         ValueError
-            If `stage` is not done or an output is missing; the message names
+            If the task is not done or an output is missing; the message names
             the command to run first. If an output has another size than the
             manifest records; the message names the file, both sizes and
             ``--force``.
         """
-        check = self.check_stage(stage)
-        if check.status is StageStatus.OUTPUT_SIZE_MISMATCH:
+        task = self.task(name)
+        if task.status is TaskStatus.CHANGED:
             raise ValueError(
-                f"{check.detail}; run omphjc {stage} with --force to regenerate "
+                f"{task.detail}; run omphjc {name} with --force to regenerate "
                 "the file"
             )
-        if check.status is not StageStatus.DONE:
+        if task.status is not TaskStatus.DONE:
             raise ValueError(
-                f"The {stage} stage of {self.root_dir} has not run to completion; "
-                f"run omphjc {stage} first"
+                f"The {name} stage of {self.root_dir} has not run to completion; "
+                f"run omphjc {name} first"
             )
-        return self.manifest.stages[stage]
+        return self.manifest.stages[name]
 
-    def require_events(self, stage: str) -> EventOutput:
-        """Return the events `stage` made, which must be done with its outputs as recorded.
+    def require_events(self, name: str) -> EventOutput:
+        """Return the events task `name` made; it must be done with its outputs intact.
 
         Raises
         ------
         ValueError
-            As :meth:`require_done` does, or if the stage made no event file.
+            As :meth:`require_done` does, or if the task made no event file.
         """
-        events = self.require_done(stage).result.outputs.get(EVENTS_OUTPUT)
+        events = self.require_done(name).result.outputs.get(EVENTS_OUTPUT)
         if not isinstance(events, EventOutput):
-            raise ValueError(f"The {stage} stage of {self.root_dir} made no event file")
+            raise ValueError(f"The {name} stage of {self.root_dir} made no event file")
         return events
 
     def run_task(
         self,
-        stage: str,
+        name: str,
         parameters: dict[str, Any],
         body: TaskBody,
         *,
         force: bool = False,
     ) -> TaskRecord:
-        """Run `stage` through `body` unless its result can be kept; record it.
+        """Run task `name` through `body` unless its result can be kept; record it.
 
         A task recorded as done, with its outputs present and the same
         `parameters`, is kept. One recorded as done with other parameters, or
@@ -257,8 +226,9 @@ class Job:
 
         Parameters
         ----------
-        stage : str
-            Name of the stage; its task's directory is ``<root>/<stage>``.
+        name : str
+            Name of the task, the name of its stage; its directory is
+            ``<root>/<name>``.
         parameters : dict
             What the task is asked for, as JSON values.
         body : TaskBody
@@ -284,33 +254,33 @@ class Job:
         Exception
             Whatever `body` raised, after the failure is recorded.
         """
-        earlier = self.manifest.stages.get(stage)
+        earlier = self.manifest.stages.get(name)
         if earlier is not None and earlier.status == DONE and not force:
             if earlier.parameters != parameters:
                 raise ValueError(
-                    f"{stage} in {self.root_dir} ran with {earlier.parameters}; "
+                    f"{name} in {self.root_dir} ran with {earlier.parameters}; "
                     f"pass force to run it with {parameters}"
                 )
-            check = self.check_stage(stage)
-            if check.status is StageStatus.DONE:
+            task = self.task(name)
+            if task.status is TaskStatus.DONE:
                 return earlier
-            if check.status is StageStatus.OUTPUT_SIZE_MISMATCH:
+            if task.status is TaskStatus.CHANGED:
                 raise ValueError(
-                    f"{check.detail}; run omphjc {stage} with --force to "
+                    f"{task.detail}; run omphjc {name} with --force to "
                     "regenerate the file"
                 )
         overwrite = force or earlier is not None
         started = timestamp()
         clock = time.monotonic()
         self._record_identity()
-        self.manifest.stages[stage] = TaskRecord.running(
+        self.manifest.stages[name] = TaskRecord.running(
             started=started, parameters=parameters
         )
         self._write_manifest()
         try:
             outcome = body(overwrite)
         except BaseException as error:
-            self.manifest.stages[stage] = TaskRecord.failed(
+            self.manifest.stages[name] = TaskRecord.failed(
                 started=started, parameters=parameters, error=str(error)
             )
             self._write_manifest()
@@ -322,7 +292,7 @@ class Job:
             wall_seconds=time.monotonic() - clock,
             root_dir=self.root_dir,
         )
-        self.manifest.stages[stage] = record
+        self.manifest.stages[name] = record
         self._write_manifest()
         return record
 
@@ -336,8 +306,8 @@ class Job:
         """
         found = [
             folder
-            for stage in self.manifest.stages
-            for folder in set_aside_folders(self.task_dir(stage))
+            for name in self.manifest.stages
+            for folder in set_aside_folders(self.task_dir(name))
         ]
         return sorted(found, key=lambda folder: (folder.created, folder.path))
 
@@ -352,8 +322,8 @@ class Job:
         """
         removed = [
             folder
-            for stage in self.manifest.stages
-            for folder in clear_set_aside_folders(self.task_dir(stage))
+            for name in self.manifest.stages
+            for folder in clear_set_aside_folders(self.task_dir(name))
         ]
         return sorted(removed, key=lambda folder: (folder.created, folder.path))
 
