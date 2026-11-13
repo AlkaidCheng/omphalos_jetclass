@@ -142,7 +142,7 @@ shares, and `processes`, with one entry per process (see
 |---|---|
 | `models_dir` | Folder of the models imported by path; `models` by default |
 | `delphes_card` | Delphes card of every run |
-| `definitions` | MadGraph multiparticle definitions for every process, written before each entry's own (see [Models](#models)) |
+| `definitions` | List of MadGraph multiparticle definitions for every process, written before each entry's own (see [Models](#models)) |
 | `run_card` | Run-card values for every process |
 | `pythia` | Pythia settings for every process (see [Pythia settings](#pythia-settings)) |
 | `pythia_matching` | Pythia settings added for MLM-matched processes |
@@ -242,8 +242,8 @@ An entry needs the first four keys below; the others are optional.
 | `label` | Class name of the sample, unique within the catalogue | required |
 | `description` | The physics, with formulas in LaTeX syntax | required |
 | `model` | MadGraph model, with an optional restriction suffix (see [Models](#models)) | required |
-| `processes` | MadGraph process lines; the first is generated and the others are added to it | required |
-| `definitions` | Multiparticle definitions, without the leading `define`, written after `common.definitions` | none |
+| `processes` | List of MadGraph process lines; the first is generated and the others are added to it | required |
+| `definitions` | List of multiparticle definitions, without the leading `define`, written after `common.definitions` | none |
 | `run_card` | Run-card values, added to `common.run_card` and overriding it | none |
 | `pythia` | Pythia settings, added to `common.pythia` and overriding it | none |
 | `matching` | `true` for an MLM-matched sample: the Pythia settings gain `common.pythia_matching` and the matching values derived from the run card | `false` |
