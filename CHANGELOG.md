@@ -176,3 +176,6 @@
   malformed catalogue, including `definitions` or `processes` that are not
   lists of strings, and `omphjc --catalogue` reports it without a traceback.
   (#62)
+- `read_catalogue` refuses a top-level key other than `common` and
+  `processes`, and a `matching` that is not a boolean, so a quoted `"no"` no
+  longer turns matching on. (#63)
