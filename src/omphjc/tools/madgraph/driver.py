@@ -99,6 +99,8 @@ from omphjc.tools.madgraph.cards import (
 )
 from omphjc.tools.madgraph.madspin_card import MadSpinCard
 from omphjc.tools.madgraph.proc_card import ProcCard
+from omphjc.tools.madgraph.run_card import RunCard
+from omphjc.tools.madgraph.slha_card import ParamCard
 from omphjc.workspace import ProgramRun, ProgramWorkspace
 
 # MadGraph's command-line program, bin/mg5_aMC of an installation.
@@ -152,6 +154,10 @@ class MadGraphRun(ProgramRun):
         the cross section and the run card.
     n_cores : int
         Number of cores MadGraph ran its jobs on.
+    card_paths : Mapping[str, Path]
+        The cards in the ``Cards`` directory of `process_dir`:
+        ``proc_card``, ``run_card``, ``param_card`` and, with MadSpin,
+        ``madspin_card``. A card that MadGraph did not write is left out.
     """
 
     process_dir: Path
@@ -288,6 +294,7 @@ def generate_events(
         output_path=output_path,
         banner=Banner.read(output_path),
         n_cores=n_cores,
+        card_paths=workspace.card_paths,
         log_path=workspace.log_path,
         usage=workspace.usage,
         set_aside=set_aside,
@@ -345,6 +352,7 @@ class MadGraphWorkspace(ProgramWorkspace):
     """
 
     purpose = _RUN_PURPOSE
+    card_classes = (ProcCard, RunCard, ParamCard, MadSpinCard)
     program = _MG5_EXECUTABLE
     description = f"MadGraph's bin/{_MG5_EXECUTABLE}"
     log_name = _LOG_FILE
@@ -390,6 +398,11 @@ class MadGraphWorkspace(ProgramWorkspace):
         return names
 
     @property
+    def cards_dir(self) -> Path:
+        """The ``Cards`` directory of MadGraph's process directory."""
+        return self.process_dir / "Cards"
+
+    @property
     def output_path(self) -> Path:
         """The event file MadGraph writes.
 
@@ -432,7 +445,7 @@ class MadGraphWorkspace(ProgramWorkspace):
         unconfirmed = list(unconfirmed)
         # MadGraph writes the process card on output. A process directory
         # without it is not one that a run leaves.
-        proc_card_path = self.process_dir / "Cards" / ProcCard.file_name
+        proc_card_path = self.cards_dir / ProcCard.file_name
         if self.process_dir.is_dir() and not proc_card_path.is_file():
             unconfirmed.append(self.spec.name)
         return super().clear_earlier_run(unconfirmed=unconfirmed)
@@ -481,7 +494,7 @@ class MadGraphWorkspace(ProgramWorkspace):
         MadGraphError
             If MadGraph wrote no process directory.
         """
-        cards_dir = self.process_dir / "Cards"
+        cards_dir = self.cards_dir
         if not cards_dir.is_dir():
             raise self.make_error(
                 f"MadGraph wrote no process directory {self.process_dir}"

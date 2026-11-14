@@ -247,6 +247,15 @@ class TaskCard:
         return cls(path, hashlib.sha256(path.read_bytes()).hexdigest())
 
 
+def read_cards(card_paths: Mapping[str, Path]) -> dict[str, TaskCard]:
+    """Return the card at each of `card_paths`, under the same name.
+
+    Each card is recorded with the SHA-256 of its file as it is. A driver's
+    run record gives the paths (:attr:`omphjc.workspace.Run.card_paths`).
+    """
+    return {name: TaskCard.from_path(path) for name, path in card_paths.items()}
+
+
 @dataclass(frozen=True)
 class TaskResult:
     """What a task made.

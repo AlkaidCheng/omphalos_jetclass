@@ -53,11 +53,12 @@ def test_a_shower_runs_in_its_own_working_directory(
     assert run.output_path == workdir / "particles.root" and run.output_path.is_file()
     events = (workdir / "events.lhe").read_text()
     assert events.count("<event>") == 3
-    cmnd = run.cmnd_path.read_text()
+    cmnd = run.card_paths["command_file"].read_text()
     assert "Beams:LHEF = events.lhe" in cmnd
     assert "Main:numberOfEvents = 3" in cmnd
     assert "Random:seed = 7" in cmnd
-    assert run.card_path.read_text() == particles_card_text()
+    assert set(run.card_paths) == {"command_file", "particles_card"}
+    assert run.card_paths["particles_card"].read_text() == particles_card_text()
     assert run.statistics.pythia_version == "8.318"
     assert (run.statistics.events_read, run.statistics.events_accepted) == (3, 3)
     assert run.log_path == workdir / "shower.log"
@@ -82,7 +83,7 @@ def test_a_plain_lhe_file_is_copied_and_no_seed_leaves_pythia_to_the_clock(
         delphes_pythia8_path=delphes_pythia8_path,
     )
     assert (tmp_path / "shower" / "events.lhe").read_text() == lhe_path.read_text()
-    assert "Random:seed = 0" in run.cmnd_path.read_text()
+    assert "Random:seed = 0" in run.card_paths["command_file"].read_text()
     assert run.statistics.events_read == 2
 
 
@@ -106,7 +107,7 @@ def test_a_matched_process_showers_with_matching_and_loses_events_to_it(
         overrides={"Main:timesAllowErrors": 5},
         delphes_pythia8_path=delphes_pythia8_path,
     )
-    cmnd = run.cmnd_path.read_text()
+    cmnd = run.card_paths["command_file"].read_text()
     assert "JetMatching:merge = on" in cmnd
     assert "Main:timesAllowErrors = 5" in cmnd
     assert (run.statistics.events_read, run.statistics.events_accepted) == (4, 2)

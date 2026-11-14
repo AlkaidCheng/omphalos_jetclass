@@ -129,17 +129,14 @@ class ShowerRun(ProgramRun):
     output_path : Path
         The showered events. This is a Delphes ROOT file that holds the
         generator record of every event in its ``Particle`` branch.
-    cmnd_path : Path
-        The Pythia command file that the run used.
-    card_path : Path
-        The Delphes card that the run used. It is the card that writes the
+    card_paths : Mapping[str, Path]
+        Two cards, as the run used them: ``command_file``, the Pythia command
+        file, and ``particles_card``, the Delphes card that writes the
         generator record.
     statistics : ShowerStatistics
         Pythia's version and event counts, read from the log.
     """
 
-    cmnd_path: Path
-    card_path: Path
     statistics: ShowerStatistics
 
 
@@ -289,8 +286,7 @@ def shower_events(
         raise workspace.make_error(f"DelphesPythia8 did not finish: {error}") from None
     return ShowerRun(
         output_path=workspace.output_path,
-        cmnd_path=workspace.cmnd_path,
-        card_path=workspace.card_path,
+        card_paths=workspace.card_paths,
         log_path=workspace.log_path,
         statistics=statistics,
         usage=workspace.usage,
@@ -333,6 +329,7 @@ class ShowerWorkspace(ProgramWorkspace):
     """
 
     purpose = _RUN_PURPOSE
+    card_classes = (PythiaCmnd, ParticlesCard)
     program = _DELPHES_PYTHIA8
     description = f"Delphes's {_DELPHES_PYTHIA8}"
     log_name = _LOG_FILE
@@ -377,13 +374,7 @@ class ShowerWorkspace(ProgramWorkspace):
 
     @property
     def artifacts(self) -> list[str]:
-        return [
-            _EVENTS_FILE,
-            PythiaCmnd.file_name,
-            ParticlesCard.file_name,
-            _OUTPUT_FILE,
-            *super().artifacts,
-        ]
+        return [_EVENTS_FILE, _OUTPUT_FILE, *super().artifacts]
 
     def write_inputs(self, lhe_path: Path, cmnd: PythiaCmnd) -> None:
         """Decompress `lhe_path` into the directory and write the command file and the card."""

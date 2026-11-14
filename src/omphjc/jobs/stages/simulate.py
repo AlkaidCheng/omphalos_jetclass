@@ -10,10 +10,10 @@ from omphjc.jobs.task import (
     EVENTS_OUTPUT,
     INPUT_FINGERPRINT_PARAMETER,
     EventOutput,
-    TaskCard,
     TaskOutcome,
     TaskRecord,
     TaskResult,
+    read_cards,
 )
 from omphjc.tools.delphes.driver import (
     SimulationWorkspace,
@@ -114,7 +114,7 @@ def simulate(
                         fingerprint=delphes_file.fingerprint(),
                     )
                 },
-                cards={"detector_card": TaskCard.from_path(run.card_path)},
+                cards=read_cards(run.card_paths),
             ),
             usage=run.usage.as_record(),
             set_aside_dir=run.set_aside,
