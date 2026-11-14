@@ -60,6 +60,9 @@ class ProcCard(InputCard):
     format_name: ClassVar[str] = "proc_card"
     record_version: ClassVar[int] = 1
     reference_file_name: ClassVar[str] = "proc_card_mg5.dat"
+    card_name: ClassVar[str] = "proc_card"
+    file_name: ClassVar[str] = "proc_card_mg5.dat"
+    description: ClassVar[str] = "The process card that MadGraph writes on output."
 
     commands: tuple[str, ...]
 

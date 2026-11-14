@@ -97,6 +97,8 @@ from omphjc.tools.madgraph.cards import (
     madspin_card_text,
     proc_card_commands,
 )
+from omphjc.tools.madgraph.madspin_card import MadSpinCard
+from omphjc.tools.madgraph.proc_card import ProcCard
 from omphjc.workspace import ProgramRun, ProgramWorkspace
 
 # MadGraph's command-line program, bin/mg5_aMC of an installation.
@@ -113,12 +115,7 @@ _LOG_FILE = "madgraph.log"
 _EVENT_FILE = "unweighted_events.lhe.gz"
 _FIRST_RUN = "run_01"
 _DECAYED_RUN = "run_01_decayed_1"
-_MADSPIN_CARD = "madspin_card.dat"
 _ME5_CONFIGURATION = "me5_configuration.txt"
-
-# The process card MadGraph writes into Cards/ on output: the evidence that a
-# directory is a MadGraph process directory, which a rerun may replace.
-_PROC_CARD = "proc_card_mg5.dat"
 
 # Folder of the model copies in a working directory.
 _MODELS_DIR = "models"
@@ -433,8 +430,10 @@ class MadGraphWorkspace(ProgramWorkspace):
                     f"{self.spec.model_dir}"
                 )
         unconfirmed = list(unconfirmed)
-        process_dir = self.process_dir
-        if process_dir.is_dir() and not (process_dir / "Cards" / _PROC_CARD).is_file():
+        # MadGraph writes the process card on output. A process directory
+        # without it is not one that a run leaves.
+        proc_card_path = self.process_dir / "Cards" / ProcCard.file_name
+        if self.process_dir.is_dir() and not proc_card_path.is_file():
             unconfirmed.append(self.spec.name)
         return super().clear_earlier_run(unconfirmed=unconfirmed)
 
@@ -490,6 +489,6 @@ class MadGraphWorkspace(ProgramWorkspace):
         with (cards_dir / _ME5_CONFIGURATION).open("a", encoding="utf-8") as stream:
             stream.write(f"\nrun_mode = {_MULTICORE_RUN_MODE}\nnb_core = {n_cores}\n")
         if self.spec.uses_madspin:
-            (cards_dir / _MADSPIN_CARD).write_text(
+            (cards_dir / MadSpinCard.file_name).write_text(
                 madspin_card_text(self.spec), encoding="utf-8"
             )

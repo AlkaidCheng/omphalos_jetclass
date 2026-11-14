@@ -67,7 +67,7 @@ from pathlib import Path
 from omphjc.processes.catalogue import ProcessSpec, SettingValue
 from omphjc.programs import ProgramError
 from omphjc.safe_paths import require_file, require_unoccupied
-from omphjc.tools.delphes.card import particles_card_text
+from omphjc.tools.delphes.card import ParticlesCard, particles_card_text
 from omphjc.tools.pythia.cmnd import PythiaCmnd
 from omphjc.workspace import ProgramRun, ProgramWorkspace
 
@@ -75,8 +75,6 @@ from omphjc.workspace import ProgramRun, ProgramWorkspace
 _DELPHES_PYTHIA8 = "DelphesPythia8"
 
 _EVENTS_FILE = "events.lhe"
-_CMND_FILE = "pythia.cmnd"
-_CARD_FILE = "particles_card.tcl"
 _OUTPUT_FILE = "particles.root"
 _LOG_FILE = "shower.log"
 
@@ -365,12 +363,12 @@ class ShowerWorkspace(ProgramWorkspace):
     @property
     def cmnd_path(self) -> Path:
         """The Pythia command file of the run."""
-        return self.workdir / _CMND_FILE
+        return self.workdir / PythiaCmnd.file_name
 
     @property
     def card_path(self) -> Path:
         """The Delphes card of the run, the one that writes the generator record."""
-        return self.workdir / _CARD_FILE
+        return self.workdir / ParticlesCard.file_name
 
     @property
     def output_path(self) -> Path:
@@ -379,7 +377,13 @@ class ShowerWorkspace(ProgramWorkspace):
 
     @property
     def artifacts(self) -> list[str]:
-        return [_EVENTS_FILE, _CMND_FILE, _CARD_FILE, _OUTPUT_FILE, *super().artifacts]
+        return [
+            _EVENTS_FILE,
+            PythiaCmnd.file_name,
+            ParticlesCard.file_name,
+            _OUTPUT_FILE,
+            *super().artifacts,
+        ]
 
     def write_inputs(self, lhe_path: Path, cmnd: PythiaCmnd) -> None:
         """Decompress `lhe_path` into the directory and write the command file and the card."""
@@ -399,7 +403,12 @@ class ShowerWorkspace(ProgramWorkspace):
             running at the deadline.
         """
         self.run(
-            [self.program_path, _CARD_FILE, _CMND_FILE, _OUTPUT_FILE],
+            [
+                self.program_path,
+                ParticlesCard.file_name,
+                PythiaCmnd.file_name,
+                _OUTPUT_FILE,
+            ],
             failure_message="DelphesPythia8 failed",
         )
 

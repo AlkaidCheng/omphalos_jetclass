@@ -233,6 +233,27 @@ class DelphesCard(Card):
         return differences
 
 
+class DetectorCard(DelphesCard):
+    """The detector card of a simulation: the Delphes card ``DelphesROOT`` reads."""
+
+    card_name: ClassVar[str] = "detector_card"
+    file_name: ClassVar[str] = "delphes_card.tcl"
+    description: ClassVar[str] = "The detector card, with the seed of the run."
+
+
+class ParticlesCard(DelphesCard):
+    """The particles card of a shower: the Delphes card ``DelphesPythia8`` reads.
+
+    Its text is :func:`particles_card_text`.
+    """
+
+    card_name: ClassVar[str] = "particles_card"
+    file_name: ClassVar[str] = "particles_card.tcl"
+    description: ClassVar[str] = (
+        "The Delphes card that writes the generator record and simulates nothing."
+    )
+
+
 def reference_card_text() -> str:
     """Return the official JetClass card as text."""
     return delphes_reference_card_path().read_text(encoding="utf-8")

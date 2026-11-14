@@ -15,6 +15,7 @@ from omphjc.tools.madgraph.driver import (
     MadGraphWorkspace,
     generate_events,
 )
+from omphjc.tools.madgraph.proc_card import ProcCard
 
 
 def test_a_process_runs_in_its_own_working_directory(
@@ -150,12 +151,10 @@ def test_a_process_directory_without_the_process_card_is_set_aside(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import omphjc.tools.madgraph.driver as driver
-
     generate_events(
         specs["HToBB"], workdir=tmp_path, n_events=10, seed=1, mg5_path=mg5_path
     )
-    monkeypatch.setattr(driver, "_PROC_CARD", "a_card_madgraph_did_not_write.dat")
+    monkeypatch.setattr(ProcCard, "file_name", "a_card_madgraph_did_not_write.dat")
     run = generate_events(
         specs["HToBB"],
         workdir=tmp_path,

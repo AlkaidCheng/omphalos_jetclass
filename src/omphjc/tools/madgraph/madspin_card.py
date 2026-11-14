@@ -32,6 +32,9 @@ class MadSpinCard(InputCard):
     format_name: ClassVar[str] = "madspin_card"
     record_version: ClassVar[int] = 1
     reference_file_name: ClassVar[str] = "madspin_card.dat"
+    card_name: ClassVar[str] = "madspin_card"
+    file_name: ClassVar[str] = "madspin_card.dat"
+    description: ClassVar[str] = "The MadSpin card, for a process that MadSpin decays."
 
     options: dict[str, RunCardValue]
     decays: frozenset[str]

@@ -177,6 +177,8 @@
 - `task.json` lists the cards each stage ran with under `result.cards`,
   each with its path and SHA-256, in place of the `cards`, `settings` and
   `card` entries of the metadata. (#72)
+- A card class names its card, its file and what the card is (`card_name`,
+  `file_name`, `description`). (#73)
 
 ### Fixed
 
