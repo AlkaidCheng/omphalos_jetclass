@@ -40,6 +40,7 @@ from omphjc.jobs import (
     exception_on_termination,
     generate,
     job_seed,
+    read_cards,
     shower,
     simulate,
 )
@@ -293,6 +294,8 @@ def test_a_card_is_recorded_with_the_hash_of_its_file(tmp_path: Path) -> None:
     card = TaskCard.from_path(card_path)
     assert card.path == card_path
     assert card.sha256 == hashlib.sha256(b"10 = nevents\n").hexdigest()
+    assert read_cards({"run_card": card_path}) == {"run_card": card}
+    assert read_cards({}) == {}
 
 
 def test_a_changed_or_deleted_card_leaves_the_task_done(

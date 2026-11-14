@@ -71,11 +71,9 @@ class SimulationRun(ProgramRun):
     ----------
     output_path : Path
         The Delphes ROOT file.
-    card_path : Path
-        The detector card that the run used.
+    card_paths : Mapping[str, Path]
+        One card, ``detector_card``: the detector card that the run used.
     """
-
-    card_path: Path
 
 
 def detector_card_text(spec: ProcessSpec, card_path: Path | None = None) -> str:
@@ -207,7 +205,7 @@ def simulate_events(
         )
     return SimulationRun(
         output_path=workspace.output_path,
-        card_path=workspace.card_path,
+        card_paths=workspace.card_paths,
         log_path=workspace.log_path,
         usage=workspace.usage,
         set_aside=set_aside,
@@ -249,6 +247,7 @@ class SimulationWorkspace(ProgramWorkspace):
     """
 
     purpose = _RUN_PURPOSE
+    card_classes = (DetectorCard,)
     program = _DELPHES_ROOT
     description = f"Delphes's {_DELPHES_ROOT}"
     log_name = _LOG_FILE
@@ -283,7 +282,7 @@ class SimulationWorkspace(ProgramWorkspace):
 
     @property
     def artifacts(self) -> list[str]:
-        return [DetectorCard.file_name, _OUTPUT_FILE, *super().artifacts]
+        return [_OUTPUT_FILE, *super().artifacts]
 
     def write_card(self, card_text: str) -> None:
         """Write the detector card the run uses."""

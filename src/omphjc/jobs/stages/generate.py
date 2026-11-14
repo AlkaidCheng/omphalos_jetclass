@@ -1,6 +1,7 @@
 """The generation stage: parton-level events from MadGraph."""
 
 import shutil
+from collections.abc import Mapping
 from pathlib import Path
 
 from omphjc.events.formats import EventFormat
@@ -8,10 +9,10 @@ from omphjc.jobs.job import Job
 from omphjc.jobs.task import (
     EVENTS_OUTPUT,
     EventOutput,
-    TaskCard,
     TaskOutcome,
     TaskRecord,
     TaskResult,
+    read_cards,
 )
 from omphjc.tools.madgraph.driver import MadGraphWorkspace, generate_events
 from omphjc.tools.madgraph.lhe_file import LHEFile
@@ -20,14 +21,6 @@ GENERATE = "generate"
 """The stage's name and directory, ``<job>/generate/``."""
 
 _CARDS_DIR = "cards"
-# The cards MadGraph writes into its Cards directory that a job keeps as run:
-# the file of each, under the name the record gives the card.
-_MADGRAPH_CARD_FILE_NAMES = {
-    "proc_card": "proc_card_mg5.dat",
-    "run_card": "run_card.dat",
-    "param_card": "param_card.dat",
-    "madspin_card": "madspin_card.dat",
-}
 
 
 def generate(
@@ -96,7 +89,7 @@ def generate(
             log_dir=run_dir,
             mg5_path=mg5_path,
         )
-        cards = _copy_cards(run.process_dir / "Cards", task_dir / _CARDS_DIR)
+        card_copy_paths = _copy_cards(run.card_paths, task_dir / _CARDS_DIR)
         return TaskOutcome(
             TaskResult(
                 outputs={
@@ -108,7 +101,7 @@ def generate(
                         fingerprint=LHEFile.read(run.output_path).fingerprint(),
                     )
                 },
-                cards=cards,
+                cards=read_cards(card_copy_paths),
                 metadata={
                     "madgraph_version": run.banner.version,
                     "cross_section_pb": run.banner.cross_section_pb,
@@ -126,15 +119,14 @@ def generate(
     )
 
 
-def _copy_cards(source_dir: Path, target_dir: Path) -> dict[str, TaskCard]:
-    """Copy the cards present in `source_dir` into `target_dir`; return the copies."""
+def _copy_cards(card_paths: Mapping[str, Path], target_dir: Path) -> dict[str, Path]:
+    """Copy each card of `card_paths` into `target_dir`.
+
+    The copies are returned under the names of the cards.
+    """
     target_dir.mkdir(parents=True, exist_ok=True)
-    cards = {}
-    for name, file_name in _MADGRAPH_CARD_FILE_NAMES.items():
-        card_path = source_dir / file_name
-        if not card_path.is_file():
-            continue
-        copy_path = target_dir / file_name
-        shutil.copyfile(card_path, copy_path)
-        cards[name] = TaskCard.from_path(copy_path)
-    return cards
+    copy_paths = {}
+    for name, card_path in card_paths.items():
+        copy_paths[name] = target_dir / card_path.name
+        shutil.copyfile(card_path, copy_paths[name])
+    return copy_paths

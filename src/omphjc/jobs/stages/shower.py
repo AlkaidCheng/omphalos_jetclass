@@ -10,10 +10,10 @@ from omphjc.jobs.task import (
     EVENTS_OUTPUT,
     INPUT_FINGERPRINT_PARAMETER,
     EventOutput,
-    TaskCard,
     TaskOutcome,
     TaskRecord,
     TaskResult,
+    read_cards,
 )
 from omphjc.processes.catalogue import SettingValue
 from omphjc.tools.pythia.driver import ShowerWorkspace, shower_events
@@ -123,10 +123,7 @@ def shower(
                         fingerprint=DelphesROOTFile.read(run.output_path).fingerprint(),
                     )
                 },
-                cards={
-                    "command_file": TaskCard.from_path(run.cmnd_path),
-                    "particles_card": TaskCard.from_path(run.card_path),
-                },
+                cards=read_cards(run.card_paths),
                 metadata=metadata,
             ),
             usage=run.usage.as_record(),

@@ -65,6 +65,7 @@ from omphjc.jobs.task import (
     TaskResult,
     TaskRun,
     TaskStatus,
+    read_cards,
 )
 
 __all__ = [
@@ -96,6 +97,7 @@ __all__ = [
     "exception_on_termination",
     "generate",
     "job_seed",
+    "read_cards",
     "shower",
     "simulate",
 ]

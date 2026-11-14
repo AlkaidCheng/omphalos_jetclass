@@ -141,6 +141,27 @@ def _commands(log_path: Path) -> list[str]:
     return [line for line in log_path.read_text().splitlines() if line[:2] == "$ "]
 
 
+def test_a_run_names_the_cards_its_workspace_declares(
+    driver: Driver, workdir: Path
+) -> None:
+    card_classes = {
+        card_class.card_name: card_class
+        for card_class in driver.workspace_type.card_classes
+    }
+    assert len(card_classes) == len(driver.workspace_type.card_classes)
+    run = driver.run(workdir=workdir, seed=1)
+    assert run.card_paths and set(run.card_paths) <= set(card_classes)
+    for card_name, card_path in run.card_paths.items():
+        card_class = card_classes[card_name]
+        assert card_path.name == card_class.file_name
+        card = card_class.read(card_path)
+        assert card.fingerprint().startswith(f"{card_class.format_name}-v")
+    stamp = read_stamp(workdir)
+    assert stamp is not None
+    for card_path in run.card_paths.values():
+        assert card_path.relative_to(workdir.resolve()).parts[0] in stamp.artifacts
+
+
 CARD_CLASSES = (
     ProcCard,
     RunCard,

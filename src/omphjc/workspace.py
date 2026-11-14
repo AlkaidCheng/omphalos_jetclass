@@ -31,13 +31,13 @@ own fields.
 
 import os
 import time
-from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
+from omphjc.data_files import Card
 from omphjc.programs import (
     ProgramError,
     ProgramUsage,
@@ -65,10 +65,15 @@ class Run:
         Folder in the working directory that holds what an earlier run left
         and this run could not confirm as its own. This run moved it there
         instead of deleting it. It is ``None`` when nothing was set aside.
+    card_paths : Mapping[str, Path]
+        The cards of the run, as the run used them, by the name of each card
+        (:attr:`Workspace.card_paths`). A card is a file that steers the
+        run's program.
     """
 
     output_path: Path
     set_aside: Path | None = None
+    card_paths: Mapping[str, Path] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -88,14 +93,16 @@ class ProgramRun(Run):
     usage: ProgramUsage
 
 
-class Workspace(ABC):
+class Workspace:
     """The directory of one process's runs for one purpose.
 
     The directory is stamped, cleared and sealed. A subclass does the
     following:
 
     - It names its purpose in the class attribute below.
-    - It lists what a run makes in :attr:`artifacts`.
+    - It lists the classes of the cards of its run in :attr:`card_classes`,
+      when the run uses any.
+    - It adds what a run makes, other than its cards, to :attr:`artifacts`.
     - It adds the steps of its run, each inside
       ``with workspace.sealed_run():``.
 
@@ -123,6 +130,8 @@ class Workspace(ABC):
 
     purpose: ClassVar[str]
     """What the directory is used for, written in its stamp."""
+    card_classes: ClassVar[tuple[type[Card], ...]] = ()
+    """The class of each card of a run. Each class names its card and its file."""
 
     def __init__(self, process_name: str, workdir: Path) -> None:
         self.process_name = process_name
@@ -130,9 +139,41 @@ class Workspace(ABC):
         self.details = {"process": process_name}
 
     @property
-    @abstractmethod
+    def cards_dir(self) -> Path:
+        """The directory where a run keeps its cards: the working directory.
+
+        A subclass whose program keeps them elsewhere replaces this property.
+        """
+        return self.workdir
+
+    @property
     def artifacts(self) -> list[str]:
-        """What a run makes in the directory, as POSIX paths relative to it."""
+        """What a run makes in the directory, as POSIX paths relative to it.
+
+        The base class lists the file of each card in :attr:`card_classes`,
+        and a subclass adds the rest of what its run makes.
+
+        The cards are listed only when :attr:`cards_dir` is the working
+        directory. Cards that a program keeps elsewhere are inside a
+        directory that the subclass lists, and an artifact inside another
+        would be cleared twice.
+        """
+        if self.cards_dir != self.workdir:
+            return []
+        return [card_class.file_name for card_class in self.card_classes]
+
+    @property
+    def card_paths(self) -> dict[str, Path]:
+        """The cards of a run that exist, by the name of each card.
+
+        The names and the files are those of :attr:`card_classes`. The run
+        record of the driver carries the mapping (:attr:`Run.card_paths`).
+        """
+        card_paths = {
+            card_class.card_name: self.cards_dir / card_class.file_name
+            for card_class in self.card_classes
+        }
+        return {name: path for name, path in card_paths.items() if path.is_file()}
 
     @contextmanager
     def sealed_run(self) -> Iterator[Path | None]:
@@ -288,8 +329,12 @@ class ProgramWorkspace(Workspace):
 
     @property
     def artifacts(self) -> list[str]:
-        """The log, when it is in the directory; a subclass adds what its run makes."""
-        return [self.log_name] if self.log_dir is None else []
+        """The cards and, when it is in the directory, the log.
+
+        A subclass adds the rest of what its run makes.
+        """
+        log_names = [self.log_name] if self.log_dir is None else []
+        return [*super().artifacts, *log_names]
 
     def run(
         self, command: Sequence[str | os.PathLike[str]], *, failure_message: str

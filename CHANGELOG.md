@@ -179,6 +179,10 @@
   `card` entries of the metadata. (#72)
 - A card class names its card, its file and what the card is (`card_name`,
   `file_name`, `description`). (#73)
+- A workspace lists the classes of its cards in `card_classes`, and a
+  driver's run record names the cards of its run in `card_paths`, in place
+  of `ShowerRun.cmnd_path`, `ShowerRun.card_path` and
+  `SimulationRun.card_path`. (#74)
 
 ### Fixed
 

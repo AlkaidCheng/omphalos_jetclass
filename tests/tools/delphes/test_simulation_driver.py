@@ -33,7 +33,8 @@ def test_a_simulation_runs_in_its_own_working_directory(
         delphes_root_path=delphes_root_path,
     )
     assert run.output_path == workdir / "delphes.root" and run.output_path.is_file()
-    card = run.card_path.read_text()
+    assert set(run.card_paths) == {"detector_card"}
+    card = run.card_paths["detector_card"].read_text()
     assert card.startswith(reference_card_text())
     assert card.endswith("\nset RandomSeed 7\n")
     assert run.log_path == workdir / "simulate.log"
@@ -84,7 +85,7 @@ def test_another_card_can_be_run_and_no_seed_leaves_it_alone(
         card_path=card,
         delphes_root_path=delphes_root_path,
     )
-    assert run.card_path.read_text() == card.read_text()
+    assert run.card_paths["detector_card"].read_text() == card.read_text()
     assert detector_card_text(specs["HToBB"], card) == card.read_text()
     assert detector_card_text(specs["HToBB"]) == reference_card_text()
     with pytest.raises(FileNotFoundError, match="Delphes card"):

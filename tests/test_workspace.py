@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from omphjc.data_files import Card
 from omphjc.programs import ProgramError
 from omphjc.stamps import SET_ASIDE_DIR, StampError, read_stamp, write_stamp
 from omphjc.workspace import ProgramWorkspace, Workspace
@@ -23,11 +24,63 @@ class PlainWorkspace(Workspace):
         return ARTIFACTS
 
 
+class NoteCard(Card):
+    """A card for the tests, which is never parsed."""
+
+    card_name = "note_card"
+    file_name = "note.dat"
+    description = "A note that steers nothing."
+
+
+class CardWorkspace(Workspace):
+    """A workspace whose run keeps one card in the working directory."""
+
+    purpose = PURPOSE
+    card_classes = (NoteCard,)
+
+
+class NestedCardWorkspace(CardWorkspace):
+    """A workspace whose run keeps its card in a directory of its own."""
+
+    @property
+    def cards_dir(self) -> Path:
+        return self.workdir / "cards"
+
+    @property
+    def artifacts(self) -> list[str]:
+        return ["cards", *super().artifacts]
+
+
+def test_the_cards_in_the_working_directory_are_artifacts(tmp_path: Path) -> None:
+    workspace = CardWorkspace("HToBB", tmp_path / "run")
+    assert workspace.artifacts == ["note.dat"]
+    card_path = workspace.workdir / "note.dat"
+    with workspace.sealed_run():
+        card_path.write_text("a note")
+    stamp = read_stamp(workspace.workdir)
+    assert stamp is not None and list(stamp.artifacts) == ["note.dat"]
+    assert workspace.card_paths == {"note_card": card_path}
+    with workspace.sealed_run():
+        assert not card_path.exists()
+
+
+def test_cards_in_another_directory_are_not_listed_again(tmp_path: Path) -> None:
+    workspace = NestedCardWorkspace("HToBB", tmp_path / "run")
+    assert workspace.artifacts == ["cards"]
+    with workspace.sealed_run():
+        workspace.cards_dir.mkdir()
+        (workspace.cards_dir / "note.dat").write_text("a note")
+    assert workspace.card_paths == {"note_card": workspace.cards_dir / "note.dat"}
+    stamp = read_stamp(workspace.workdir)
+    assert stamp is not None and list(stamp.artifacts) == ["cards"]
+
+
 def test_entering_sealed_run_creates_and_stamps_the_directory(tmp_path: Path) -> None:
     workdir = tmp_path / "run"
     workspace = PlainWorkspace("HToBB", workdir)
     assert workspace.workdir == workdir.resolve()
     assert workspace.artifacts == ARTIFACTS
+    assert workspace.card_paths == {}
     with workspace.sealed_run() as set_aside:
         stamp = read_stamp(workdir)
         assert stamp is not None and stamp.purpose == PURPOSE
