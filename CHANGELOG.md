@@ -185,6 +185,8 @@
   `SimulationRun.card_path`. (#74)
 - `Job` addresses a task by its `Stage` (`GenerateStage`, `ShowerStage`,
   `SimulateStage`) in place of the name of the task. (#75)
+- `omphjc.jobs.simulate` takes a detector simulator, such as
+  `omphjc.tools.delphes.adapter.DelphesSimulator`. (#76)
 
 ### Fixed
 

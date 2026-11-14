@@ -19,13 +19,14 @@ name from a catalogue therefore cannot place a job outside `outdir`.
 
 import signal
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from types import FrameType
-from typing import Any
+from typing import Any, Protocol
 
 from omphjc.comparison import Difference
+from omphjc.events.formats import EventFormat
 from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.stage import Stage
@@ -64,6 +65,18 @@ TaskBody = Callable[[bool, Path], TaskOutcome]
 and give the directory of this run, where the program writes its log."""
 
 
+class EventReadingTool(Protocol):
+    """A tool that reads the event file an earlier stage made."""
+
+    @property
+    def name(self) -> str:
+        """The name of the tool, as a message names it."""
+
+    @property
+    def input_formats(self) -> frozenset[EventFormat]:
+        """The formats of event file the tool can read."""
+
+
 def job_seed(spec: ProcessSpec, job_id: int) -> int:
     """Return the seed of job `job_id` of `spec`: ``seed_offset + job_id``.
 
@@ -81,6 +94,37 @@ def job_seed(spec: ProcessSpec, job_id: int) -> int:
     if seed > PYTHIA_SEED_LIMIT:
         raise ValueError(f"Seed {seed} exceeds Pythia's limit of {PYTHIA_SEED_LIMIT}")
     return seed
+
+
+def task_parameters(
+    stage_parameters: Mapping[str, Any],
+    tool_parameters: Mapping[str, Any],
+    *,
+    tool_name: str,
+) -> dict[str, Any]:
+    """Return the parameters of a task: those of its stage and those of its tool.
+
+    Parameters
+    ----------
+    stage_parameters : Mapping[str, Any]
+        The parameters that the stage has with every tool.
+    tool_parameters : Mapping[str, Any]
+        The parameters of the tool that does the task.
+    tool_name : str
+        The name of that tool, for the error message.
+
+    Raises
+    ------
+    ValueError
+        If `tool_parameters` uses a key of `stage_parameters`.
+    """
+    shared_keys = stage_parameters.keys() & tool_parameters.keys()
+    if shared_keys:
+        raise ValueError(
+            f"The parameters of {tool_name} use the keys of the stage: "
+            f"{', '.join(sorted(shared_keys))}"
+        )
+    return {**stage_parameters, **tool_parameters}
 
 
 class Job:
@@ -248,20 +292,40 @@ class Job:
             )
         return task.record
 
-    def require_events(self, stage: Stage) -> EventOutput:
+    def require_events(
+        self, stage: Stage, *, for_tool: EventReadingTool | None = None
+    ) -> EventOutput:
         """Return the events that the task of `stage` made.
 
         The task must be done with its outputs intact.
 
+        Parameters
+        ----------
+        stage : Stage
+            The stage whose task made the events.
+        for_tool : EventReadingTool or None, optional
+            The tool that will read the events. When it is given, the event
+            file must have a format the tool reads.
+
         Raises
         ------
         ValueError
-            As :meth:`require_done` does, or if the task made no event file.
+            For the reasons that :meth:`require_done` gives. If the task made
+            no event file. If `for_tool` cannot read the format of the file.
         """
         events = self.require_done(stage).events
         if events is None:
             raise ValueError(
                 f"The {stage.task_name} stage of {self.root_dir} made no event file"
+            )
+        if for_tool is not None and events.format not in for_tool.input_formats:
+            readable_formats = sorted(
+                event_format.value for event_format in for_tool.input_formats
+            )
+            raise ValueError(
+                f"{for_tool.name} reads {', '.join(readable_formats)} files, but "
+                f"the {stage.task_name} stage of {self.root_dir} made a "
+                f"{events.format.value} file"
             )
         return events
 

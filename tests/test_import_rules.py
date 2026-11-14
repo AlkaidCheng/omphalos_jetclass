@@ -45,15 +45,20 @@ CROSS_TOOL_IMPORTS = {
     ("omphjc.tools.pythia.driver", "omphjc.tools.delphes.card"),
 }
 
-# The tool modules the jobs layer imports: each stage function calls its tool's
-# driver, the generate stage fingerprints the LHE file it made, and a job's
-# seed is checked against Pythia's limit.
+# The tool modules the jobs layer imports: the generate and shower stage
+# functions call their tool's driver, the generate stage fingerprints the LHE
+# file it made, and a job's seed is checked against Pythia's limit.
 JOBS_TOOL_IMPORTS = {
     ("omphjc.jobs.job", "omphjc.tools.pythia.cmnd"),
     ("omphjc.jobs.stages.generate", "omphjc.tools.madgraph.driver"),
     ("omphjc.jobs.stages.generate", "omphjc.tools.madgraph.lhe_file"),
     ("omphjc.jobs.stages.shower", "omphjc.tools.pythia.driver"),
-    ("omphjc.jobs.stages.simulate", "omphjc.tools.delphes.driver"),
+}
+
+# The one module of a tool that imports the jobs layer: its adapter, which
+# returns what the tool made as the outcome of a task.
+ADAPTER_JOBS_IMPORTS = {
+    ("omphjc.tools.delphes.adapter", "omphjc.jobs.task"),
 }
 
 
@@ -112,7 +117,7 @@ def test_tool_packages_import_nothing(package: str) -> None:
     assert IMPORTS[package] == set()
 
 
-def test_tools_import_no_stage_and_no_command() -> None:
+def test_a_tool_imports_the_jobs_layer_only_in_its_adapter_and_no_command() -> None:
     reaches = {
         (name, target)
         for name, targets in IMPORTS.items()
@@ -120,7 +125,7 @@ def test_tools_import_no_stage_and_no_command() -> None:
         for target in targets
         if _within(target, "omphjc.jobs") or _within(target, "omphjc.cli")
     }
-    assert reaches == set()
+    assert reaches == ADAPTER_JOBS_IMPORTS
 
 
 def test_a_tool_imports_another_only_where_accepted() -> None:
@@ -238,6 +243,22 @@ def test_the_event_file_contracts_load_no_array_library(module: str) -> None:
 
 def test_the_commands_load_no_array_library() -> None:
     loaded = _loaded_after("import omphjc.cli.main")
+    assert {name for name in loaded if name.split(".")[0] in ARRAY_LIBRARIES} == set()
+
+
+@pytest.mark.parametrize(
+    "arguments", [["--help"], ["processes"], ["check-cards"]], ids=lambda a: a[0]
+)
+def test_a_command_that_runs_no_stage_loads_no_array_library(
+    arguments: list[str],
+) -> None:
+    statement = (
+        "import contextlib, io\n"
+        "from omphjc.cli import cli\n"
+        "with contextlib.redirect_stdout(io.StringIO()):\n"
+        f"    cli({arguments!r}, standalone_mode=False)"
+    )
+    loaded = _loaded_after(statement)
     assert {name for name in loaded if name.split(".")[0] in ARRAY_LIBRARIES} == set()
 
 

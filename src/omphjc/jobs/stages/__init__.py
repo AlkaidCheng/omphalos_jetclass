@@ -10,14 +10,16 @@ The stages so far:
 
 - MadGraph generation (:mod:`omphjc.jobs.stages.generate`);
 - the Pythia shower (:mod:`omphjc.jobs.stages.shower`);
-- the Delphes simulation (:mod:`omphjc.jobs.stages.simulate`).
+- the detector simulation (:mod:`omphjc.jobs.stages.simulate`), run by a
+  simulator such as :class:`omphjc.tools.delphes.adapter.DelphesSimulator`.
 """
 
 from omphjc.jobs.stages.generate import GenerateStage, generate
 from omphjc.jobs.stages.shower import ShowerStage, shower
-from omphjc.jobs.stages.simulate import SimulateStage, simulate
+from omphjc.jobs.stages.simulate import DetectorSimulator, SimulateStage, simulate
 
 __all__ = [
+    "DetectorSimulator",
     "GenerateStage",
     "ShowerStage",
     "SimulateStage",

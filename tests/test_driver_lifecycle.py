@@ -116,7 +116,7 @@ def _simulation(
         occupied="Output file",
         seed_path="delphes_card.tcl",
         seed_line="set RandomSeed {}",
-        invalid={"card_path": tmp_path / "missing.tcl"},
+        invalid={"detector_card_path": tmp_path / "missing.tcl"},
         invalid_error=FileNotFoundError,
         invalid_match="Delphes card",
     )

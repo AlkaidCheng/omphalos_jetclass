@@ -207,7 +207,7 @@ def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
 @OUTDIR_OPTION
 @click.option(
     "--card",
-    "card_path",
+    "detector_card_path",
     type=EXISTING_FILE,
     default=None,
     help="Detector card to run instead of the process's.",
@@ -230,7 +230,7 @@ def simulate_job(
     name: str,
     job_id: int,
     outdir: Path,
-    card_path: Path | None,
+    detector_card_path: Path | None,
     timeout: float | None,
     force: bool,
     delphes_root_path: Path | None,
@@ -241,14 +241,17 @@ def simulate_job(
     spec = lookup_process(specs, name)
 
     def run(job: Job) -> TaskRecord:
-        return simulate(
-            job,
-            card_path=card_path,
-            timeout=timeout,
-            accept_input=accept_input,
-            force=force,
+        # The adapter loads the array libraries, so it is imported here and
+        # not when a command starts.
+        from omphjc.tools.delphes.adapter import DelphesSimulator
+
+        simulator = DelphesSimulator(
+            spec,
+            detector_card_path=detector_card_path,
+            timeout_seconds=timeout,
             delphes_root_path=delphes_root_path,
         )
+        return simulate(job, simulator, accept_input=accept_input, force=force)
 
     _run_stage_command(
         spec,

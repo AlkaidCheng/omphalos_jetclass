@@ -29,12 +29,13 @@ How a stage is recorded:
 
 1. The stage calls a driver, such as
    :func:`omphjc.tools.madgraph.driver.generate_events`. The driver returns a
-   run record with absolute paths.
-2. The stage function builds a :class:`TaskOutcome` from it. The outcome holds
-   the :class:`TaskResult` and the usage of the run. The result holds the
-   task's outputs and cards by name, and its metadata. An output is a
-   :class:`TaskOutput`, or an :class:`EventOutput` for an event file. A card
-   is a :class:`TaskCard`.
+   run record with absolute paths. The simulation stage calls its simulator
+   (:class:`DetectorSimulator`), which calls the driver of its tool.
+2. The stage function, or the simulator, builds a :class:`TaskOutcome` from
+   the run record. The outcome holds the :class:`TaskResult` and the usage of
+   the run. The result holds the task's outputs and cards by name, and its
+   metadata. An output is a :class:`TaskOutput`, or an :class:`EventOutput`
+   for an event file. A card is a :class:`TaskCard`.
 3. :meth:`Job.run_task` records the run as a :class:`TaskRun`, with its
    status, start and finish times, log and usage. It writes the run, the
    parameters and the result to ``task.json`` as a :class:`TaskRecord`, with
@@ -48,10 +49,12 @@ from omphjc.jobs.job import (
     TerminationError,
     exception_on_termination,
     job_seed,
+    task_parameters,
 )
 from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.stage import Stage
 from omphjc.jobs.stages import (
+    DetectorSimulator,
     GenerateStage,
     ShowerStage,
     SimulateStage,
@@ -88,6 +91,7 @@ __all__ = [
     "RUNNING",
     "TaskRun",
     "AcceptedInput",
+    "DetectorSimulator",
     "EventOutput",
     "GenerateStage",
     "Job",
@@ -112,4 +116,5 @@ __all__ = [
     "read_cards",
     "shower",
     "simulate",
+    "task_parameters",
 ]
