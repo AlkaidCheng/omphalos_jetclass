@@ -63,6 +63,7 @@ import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from omphjc.processes.catalogue import ProcessSpec, SettingValue
 from omphjc.programs import ProgramError
@@ -70,16 +71,6 @@ from omphjc.safe_paths import require_file, require_unoccupied
 from omphjc.tools.delphes.card import ParticlesCard, particles_card_text
 from omphjc.tools.pythia.cmnd import PythiaCmnd
 from omphjc.workspace import ProgramRun, ProgramWorkspace
-
-# Delphes's program combining Pythia 8 and the detector simulation.
-_DELPHES_PYTHIA8 = "DelphesPythia8"
-
-_EVENTS_FILE = "events.lhe"
-_OUTPUT_FILE = "particles.root"
-_LOG_FILE = "shower.log"
-
-# The purpose written in the stamp of a working directory.
-_RUN_PURPOSE = "pythia-shower"
 
 # What DelphesPythia8 prints when Main:timesAllowErrors failed events end the run.
 _ABORTED = "Event generation aborted prematurely"
@@ -261,7 +252,7 @@ def shower_events(
     # once and leaves earlier results in place.
     cmnd = PythiaCmnd.from_process(
         spec,
-        lhe_path=Path(_EVENTS_FILE),
+        lhe_path=Path(workspace.input_file_name),
         n_events=n_events,
         seed=seed,
         overrides=overrides,
@@ -328,12 +319,17 @@ class ShowerWorkspace(ProgramWorkspace):
         ``DelphesPythia8``.
     """
 
-    purpose = _RUN_PURPOSE
+    purpose = "pythia-shower"
     card_classes = (PythiaCmnd, ParticlesCard)
-    program = _DELPHES_PYTHIA8
-    description = f"Delphes's {_DELPHES_PYTHIA8}"
-    log_name = _LOG_FILE
+    # Delphes's program that combines Pythia 8 and the detector simulation.
+    program = "DelphesPythia8"
+    description = f"Delphes's {program}"
+    log_name = "shower.log"
     error_type = ShowerError
+    input_file_name: ClassVar[str] = "events.lhe"
+    """The file of the input events in the directory, uncompressed."""
+    output_file_name: ClassVar[str] = "particles.root"
+    """The file of the showered events in the directory."""
 
     def __init__(
         self,
@@ -355,7 +351,7 @@ class ShowerWorkspace(ProgramWorkspace):
     @property
     def events_path(self) -> Path:
         """The uncompressed event file the run reads."""
-        return self.workdir / _EVENTS_FILE
+        return self.workdir / self.input_file_name
 
     @property
     def cmnd_path(self) -> Path:
@@ -370,11 +366,11 @@ class ShowerWorkspace(ProgramWorkspace):
     @property
     def output_path(self) -> Path:
         """The ROOT file of showered events the run writes."""
-        return self.workdir / _OUTPUT_FILE
+        return self.workdir / self.output_file_name
 
     @property
     def artifacts(self) -> list[str]:
-        return [_EVENTS_FILE, _OUTPUT_FILE, *super().artifacts]
+        return [self.input_file_name, self.output_file_name, *super().artifacts]
 
     def write_inputs(self, lhe_path: Path, cmnd: PythiaCmnd) -> None:
         """Decompress `lhe_path` into the directory and write the command file and the card."""
@@ -398,7 +394,7 @@ class ShowerWorkspace(ProgramWorkspace):
                 self.program_path,
                 ParticlesCard.file_name,
                 PythiaCmnd.file_name,
-                _OUTPUT_FILE,
+                self.output_file_name,
             ],
             failure_message="DelphesPythia8 failed",
         )

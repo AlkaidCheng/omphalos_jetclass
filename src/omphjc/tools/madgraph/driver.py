@@ -87,6 +87,7 @@ import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import ProgramError, RaisedOpenFileLimit, available_cores
@@ -103,13 +104,6 @@ from omphjc.tools.madgraph.run_card import RunCard
 from omphjc.tools.madgraph.slha_card import ParamCard
 from omphjc.workspace import ProgramRun, ProgramWorkspace
 
-# MadGraph's command-line program, bin/mg5_aMC of an installation.
-_MG5_EXECUTABLE = "mg5_aMC"
-
-_PROCESS_SCRIPT = "process.mg5"
-_LAUNCH_SCRIPT = "launch.mg5"
-_LOG_FILE = "madgraph.log"
-
 # MadGraph's names for the event file of the first run and, after MadSpin, of
 # its decayed copy ("%s_decayed_%i" in do_decay_events,
 # madgraph/interface/common_run_interface.py, 3.8.1), and for the MadSpin card
@@ -118,12 +112,6 @@ _EVENT_FILE = "unweighted_events.lhe.gz"
 _FIRST_RUN = "run_01"
 _DECAYED_RUN = "run_01_decayed_1"
 _ME5_CONFIGURATION = "me5_configuration.txt"
-
-# Folder of the model copies in a working directory.
-_MODELS_DIR = "models"
-
-# Purpose of the stamp on a working directory (omphjc.stamps).
-_RUN_PURPOSE = "madgraph-event-generation"
 
 # MadGraph's run_mode for parallel jobs on the current machine (0 runs them one
 # after another, 1 submits them to a batch system; set2_run_mode in
@@ -278,13 +266,13 @@ def generate_events(
     with workspace.sealed_run() as set_aside:
         local_spec = workspace.copy_model()
         workspace.run_script(
-            _PROCESS_SCRIPT,
+            workspace.process_script_name,
             proc_card_commands(local_spec, output_dir=workspace.process_dir),
         )
         workspace.write_cards(n_cores)
         # Keeps MadGraph's unweighting in its seeded process (see the module docstring).
         with RaisedOpenFileLimit(enabled=seed is not None):
-            workspace.run_script(_LAUNCH_SCRIPT, launch)
+            workspace.run_script(workspace.launch_script_name, launch)
 
     output_path = workspace.output_path
     if not output_path.is_file():
@@ -351,12 +339,19 @@ class MadGraphWorkspace(ProgramWorkspace):
         has no ``mg5_aMC``.
     """
 
-    purpose = _RUN_PURPOSE
+    purpose = "madgraph-event-generation"
     card_classes = (ProcCard, RunCard, ParamCard, MadSpinCard)
-    program = _MG5_EXECUTABLE
-    description = f"MadGraph's bin/{_MG5_EXECUTABLE}"
-    log_name = _LOG_FILE
+    # MadGraph's command-line program, bin/mg5_aMC of an installation.
+    program = "mg5_aMC"
+    description = f"MadGraph's bin/{program}"
+    log_name = "madgraph.log"
     error_type = MadGraphError
+    process_script_name: ClassVar[str] = "process.mg5"
+    """The script that makes the process directory."""
+    launch_script_name: ClassVar[str] = "launch.mg5"
+    """The script that launches the run."""
+    models_dir_name: ClassVar[str] = "models"
+    """The folder of the model copies in the directory."""
 
     def __init__(
         self,
@@ -388,13 +383,18 @@ class MadGraphWorkspace(ProgramWorkspace):
         """
         if self.spec.model_dir is None:
             return None
-        return inside(self.workdir, _MODELS_DIR, self.spec.model_base)
+        return inside(self.workdir, self.models_dir_name, self.spec.model_base)
 
     @property
     def artifacts(self) -> list[str]:
-        names = [self.spec.name, _PROCESS_SCRIPT, _LAUNCH_SCRIPT, *super().artifacts]
+        names = [
+            self.spec.name,
+            self.process_script_name,
+            self.launch_script_name,
+            *super().artifacts,
+        ]
         if self.spec.model_dir is not None:
-            names.append(f"{_MODELS_DIR}/{self.spec.model_base}")
+            names.append(f"{self.models_dir_name}/{self.spec.model_base}")
         return names
 
     @property
