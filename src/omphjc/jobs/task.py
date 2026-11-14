@@ -16,11 +16,13 @@ A task is the work of one stage in a job. Its record is the file
             "fingerprint": "lhe-v1:<sha256>"
           }
         },
+        "cards": {
+          "run_card": {"path": "generate/cards/run_card.dat", "sha256": "<sha256>"}
+        },
         "metadata": {
           "madgraph_version": "3.8.1",
           "cross_section_pb": 1.23,
-          "cross_section_error_pb": 0.01,
-          "cards": {"generate/cards/run_card.dat": "<sha256>"}
+          "cross_section_error_pb": 0.01
         }
       },
       "runs": [
@@ -75,6 +77,12 @@ the stage gives them. Each output has its ``path`` and its size in bytes,
 ``n_bytes``. An event file also has its ``format``, the number of events it
 holds and the ``fingerprint`` of its content. The next task reads the output
 named ``events``.
+
+``cards`` holds the cards of the task, under the names its stage gives them.
+A card is a file that steers the task's program, such as a run card or a
+detector card. Each card has its ``path`` and the ``sha256`` of the file as
+the run used it. The cards are a record for the reader: they do not count
+when the status of the task is judged.
 
 ``metadata`` is what is known about the task and the sample it made. The
 stage chooses its keys.
@@ -146,6 +154,7 @@ files into account. A task whose latest run is done has
 :attr:`TaskStatus.DONE` only while its outputs are intact.
 """
 
+import hashlib
 import secrets
 import socket
 from collections.abc import Mapping
@@ -218,6 +227,27 @@ class EventOutput(TaskOutput):
 
 
 @dataclass(frozen=True)
+class TaskCard:
+    """A card of a task: a file that steered the task's program.
+
+    Parameters
+    ----------
+    path : Path
+        The file as the run used it, inside the job directory.
+    sha256 : str
+        The SHA-256 of the file, as hexadecimal digits.
+    """
+
+    path: Path
+    sha256: str
+
+    @classmethod
+    def from_path(cls, path: Path) -> "TaskCard":
+        """Return the card at `path`, with the SHA-256 of the file as it is."""
+        return cls(path, hashlib.sha256(path.read_bytes()).hexdigest())
+
+
+@dataclass(frozen=True)
 class TaskResult:
     """What a task made.
 
@@ -227,12 +257,16 @@ class TaskResult:
         The task's outputs under the names its stage gives them. The next
         task reads the :class:`EventOutput` named :data:`EVENTS_OUTPUT`. A
         task that makes no events has no such output.
+    cards : dict[str, TaskCard]
+        The cards the task's program read, under the names its stage gives
+        them.
     metadata : dict
         What is known about the task and the sample it made, as JSON values.
         The stage chooses the keys.
     """
 
     outputs: dict[str, TaskOutput] = field(default_factory=dict)
+    cards: dict[str, TaskCard] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -254,7 +288,11 @@ class TaskResult:
                 )
             else:
                 outputs[name] = TaskOutput(path, output["n_bytes"])
-        return cls(outputs=outputs, metadata=record["metadata"])
+        cards = {
+            name: TaskCard(root_dir / card["path"], card["sha256"])
+            for name, card in record["cards"].items()
+        }
+        return cls(outputs=outputs, cards=cards, metadata=record["metadata"])
 
 
 @dataclass(frozen=True)
@@ -403,6 +441,17 @@ class TaskRecord(RecordFile):
         """
         events = self.outputs.get(EVENTS_OUTPUT)
         return events if isinstance(events, EventOutput) else None
+
+    @property
+    def cards(self) -> dict[str, TaskCard]:
+        """The cards the task's program read, under the names its stage gives them.
+
+        Raises
+        ------
+        ValueError
+            If the latest run is not done.
+        """
+        return self._done_result().cards
 
     @property
     def metadata(self) -> dict[str, Any]:

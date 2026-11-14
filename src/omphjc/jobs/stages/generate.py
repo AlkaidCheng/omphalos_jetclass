@@ -4,10 +4,11 @@ import shutil
 from pathlib import Path
 
 from omphjc.events.formats import EventFormat
-from omphjc.jobs.job import Job, sha256
+from omphjc.jobs.job import Job
 from omphjc.jobs.task import (
     EVENTS_OUTPUT,
     EventOutput,
+    TaskCard,
     TaskOutcome,
     TaskRecord,
     TaskResult,
@@ -19,13 +20,14 @@ GENERATE = "generate"
 """The stage's name and directory, ``<job>/generate/``."""
 
 _CARDS_DIR = "cards"
-# The cards MadGraph writes into its Cards directory that a job keeps as run.
-_MADGRAPH_CARDS = (
-    "proc_card_mg5.dat",
-    "run_card.dat",
-    "param_card.dat",
-    "madspin_card.dat",
-)
+# The cards MadGraph writes into its Cards directory that a job keeps as run:
+# the file of each, under the name the record gives the card.
+_MADGRAPH_CARD_FILE_NAMES = {
+    "proc_card": "proc_card_mg5.dat",
+    "run_card": "run_card.dat",
+    "param_card": "param_card.dat",
+    "madspin_card": "madspin_card.dat",
+}
 
 
 def generate(
@@ -50,12 +52,14 @@ def generate(
     and the fingerprint of its content
     (:class:`omphjc.tools.madgraph.lhe_file.LHEFile`).
 
+    Its cards are the copies in ``generate/cards/``: the process card, the run
+    card, the parameter card and, with MadSpin, the MadSpin card.
+
     Its metadata holds:
 
     - the MadGraph version;
     - the cross section and its error, in pb;
-    - the number of cores MadGraph ran on;
-    - the SHA-256 of each card, by path.
+    - the number of cores MadGraph ran on.
 
     Parameters
     ----------
@@ -92,7 +96,7 @@ def generate(
             log_dir=run_dir,
             mg5_path=mg5_path,
         )
-        cards = _copy_cards(run.process_dir / "Cards", task_dir / _CARDS_DIR, job)
+        cards = _copy_cards(run.process_dir / "Cards", task_dir / _CARDS_DIR)
         return TaskOutcome(
             TaskResult(
                 outputs={
@@ -104,12 +108,12 @@ def generate(
                         fingerprint=LHEFile.read(run.output_path).fingerprint(),
                     )
                 },
+                cards=cards,
                 metadata={
                     "madgraph_version": run.banner.version,
                     "cross_section_pb": run.banner.cross_section_pb,
                     "cross_section_error_pb": run.banner.cross_section_error_pb,
                     "n_cores": run.n_cores,
-                    "cards": cards,
                 },
             ),
             usage=run.usage.as_record(),
@@ -122,15 +126,15 @@ def generate(
     )
 
 
-def _copy_cards(source_dir: Path, target_dir: Path, job: Job) -> dict[str, str]:
-    """Copy the cards present in `source_dir` into `target_dir`; return their SHA-256."""
+def _copy_cards(source_dir: Path, target_dir: Path) -> dict[str, TaskCard]:
+    """Copy the cards present in `source_dir` into `target_dir`; return the copies."""
     target_dir.mkdir(parents=True, exist_ok=True)
-    hashes = {}
-    for name in _MADGRAPH_CARDS:
-        card_path = source_dir / name
+    cards = {}
+    for name, file_name in _MADGRAPH_CARD_FILE_NAMES.items():
+        card_path = source_dir / file_name
         if not card_path.is_file():
             continue
-        target_path = target_dir / name
-        shutil.copyfile(card_path, target_path)
-        hashes[job.relative_path(target_path)] = sha256(target_path)
-    return hashes
+        copy_path = target_dir / file_name
+        shutil.copyfile(card_path, copy_path)
+        cards[name] = TaskCard.from_path(copy_path)
+    return cards

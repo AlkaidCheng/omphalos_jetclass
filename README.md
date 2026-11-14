@@ -419,21 +419,21 @@ again, so the record names the log of a failed or interrupted run too. The
 status of the stage is that of its latest run, and what a rerun followed is
 the status of the run before it: a failure, an interruption, or, after a run
 that was done, a missing output.
-The result names the stage's outputs, giving
-each file's size and an event file's format, number of events and fingerprint,
-and holds the metadata of what it made. Two event files with the same events
-have the same fingerprint
+The result names the stage's outputs, giving each file's size and an event
+file's format, number of events and fingerprint. Two event files with the same
+events have the same fingerprint
 ([Same events, different files](docs/reproducibility.md#same-events-different-files)).
-For generation the parameters are the event count and the seed, and the
-metadata the MadGraph version, the cross section with its error, the cores
-MadGraph ran on and the SHA-256 of each card. For the shower the parameters are
-the event count, the seed, the Pythia overrides and the fingerprint of the
-generated events, and the metadata the Pythia version, the events read, the
-fraction kept by matching for a matched process, and the SHA-256 of the command
-file and the record-only card as run. For the simulation the parameters are the
-seed, the SHA-256 of the detector card chosen and the fingerprint of the
-showered events, and the metadata the SHA-256 of the card as run; its number of
-events is counted in `delphes.root`. A stage run again with the same events
+The result also names the stage's cards, the files that steered its program as
+the run used them, each with its path and SHA-256, and holds the metadata of
+what the stage made.
+
+| Stage | Parameters | Cards | Metadata |
+|---|---|---|---|
+| `generate` | event count, seed | process card, run card, parameter card, MadSpin card | MadGraph version, cross section with its error, cores MadGraph ran on |
+| `shower` | event count, seed, Pythia overrides, fingerprint of the generated events | Pythia command file, record-only Delphes card | Pythia version, events read, fraction kept by matching for a matched process |
+| `simulate` | seed, SHA-256 of the detector card chosen, fingerprint of the showered events | detector card with the seed | none; the number of events is counted in `delphes.root` |
+
+A stage run again with the same events
 therefore keeps the stages after it, and a stage whose input events changed is
 refused unless `--force` is given. `--accept-input`, on `omphjc shower` and
 `omphjc simulate`, keeps the result of such a stage without running it, when

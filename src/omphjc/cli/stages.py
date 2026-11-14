@@ -196,7 +196,7 @@ def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
         yield format_row("kept by matching", f"{metadata['matching_efficiency']:.1%}")
     yield format_row("output", job.relative_path(events.path))
     yield format_row("log", record.latest_run.log)
-    yield format_row("settings", ", ".join(metadata["settings"]))
+    yield format_row("settings", _format_card_paths(job, record))
 
 
 @click.command("simulate")
@@ -263,11 +263,19 @@ def simulate_job(
 def _simulation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the simulation stage of `job` ran with and what it made."""
     events = job.require_events(SIMULATE)
-    yield format_row("card", ", ".join(record.metadata["card"]))
+    yield format_row("card", _format_card_paths(job, record))
     yield format_row("seed", record.parameters["seed"])
     yield format_row("events", events.n_events)
     yield format_row("output", job.relative_path(events.path))
     yield format_row("log", record.latest_run.log)
+
+
+def _format_card_paths(job: Job, record: TaskRecord) -> str:
+    """Return the paths of the cards in `record` as one line of a report.
+
+    The paths are relative to the job directory.
+    """
+    return ", ".join(job.relative_path(card.path) for card in record.cards.values())
 
 
 def _run_stage_command(
