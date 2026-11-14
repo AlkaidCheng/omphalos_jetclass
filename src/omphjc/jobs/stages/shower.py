@@ -4,12 +4,13 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from omphjc.events.formats import EventFormat
-from omphjc.jobs.job import Job, sha256
+from omphjc.jobs.job import Job
 from omphjc.jobs.stages.generate import GENERATE
 from omphjc.jobs.task import (
     EVENTS_OUTPUT,
     INPUT_FINGERPRINT_PARAMETER,
     EventOutput,
+    TaskCard,
     TaskOutcome,
     TaskRecord,
     TaskResult,
@@ -44,12 +45,14 @@ def shower(
     accepted and the fingerprint of its content
     (:class:`omphjc.events.delphes_root.DelphesROOTFile`).
 
+    Its cards are the Pythia command file and the Delphes card that writes the
+    generator record, both as the run used them.
+
     Its metadata holds:
 
     - the Pythia version;
     - the number of events read;
-    - the fraction of events kept by matching, for a matched process;
-    - the SHA-256 of the command file and of the record-only card as run.
+    - the fraction of events kept by matching, for a matched process.
 
     Parameters
     ----------
@@ -104,10 +107,6 @@ def shower(
         metadata = {
             "pythia_version": statistics.pythia_version,
             "events_read": statistics.events_read,
-            "settings": {
-                job.relative_path(run.cmnd_path): sha256(run.cmnd_path),
-                job.relative_path(run.card_path): sha256(run.card_path),
-            },
         }
         if job.spec.matching and statistics.events_read > 0:
             metadata["matching_efficiency"] = (
@@ -123,6 +122,10 @@ def shower(
                         n_events=statistics.events_accepted,
                         fingerprint=DelphesROOTFile.read(run.output_path).fingerprint(),
                     )
+                },
+                cards={
+                    "command_file": TaskCard.from_path(run.cmnd_path),
+                    "particles_card": TaskCard.from_path(run.card_path),
                 },
                 metadata=metadata,
             ),

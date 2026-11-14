@@ -28,6 +28,7 @@ from omphjc.jobs import (
     Manifest,
     ReplacedRunError,
     Task,
+    TaskCard,
     TaskOutcome,
     TaskOutput,
     TaskRecord,
@@ -104,7 +105,8 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
                 ),
                 "summary": TaskOutput(tmp_path / "x" / "summary.txt", n_bytes=3),
             },
-            metadata={"cards": {"x/c.dat": "abc"}},
+            cards={"run_card": TaskCard(tmp_path / "x" / "run_card.dat", "abc")},
+            metadata={"version": "1.0"},
         ),
     )
     path = tmp_path / "x" / "task.json"
@@ -138,7 +140,8 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
             },
             "summary": {"path": "x/summary.txt", "n_bytes": 3},
         },
-        "metadata": {"cards": {"x/c.dat": "abc"}},
+        "cards": {"run_card": {"path": "x/run_card.dat", "sha256": "abc"}},
+        "metadata": {"version": "1.0"},
     }
     assert TaskRecord.read(path, root_dir=tmp_path) == record
     events = written["result"]["outputs"]["events"]
@@ -226,6 +229,14 @@ def test_a_task_record_refuses_a_path_outside_its_root_directory(
     )
     with pytest.raises(ValueError, match="elsewhere"):
         record.write(path, root_dir=tmp_path / "job")
+    card_elsewhere = TaskCard(tmp_path / "elsewhere" / "card.dat", "abc")
+    record = TaskRecord(
+        parameters={},
+        runs=(_run("done"),),
+        result=TaskResult(cards={"card": card_elsewhere}),
+    )
+    with pytest.raises(ValueError, match="elsewhere"):
+        record.write(path, root_dir=tmp_path / "job")
     assert list(path.parent.iterdir()) == []
 
 
@@ -274,6 +285,35 @@ def _make_output(job: Job) -> TaskOutcome:
             metadata={"n": 1},
         )
     )
+
+
+def test_a_card_is_recorded_with_the_hash_of_its_file(tmp_path: Path) -> None:
+    card_path = tmp_path / "run_card.dat"
+    card_path.write_text("10 = nevents\n")
+    card = TaskCard.from_path(card_path)
+    assert card.path == card_path
+    assert card.sha256 == hashlib.sha256(b"10 = nevents\n").hexdigest()
+
+
+def test_a_changed_or_deleted_card_leaves_the_task_done(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    card_path = job.task_dir("x") / "card.dat"
+
+    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+        outcome = _make_output(job)
+        card_path.write_text("as run")
+        cards = {"card": TaskCard.from_path(card_path)}
+        return replace(outcome, result=replace(outcome.result, cards=cards))
+
+    record = job.run_task("x", {}, body)
+    assert record.cards == {"card": TaskCard.from_path(card_path)}
+    card_path.write_text("edited since")
+    assert job.task("x").status is TaskStatus.DONE
+    card_path.unlink()
+    assert job.task("x").status is TaskStatus.DONE
+    assert job.run_task("x", {}, body) == record
 
 
 def test_a_stage_runs_once_and_its_result_is_kept(
@@ -1063,9 +1103,11 @@ def test_generate_records_what_madgraph_made(
     )
     card = job.root_dir / "generate" / "cards" / "proc_card_mg5.dat"
     assert card.is_file()
-    assert metadata["cards"]["generate/cards/proc_card_mg5.dat"] == (
-        hashlib.sha256(card.read_bytes()).hexdigest()
+    assert record.cards["proc_card"] == TaskCard(
+        card, hashlib.sha256(card.read_bytes()).hexdigest()
     )
+    assert set(record.cards) == {"proc_card", "madspin_card"}
+    assert "cards" not in metadata
     assert (card.parent / "madspin_card.dat").is_file()
     launch = (job.root_dir / "generate" / "launch.mg5").read_text().splitlines()
     assert "set iseed 3" in launch and "set python_seed 3" in launch
@@ -1176,10 +1218,13 @@ def test_shower_records_what_it_made_and_keeps_it(
     assert metadata["pythia_version"] == "8.318"
     assert metadata["events_read"] == 1
     assert "matching_efficiency" not in metadata
-    assert set(metadata["settings"]) == {
-        "shower/pythia.cmnd",
-        "shower/particles_card.tcl",
+    assert record.cards == {
+        "command_file": TaskCard.from_path(job.root_dir / "shower" / "pythia.cmnd"),
+        "particles_card": TaskCard.from_path(
+            job.root_dir / "shower" / "particles_card.tcl"
+        ),
     }
+    assert "settings" not in metadata
     root_path = job.root_dir / "shower" / "particles.root"
     assert root_path.is_file()
     assert record.result.outputs == {
@@ -1445,7 +1490,9 @@ def test_simulate_records_what_it_made_and_keeps_it(
         == showered.result.outputs[EVENTS_OUTPUT].fingerprint
     )
     assert len(record.parameters["card"]) == 64
-    assert list(record.result.metadata["card"]) == ["simulate/delphes_card.tcl"]
+    card_path = job.root_dir / "simulate" / "delphes_card.tcl"
+    assert record.cards == {"detector_card": TaskCard.from_path(card_path)}
+    assert record.metadata == {}
     root_path = job.root_dir / "simulate" / "delphes.root"
     assert root_path.is_file()
     assert record.result.outputs == {

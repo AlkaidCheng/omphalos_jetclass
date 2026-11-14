@@ -15,7 +15,7 @@ The modules, by what they hold::
     task.py         Task and TaskStatus, a task as found on disk; TaskRecord, the
                     content of task.json, with a TaskRun for each run, and
                     what a task makes: TaskResult, TaskOutput, EventOutput,
-                    TaskOutcome
+                    TaskCard, TaskOutcome
     identity.py     JobIdentity, the content of job.json
     manifest.py     Manifest, the content of manifest.json, which lists a
                     TaskSummary of each task's record
@@ -29,8 +29,9 @@ How a stage is recorded:
    run record with absolute paths.
 2. The stage function builds a :class:`TaskOutcome` from it. The outcome holds
    the :class:`TaskResult` and the usage of the run. The result holds the
-   task's outputs by name and its metadata. An output is a
-   :class:`TaskOutput`, or an :class:`EventOutput` for an event file.
+   task's outputs and cards by name, and its metadata. An output is a
+   :class:`TaskOutput`, or an :class:`EventOutput` for an event file. A card
+   is a :class:`TaskCard`.
 3. :meth:`Job.run_task` records the run as a :class:`TaskRun`, with its
    status, start and finish times, log and usage. It writes the run, the
    parameters and the result to ``task.json`` as a :class:`TaskRecord`, with
@@ -44,7 +45,6 @@ from omphjc.jobs.job import (
     TerminationError,
     exception_on_termination,
     job_seed,
-    sha256,
 )
 from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.stages import GENERATE, SHOWER, SIMULATE, generate, shower, simulate
@@ -58,6 +58,7 @@ from omphjc.jobs.task import (
     AcceptedInput,
     EventOutput,
     Task,
+    TaskCard,
     TaskOutcome,
     TaskOutput,
     TaskRecord,
@@ -83,6 +84,7 @@ __all__ = [
     "JobIdentity",
     "Manifest",
     "Task",
+    "TaskCard",
     "TaskOutcome",
     "TaskOutput",
     "TaskRecord",
@@ -94,7 +96,6 @@ __all__ = [
     "exception_on_termination",
     "generate",
     "job_seed",
-    "sha256",
     "shower",
     "simulate",
 ]

@@ -4,12 +4,13 @@ import hashlib
 from pathlib import Path
 
 from omphjc.events.formats import EventFormat
-from omphjc.jobs.job import Job, sha256
+from omphjc.jobs.job import Job
 from omphjc.jobs.stages.shower import SHOWER
 from omphjc.jobs.task import (
     EVENTS_OUTPUT,
     INPUT_FINGERPRINT_PARAMETER,
     EventOutput,
+    TaskCard,
     TaskOutcome,
     TaskRecord,
     TaskResult,
@@ -48,7 +49,7 @@ def simulate(
     tree and the fingerprint of its content
     (:class:`omphjc.events.delphes_root.DelphesROOTFile`).
 
-    Its metadata holds the SHA-256 of the card as run.
+    Its card is the detector card as the run used it, with the seed.
 
     Parameters
     ----------
@@ -113,9 +114,7 @@ def simulate(
                         fingerprint=delphes_file.fingerprint(),
                     )
                 },
-                metadata={
-                    "card": {job.relative_path(run.card_path): sha256(run.card_path)}
-                },
+                cards={"detector_card": TaskCard.from_path(run.card_path)},
             ),
             usage=run.usage.as_record(),
             set_aside_dir=run.set_aside,

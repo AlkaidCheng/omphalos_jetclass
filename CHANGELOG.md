@@ -174,6 +174,9 @@
 - `omphjc shower` and `omphjc simulate` take `--accept-input`, which keeps a
   result whose input events changed and records the acceptance in
   `task.json`. (#70)
+- `task.json` lists the cards each stage ran with under `result.cards`,
+  each with its path and SHA-256, in place of the `cards`, `settings` and
+  `card` entries of the metadata. (#72)
 
 ### Fixed
 

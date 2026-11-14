@@ -17,7 +17,6 @@ Paths are built from screened names (:mod:`omphjc.safe_paths`). A process
 name from a catalogue therefore cannot place a job outside `outdir`.
 """
 
-import hashlib
 import signal
 import time
 from collections.abc import Callable, Iterator
@@ -62,11 +61,6 @@ _INTERRUPTIONS = (TerminationError, KeyboardInterrupt)
 TaskBody = Callable[[bool, Path], TaskOutcome]
 """Runs a task; the arguments say whether to replace what an earlier run left,
 and give the directory of this run, where the program writes its log."""
-
-
-def sha256(path: Path) -> str:
-    """Return the SHA-256 of the file at `path`, as hexadecimal digits."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def job_seed(spec: ProcessSpec, job_id: int) -> int:
