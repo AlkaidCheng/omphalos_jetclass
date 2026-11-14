@@ -1,11 +1,14 @@
 """The shower stage: Pythia 8 on the generated events, through ``DelphesPythia8``."""
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from omphjc.events.formats import EventFormat
 from omphjc.jobs.job import Job
-from omphjc.jobs.stages.generate import GENERATE
+from omphjc.jobs.stage import Stage
+from omphjc.jobs.stages.generate import GenerateStage
 from omphjc.jobs.task import (
     EVENTS_OUTPUT,
     INPUT_FINGERPRINT_PARAMETER,
@@ -18,8 +21,19 @@ from omphjc.jobs.task import (
 from omphjc.processes.catalogue import SettingValue
 from omphjc.tools.pythia.driver import ShowerWorkspace, shower_events
 
-SHOWER = "shower"
-"""The stage's name and directory, ``<job>/shower/``."""
+
+@dataclass(frozen=True)
+class ShowerStage(Stage):
+    """The parton shower of a job, which reads the generated events.
+
+    Its task is named ``shower`` and works in ``<job>/shower/``.
+    """
+
+    name: ClassVar[str] = "shower"
+
+    @property
+    def upstream_stage(self) -> GenerateStage:
+        return GenerateStage()
 
 
 def shower(
@@ -82,8 +96,9 @@ def shower(
         If the generate stage of `job` has not run to completion, or
         `accept_input` and `force` are both set.
     """
-    events = job.require_events(GENERATE)
-    task_dir = job.task_dir(SHOWER)
+    stage = ShowerStage()
+    events = job.require_events(stage.upstream_stage)
+    task_dir = job.task_dir(stage)
     pythia_overrides = dict(overrides or {})
 
     def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
@@ -137,7 +152,7 @@ def shower(
         INPUT_FINGERPRINT_PARAMETER: events.fingerprint,
     }
     return job.run_task(
-        SHOWER,
+        stage,
         parameters,
         body,
         log_name=ShowerWorkspace.log_name,

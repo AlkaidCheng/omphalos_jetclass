@@ -24,12 +24,13 @@ from omphjc.cli.options import (
     parse_assignment,
 )
 from omphjc.jobs import (
-    GENERATE,
     INPUT_FINGERPRINT_PARAMETER,
-    SHOWER,
-    SIMULATE,
+    GenerateStage,
     Job,
     ReplacedRunError,
+    ShowerStage,
+    SimulateStage,
+    Stage,
     TaskRecord,
     TerminationError,
     exception_on_termination,
@@ -105,7 +106,7 @@ def generate_job(
         spec,
         job_id,
         outdir,
-        stage=GENERATE,
+        stage=GenerateStage(),
         run=run,
         title="MadGraph generation",
         lines=_generation_lines,
@@ -115,7 +116,7 @@ def generate_job(
 def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the generate stage of `job` ran with and what it made."""
     metadata = record.metadata
-    events = job.require_events(GENERATE)
+    events = job.require_events(GenerateStage())
     yield f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
     yield format_row("events requested", record.parameters["events"])
     yield format_row("events generated", events.n_events)
@@ -126,7 +127,9 @@ def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     yield format_row("cross section", cross_section)
     yield format_row("event file", job.relative_path(events.path))
     yield format_row("log", record.latest_run.log)
-    yield format_row("cards", f"{job.relative_path(job.task_dir(GENERATE))}/cards/")
+    yield format_row(
+        "cards", f"{job.relative_path(job.task_dir(GenerateStage()))}/cards/"
+    )
 
 
 @click.command("shower")
@@ -177,8 +180,7 @@ def shower_job(
         spec,
         job_id,
         outdir,
-        stage=SHOWER,
-        upstream_stage=GENERATE,
+        stage=ShowerStage(),
         run=run,
         title="Pythia shower",
         lines=_shower_lines,
@@ -188,7 +190,7 @@ def shower_job(
 def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the shower stage of `job` ran with and what it made."""
     metadata = record.metadata
-    events = job.require_events(SHOWER)
+    events = job.require_events(ShowerStage())
     yield f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
     yield format_row("events read", metadata["events_read"])
     yield format_row("events kept", events.n_events)
@@ -252,8 +254,7 @@ def simulate_job(
         spec,
         job_id,
         outdir,
-        stage=SIMULATE,
-        upstream_stage=SHOWER,
+        stage=SimulateStage(),
         run=run,
         title="Delphes simulation",
         lines=_simulation_lines,
@@ -262,7 +263,7 @@ def simulate_job(
 
 def _simulation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the simulation stage of `job` ran with and what it made."""
-    events = job.require_events(SIMULATE)
+    events = job.require_events(SimulateStage())
     yield format_row("card", _format_card_paths(job, record))
     yield format_row("seed", record.parameters["seed"])
     yield format_row("events", events.n_events)
@@ -283,11 +284,10 @@ def _run_stage_command(
     job_id: int,
     outdir: Path,
     *,
-    stage: str,
+    stage: Stage,
     run: Callable[[Job], TaskRecord],
     title: str,
     lines: Callable[[Job, TaskRecord], Iterable[str]],
-    upstream_stage: str | None = None,
 ) -> None:
     """Run `stage` of one job of `spec` through `run` and print its report.
 
@@ -298,7 +298,7 @@ def _run_stage_command(
     - the ID of the task's latest run;
     - the rows that `lines` gives;
     - an ``input`` row, when the stage was kept for other events than those
-      it read (`upstream_stage` is the stage whose events it reads);
+      it read;
     - the number of runs and the status of each, when the task has more than
       one run;
     - what the latest run took.
@@ -319,8 +319,8 @@ def _run_stage_command(
     click.echo(format_row("run ID", record.latest_run.run_id))
     for line in lines(job, record):
         click.echo(line)
-    if upstream_stage is not None:
-        _report_accepted_input(job, record, upstream_stage)
+    if stage.upstream_stage is not None:
+        _report_accepted_input(job, record, stage.upstream_stage)
     if len(record.runs) > 1:
         statuses = ", ".join(run.status for run in record.runs)
         click.echo(format_row("runs", f"{len(record.runs)} ({statuses})"))
@@ -328,7 +328,7 @@ def _run_stage_command(
     _report_set_aside(job)
 
 
-def _report_accepted_input(job: Job, record: TaskRecord, upstream_stage: str) -> None:
+def _report_accepted_input(job: Job, record: TaskRecord, upstream_stage: Stage) -> None:
     """Print the ``input`` row of a task that was kept for another input.
 
     The row is printed when the record holds an accepted input and the events

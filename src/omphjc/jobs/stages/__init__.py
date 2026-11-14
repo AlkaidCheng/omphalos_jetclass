@@ -2,7 +2,9 @@
 
 A stage is a function that takes a :class:`Job` and its own arguments. It
 builds the parameters of its task and passes :meth:`omphjc.jobs.Job.run_task`
-a body that returns what the task made.
+a body that returns what the task made. Each stage also has a class, a
+:class:`~omphjc.jobs.stage.Stage`, that names its task and the stage whose
+events it reads.
 
 The stages so far:
 
@@ -11,8 +13,15 @@ The stages so far:
 - the Delphes simulation (:mod:`omphjc.jobs.stages.simulate`).
 """
 
-from omphjc.jobs.stages.generate import GENERATE, generate
-from omphjc.jobs.stages.shower import SHOWER, shower
-from omphjc.jobs.stages.simulate import SIMULATE, simulate
+from omphjc.jobs.stages.generate import GenerateStage, generate
+from omphjc.jobs.stages.shower import ShowerStage, shower
+from omphjc.jobs.stages.simulate import SimulateStage, simulate
 
-__all__ = ["GENERATE", "SHOWER", "SIMULATE", "generate", "shower", "simulate"]
+__all__ = [
+    "GenerateStage",
+    "ShowerStage",
+    "SimulateStage",
+    "generate",
+    "shower",
+    "simulate",
+]

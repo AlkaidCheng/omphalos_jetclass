@@ -183,6 +183,8 @@
   driver's run record names the cards of its run in `card_paths`, in place
   of `ShowerRun.cmnd_path`, `ShowerRun.card_path` and
   `SimulationRun.card_path`. (#74)
+- `Job` addresses a task by its `Stage` (`GenerateStage`, `ShowerStage`,
+  `SimulateStage`) in place of the name of the task. (#75)
 
 ### Fixed
 

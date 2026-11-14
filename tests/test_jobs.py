@@ -6,10 +6,10 @@ import shutil
 import signal
 import socket
 from collections.abc import Callable, Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import awkward as ak
 import pytest
@@ -23,10 +23,14 @@ from omphjc.jobs import (
     EVENTS_OUTPUT,
     AcceptedInput,
     EventOutput,
+    GenerateStage,
     Job,
     JobIdentity,
     Manifest,
     ReplacedRunError,
+    ShowerStage,
+    SimulateStage,
+    Stage,
     Task,
     TaskCard,
     TaskOutcome,
@@ -54,6 +58,27 @@ from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
 RUN_ID = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]{8}")
 
 
+@dataclass(frozen=True)
+class FakeStage(Stage):
+    """A stage for a test, whose task has the name the test gives it."""
+
+    name: ClassVar[str] = "fake"
+    fake_task_name: str
+
+    @property
+    def task_name(self) -> str:
+        return self.fake_task_name
+
+    @property
+    def command(self) -> str:
+        return f"omphjc {self.fake_task_name}"
+
+
+STAGE_X = FakeStage("x")
+STAGE_Y = FakeStage("y")
+STAGE_Z = FakeStage("z")
+
+
 def _run(status: str, **fields: Any) -> TaskRun:
     """Return a run with `status`, `fields` and a placeholder ID, start and host."""
     return TaskRun(run_id="r1", status=status, started="t", host="h", **fields)
@@ -69,19 +94,33 @@ def test_job_seed_is_the_process_offset_plus_the_job_number() -> None:
         job_seed(get_process("HToBB"), PYTHIA_SEED_LIMIT)
 
 
+def test_a_stage_names_its_task_its_command_and_the_stage_it_reads() -> None:
+    stages = [GenerateStage(), ShowerStage(), SimulateStage()]
+    assert [stage.task_name for stage in stages] == ["generate", "shower", "simulate"]
+    assert [stage.command for stage in stages] == [
+        "omphjc generate",
+        "omphjc shower",
+        "omphjc simulate",
+    ]
+    assert [stage.upstream_stage for stage in stages] == [None, *stages[:2]]
+    assert STAGE_X.task_name == "x" and STAGE_X != STAGE_Y
+
+
 def test_a_job_has_a_directory_per_process_and_number(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path / "runs", 7)
     assert job.root_dir == (tmp_path / "runs").resolve() / "HToBB" / "job_7"
     assert job.manifest_path == job.root_dir / "manifest.json"
-    assert job.task_dir("generate") == job.root_dir / "generate"
+    assert job.task_dir(GenerateStage()) == job.root_dir / "generate"
     assert job.relative_path(job.root_dir / "generate" / "x.log") == "generate/x.log"
     assert job.seed == 10000007
     assert job.identity_path == job.root_dir / "job.json"
     assert job.identity == JobIdentity(process="HToBB", job_id=7, seed=10000007)
-    assert job.task_record_path("generate") == job.root_dir / "generate" / "task.json"
-    assert job.task_record("generate") is None
+    assert (
+        job.task_record_path(GenerateStage()) == job.root_dir / "generate" / "task.json"
+    )
+    assert job.task_record(GenerateStage()) is None
     assert job.task_names() == []
     assert not job.root_dir.exists()
     with pytest.raises(ValueError, match="job_id"):
@@ -276,7 +315,7 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
 
 
 def _make_output(job: Job) -> TaskOutcome:
-    directory = job.task_dir("x")
+    directory = job.task_dir(STAGE_X)
     directory.mkdir(parents=True, exist_ok=True)
     output = directory / "out.txt"
     output.write_text("made")
@@ -302,7 +341,7 @@ def test_a_changed_or_deleted_card_leaves_the_task_done(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    card_path = job.task_dir("x") / "card.dat"
+    card_path = job.task_dir(STAGE_X) / "card.dat"
 
     def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
         outcome = _make_output(job)
@@ -310,13 +349,13 @@ def test_a_changed_or_deleted_card_leaves_the_task_done(
         cards = {"card": TaskCard.from_path(card_path)}
         return replace(outcome, result=replace(outcome.result, cards=cards))
 
-    record = job.run_task("x", {}, body)
+    record = job.run_task(STAGE_X, {}, body)
     assert record.cards == {"card": TaskCard.from_path(card_path)}
     card_path.write_text("edited since")
-    assert job.task("x").status is TaskStatus.DONE
+    assert job.task(STAGE_X).status is TaskStatus.DONE
     card_path.unlink()
-    assert job.task("x").status is TaskStatus.DONE
-    assert job.run_task("x", {}, body) == record
+    assert job.task(STAGE_X).status is TaskStatus.DONE
+    assert job.run_task(STAGE_X, {}, body) == record
 
 
 def test_a_stage_runs_once_and_its_result_is_kept(
@@ -329,7 +368,7 @@ def test_a_stage_runs_once_and_its_result_is_kept(
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    record = job.run_task("x", {"events": 10}, body)
+    record = job.run_task(STAGE_X, {"events": 10}, body)
     assert calls == [False]
     assert record.is_done and record.latest_run.finished is not None
     assert len(record.runs) == 1
@@ -339,11 +378,11 @@ def test_a_stage_runs_once_and_its_result_is_kept(
         metadata={"n": 1},
     )
     assert record.latest_run.log is None
-    assert job.task_record("x") == record
+    assert job.task_record(STAGE_X) == record
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.task("x") == Task("x", TaskStatus.DONE, record=record)
-    assert job.run_task("x", {"events": 10}, body) == record
+    assert job.task(STAGE_X) == Task("x", TaskStatus.DONE, record=record)
+    assert job.run_task(STAGE_X, {"events": 10}, body) == record
     assert calls == [False]
 
 
@@ -357,10 +396,10 @@ def test_other_parameters_need_force_and_force_replaces(
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.run_task("x", {"events": 10}, body)
+    job.run_task(STAGE_X, {"events": 10}, body)
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(ValueError) as refusal:
-        job.run_task("x", {"events": 20}, body)
+        job.run_task(STAGE_X, {"events": 20}, body)
     assert str(refusal.value) == (
         "The current parameters are inconsistent with those of the existing x "
         f"task in {job.root_dir} (x/task.json):\n"
@@ -368,7 +407,7 @@ def test_other_parameters_need_force_and_force_replaces(
         "Rerun with the parameters the task ran with, or run omphjc x with "
         "--force to replace its result."
     )
-    forced = job.run_task("x", {"events": 20}, body, force=True)
+    forced = job.run_task(STAGE_X, {"events": 20}, body, force=True)
     assert forced.parameters == {"events": 20}
     assert len(forced.runs) == 1
     assert calls == [False, True]
@@ -379,11 +418,13 @@ def test_a_refusal_names_only_the_parameters_that_differ(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     pythia = {"Main:timesAllowErrors": 5, "Tune:pp": 14}
-    job.run_task("x", {"events": 10, "pythia": pythia}, lambda *_: _make_output(job))
+    job.run_task(
+        STAGE_X, {"events": 10, "pythia": pythia}, lambda *_: _make_output(job)
+    )
     changed = {**pythia, "Main:timesAllowErrors": 7, "Next:numberCount": 0}
     with pytest.raises(ValueError) as refusal:
         job.run_task(
-            "x", {"events": 10, "pythia": changed}, lambda *_: _make_output(job)
+            STAGE_X, {"events": 10, "pythia": changed}, lambda *_: _make_output(job)
         )
     assert str(refusal.value).splitlines()[1:-1] == [
         "  pythia.Main:timesAllowErrors: expected 5, got 7",
@@ -404,24 +445,24 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
         )
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.task("x") == Task("x", TaskStatus.NOT_DONE)
-    record = job.run_task("x", {}, body)
+    assert job.task(STAGE_X) == Task("x", TaskStatus.NOT_DONE)
+    record = job.run_task(STAGE_X, {}, body)
     output_path = job.root_dir / "x" / "out.txt"
     output_path.unlink()
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.task("x") == Task(
+    assert job.task(STAGE_X) == Task(
         "x", TaskStatus.MISSING_OUTPUT, f"{output_path} is missing", record
     )
-    rerun = job.run_task("x", {}, body)
+    rerun = job.run_task(STAGE_X, {}, body)
     assert calls == [False, True]
     assert [run.status for run in rerun.runs] == ["done", "done"]
     assert rerun.metadata == {"n": 2}
 
     running = TaskRecord({}, (_run("running"),))
-    running.write(job.task_record_path("x"), root_dir=job.root_dir)
+    running.write(job.task_record_path(STAGE_X), root_dir=job.root_dir)
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.task("x") == Task("x", TaskStatus.NOT_DONE, record=running)
-    after_kill = job.run_task("x", {}, body)
+    assert job.task(STAGE_X) == Task("x", TaskStatus.NOT_DONE, record=running)
+    after_kill = job.run_task(STAGE_X, {}, body)
     assert [run.status for run in after_kill.runs] == [
         "interrupted",
         "done",
@@ -436,12 +477,12 @@ def test_require_done_returns_the_record_or_says_which_stage_to_run(
     job = Job(specs["HToBB"], tmp_path, 1)
     not_done = "The x stage of .* has not run to completion; run omphjc x first"
     with pytest.raises(ValueError, match=not_done):
-        job.require_done("x")
-    record = job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job))
-    assert job.require_done("x") == record
+        job.require_done(STAGE_X)
+    record = job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+    assert job.require_done(STAGE_X) == record
     (job.root_dir / "x" / "out.txt").unlink()
     with pytest.raises(ValueError, match=not_done):
-        job.require_done("x")
+        job.require_done(STAGE_X)
 
 
 def test_a_stage_whose_output_has_another_size_is_refused_unless_forced(
@@ -454,49 +495,49 @@ def test_a_stage_whose_output_has_another_size_is_refused_unless_forced(
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    record = job.run_task("x", {}, body)
+    record = job.run_task(STAGE_X, {}, body)
     output_path = job.root_dir / "x" / "out.txt"
     output_path.write_text("made and changed")
     job = Job(specs["HToBB"], tmp_path, 1)
     detail = f"{output_path} holds 16 bytes, not the 4 the x stage recorded"
-    assert job.task("x") == Task("x", TaskStatus.CHANGED, detail, record)
+    assert job.task(STAGE_X) == Task("x", TaskStatus.CHANGED, detail, record)
     refused = re.escape(f"{detail}; run omphjc x with --force to regenerate the file")
     with pytest.raises(ValueError, match=refused):
-        job.require_done("x")
+        job.require_done(STAGE_X)
     with pytest.raises(ValueError, match=refused):
-        job.run_task("x", {}, body)
+        job.run_task(STAGE_X, {}, body)
     assert calls == [False]
-    assert job.run_task("x", {}, body, force=True).is_done
+    assert job.run_task(STAGE_X, {}, body, force=True).is_done
     assert calls == [False, True]
-    assert job.require_done("x").result.outputs["out"].n_bytes == 4
+    assert job.require_done(STAGE_X).result.outputs["out"].n_bytes == 4
 
 
 def test_an_output_of_another_size_is_reported_before_a_missing_one(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    first_path = job.task_dir("x") / "first.txt"
-    second_path = job.task_dir("x") / "second.txt"
+    first_path = job.task_dir(STAGE_X) / "first.txt"
+    second_path = job.task_dir(STAGE_X) / "second.txt"
 
     def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
-        job.task_dir("x").mkdir(parents=True, exist_ok=True)
+        job.task_dir(STAGE_X).mkdir(parents=True, exist_ok=True)
         outputs = {}
         for name, path in (("first", first_path), ("second", second_path)):
             path.write_text("made")
             outputs[name] = TaskOutput(path, n_bytes=len("made"))
         return TaskOutcome(TaskResult(outputs=outputs))
 
-    record = job.run_task("x", {}, body)
+    record = job.run_task(STAGE_X, {}, body)
     first_path.unlink()
     second_path.write_text("made and changed")
-    assert job.task("x") == Task(
+    assert job.task(STAGE_X) == Task(
         "x",
         TaskStatus.CHANGED,
         f"{second_path} holds 16 bytes, not the 4 the x stage recorded",
         record,
     )
     with pytest.raises(ValueError, match="with --force to regenerate the file"):
-        job.run_task("x", {}, body)
+        job.run_task(STAGE_X, {}, body)
 
 
 def test_require_events_returns_the_events_a_done_stage_made(
@@ -504,27 +545,27 @@ def test_require_events_returns_the_events_a_done_stage_made(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(ValueError, match="has not run to completion"):
-        job.require_events("x")
-    job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job))
+        job.require_events(STAGE_X)
+    job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
     with pytest.raises(ValueError, match="The x stage of .* made no event file"):
-        job.require_events("x")
+        job.require_events(STAGE_X)
 
     events = EventOutput(
-        job.task_dir("x") / "out.txt",
+        job.task_dir(STAGE_X) / "out.txt",
         n_bytes=len("made"),
         format=EventFormat.LHE,
         n_events=3,
         fingerprint="lhe-v1:abc",
     )
     job.run_task(
-        "x",
+        STAGE_X,
         {},
         lambda overwrite, run_dir: TaskOutcome(
             TaskResult(outputs={EVENTS_OUTPUT: events})
         ),
         force=True,
     )
-    assert Job(specs["HToBB"], tmp_path, 1).require_events("x") == events
+    assert Job(specs["HToBB"], tmp_path, 1).require_events(STAGE_X) == events
 
 
 def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
@@ -535,8 +576,8 @@ def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
 
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(RuntimeError, match="boom"):
-        job.run_task("x", {"events": 10}, failing)
-    record = job.task_record("x")
+        job.run_task(STAGE_X, {"events": 10}, failing)
+    record = job.task_record(STAGE_X)
     assert record is not None
     assert (
         record.latest_run.status == "failed" and record.latest_run.finished is not None
@@ -551,15 +592,15 @@ def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    rerun = job.run_task("x", {"events": 10}, body)
+    rerun = job.run_task(STAGE_X, {"events": 10}, body)
     assert [run.status for run in rerun.runs] == ["failed", "done"]
     assert rerun.runs[0].usage == {}
     assert rerun.runs[1].usage["wall_seconds"] >= 0
     assert calls == [True]
 
     with pytest.raises(RuntimeError, match="boom"):
-        job.run_task("y", {"events": 10}, failing)
-    other = job.run_task("y", {"events": 20}, body)
+        job.run_task(STAGE_Y, {"events": 10}, failing)
+    other = job.run_task(STAGE_Y, {"events": 20}, body)
     assert len(other.runs) == 1
 
 
@@ -572,8 +613,8 @@ def test_each_run_has_an_id_that_begins_with_its_start_time(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(RuntimeError, match="boom"):
-        job.run_task("x", {}, _fail)
-    record = job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job))
+        job.run_task(STAGE_X, {}, _fail)
+    record = job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
     first, second = record.runs
     assert first.run_id != second.run_id
     for run in record.runs:
@@ -587,7 +628,7 @@ def test_a_run_records_the_host_it_ran_on(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    record = job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job))
+    record = job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
     assert record.latest_run.host == socket.gethostname()
 
 
@@ -600,16 +641,16 @@ def test_a_run_directory_stays_when_the_task_runs_again(
 
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(TerminationError):
-        job.run_task("x", {}, write_log_then_stop)
+        job.run_task(STAGE_X, {}, write_log_then_stop)
     run_dirs: list[Path] = []
 
     def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
         run_dirs.append(run_dir)
         return _make_output(job)
 
-    first, second = job.run_task("x", {}, body).runs
-    assert run_dirs == [job.run_dir("x", second.run_id)]
-    assert (job.run_dir("x", first.run_id) / "x.log").read_text() == "first run"
+    first, second = job.run_task(STAGE_X, {}, body).runs
+    assert run_dirs == [job.run_dir(STAGE_X, second.run_id)]
+    assert (job.run_dir(STAGE_X, first.run_id) / "x.log").read_text() == "first run"
 
 
 def test_a_record_names_the_log_of_a_run_from_its_start(
@@ -619,20 +660,20 @@ def test_a_record_names_the_log_of_a_run_from_its_start(
     logs: list[str | None] = []
 
     def read_record_then_fail(overwrite: bool, run_dir: Path) -> TaskOutcome:
-        record = job.task_record("x")
+        record = job.task_record(STAGE_X)
         assert record is not None
         logs.append(record.latest_run.log)
         raise RuntimeError("boom")
 
     with pytest.raises(RuntimeError, match="boom"):
-        job.run_task("x", {}, read_record_then_fail, log_name="x.log")
-    record = job.task_record("x")
+        job.run_task(STAGE_X, {}, read_record_then_fail, log_name="x.log")
+    record = job.task_record(STAGE_X)
     assert record is not None
     failed_run = record.latest_run
     assert failed_run.status == "failed"
     assert logs == [failed_run.log] == [f"x/runs/{failed_run.run_id}/x.log"]
     with pytest.raises(ValueError, match="x.log"):
-        job.run_task("x", {}, _fail, log_name="../x.log")
+        job.run_task(STAGE_X, {}, _fail, log_name="../x.log")
 
 
 def test_a_run_whose_directory_cannot_be_made_is_recorded_as_failed(
@@ -650,8 +691,8 @@ def test_a_run_whose_directory_cannot_be_made_is_recorded_as_failed(
     monkeypatch.setattr(Path, "mkdir", refuse_run_directories)
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(PermissionError):
-        job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job))
-    record = job.task_record("x")
+        job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+    record = job.task_record(STAGE_X)
     assert record is not None
     assert record.latest_run.status == "failed"
     assert record.latest_run.error == "no run directory"
@@ -676,14 +717,14 @@ def test_a_run_that_a_signal_ended_is_recorded_as_interrupted(
 
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(type(error)):
-        job.run_task("x", {}, stop)
-    record = job.task_record("x")
+        job.run_task(STAGE_X, {}, stop)
+    record = job.task_record(STAGE_X)
     assert record is not None
     interrupted_run = record.latest_run
     assert interrupted_run.status == "interrupted"
     assert interrupted_run.error == recorded_error
     assert interrupted_run.finished is not None
-    rerun = job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job))
+    rerun = job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
     assert [run.status for run in rerun.runs] == ["interrupted", "done"]
 
 
@@ -695,8 +736,8 @@ def test_a_failure_without_a_message_is_recorded_by_its_type(
 
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(AssertionError):
-        job.run_task("x", {}, fail_without_message)
-    record = job.task_record("x")
+        job.run_task(STAGE_X, {}, fail_without_message)
+    record = job.task_record(STAGE_X)
     assert record is not None
     assert record.latest_run.status == "failed"
     assert record.latest_run.error == "AssertionError"
@@ -713,17 +754,17 @@ def test_a_run_replaced_by_a_newer_run_leaves_that_runs_record(
     def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
         replaced_run_ids.append(run_dir.name)
         newer_record = TaskRecord.running({"events": 20})
-        newer_record.write(job.task_record_path("x"), root_dir=job.root_dir)
+        newer_record.write(job.task_record_path(STAGE_X), root_dir=job.root_dir)
         newer_records.append(newer_record)
         if fails:
             raise RuntimeError("boom")
         return _make_output(job)
 
     with pytest.raises(ReplacedRunError) as refusal:
-        job.run_task("x", {"events": 10}, body)
+        job.run_task(STAGE_X, {"events": 10}, body)
     (replaced_run_id,) = replaced_run_ids
     (newer_record,) = newer_records
-    assert job.task_record("x") == newer_record
+    assert job.task_record(STAGE_X) == newer_record
     status = "failed" if fails else "done"
     assert str(refusal.value) == (
         f"Run {replaced_run_id!r} of the x task in {job.root_dir} is not recorded "
@@ -739,12 +780,12 @@ def test_a_run_whose_record_was_deleted_records_its_end(
     job = Job(specs["HToBB"], tmp_path, 1)
 
     def delete_record_then_finish(overwrite: bool, run_dir: Path) -> TaskOutcome:
-        job.task_record_path("x").unlink()
+        job.task_record_path(STAGE_X).unlink()
         return _make_output(job)
 
-    record = job.run_task("x", {}, delete_record_then_finish)
+    record = job.run_task(STAGE_X, {}, delete_record_then_finish)
     assert record.is_done
-    assert job.task_record("x") == record
+    assert job.task_record(STAGE_X) == record
 
 
 PARAMETERS = {"events": 10, "input_fingerprint": "v1:original"}
@@ -760,11 +801,11 @@ def test_an_accepted_input_keeps_a_done_task_without_a_run(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    done_record = job.run_task("x", PARAMETERS, _body(job))
+    done_record = job.run_task(STAGE_X, PARAMETERS, _body(job))
     with pytest.raises(ValueError, match="input_fingerprint: expected v1:original"):
-        job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job))
+        job.run_task(STAGE_X, CHANGED_INPUT_PARAMETERS, _body(job))
     accepted_record = job.run_task(
-        "x", CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True
+        STAGE_X, CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True
     )
     assert accepted_record.accepted_input is not None
     assert accepted_record.accepted_input.fingerprint == "v1:changed"
@@ -778,15 +819,18 @@ def test_an_accepted_input_keeps_a_done_task_without_a_run(
         done_record.runs,
         done_record.result,
     )
-    assert job.task_record("x") == accepted_record
-    assert job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job)) == accepted_record
-    assert job.run_task("x", PARAMETERS, _body(job)) == accepted_record
+    assert job.task_record(STAGE_X) == accepted_record
     assert (
-        job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
+        job.run_task(STAGE_X, CHANGED_INPUT_PARAMETERS, _body(job)) == accepted_record
+    )
+    assert job.run_task(STAGE_X, PARAMETERS, _body(job)) == accepted_record
+    assert (
+        job.run_task(STAGE_X, CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
         == accepted_record
     )
     assert (
-        job.run_task("x", PARAMETERS, _body(job), accept_input=True) == accepted_record
+        job.run_task(STAGE_X, PARAMETERS, _body(job), accept_input=True)
+        == accepted_record
     )
 
 
@@ -794,33 +838,35 @@ def test_a_later_acceptance_replaces_the_earlier_one(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.run_task("x", PARAMETERS, _body(job))
-    job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
+    job.run_task(STAGE_X, PARAMETERS, _body(job))
+    job.run_task(STAGE_X, CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
     later_parameters = {**PARAMETERS, "input_fingerprint": "v1:later"}
-    later_record = job.run_task("x", later_parameters, _body(job), accept_input=True)
+    later_record = job.run_task(
+        STAGE_X, later_parameters, _body(job), accept_input=True
+    )
     assert later_record.accepted_input is not None
     assert later_record.accepted_input.fingerprint == "v1:later"
-    assert job.run_task("x", later_parameters, _body(job)) == later_record
+    assert job.run_task(STAGE_X, later_parameters, _body(job)) == later_record
     with pytest.raises(ValueError, match="input_fingerprint: expected v1:original"):
-        job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job))
+        job.run_task(STAGE_X, CHANGED_INPUT_PARAMETERS, _body(job))
 
 
 def test_an_input_is_accepted_only_when_nothing_else_differs(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    done_record = job.run_task("x", PARAMETERS, _body(job))
+    done_record = job.run_task(STAGE_X, PARAMETERS, _body(job))
     other_parameters = {**CHANGED_INPUT_PARAMETERS, "events": 20}
     with pytest.raises(ValueError, match="events: expected 10") as refusal:
-        job.run_task("x", other_parameters, _body(job), accept_input=True)
+        job.run_task(STAGE_X, other_parameters, _body(job), accept_input=True)
     assert "input_fingerprint" not in str(refusal.value)
     with pytest.raises(ValueError, match="events: expected 10"):
-        job.run_task("x", {"events": 20}, _body(job), accept_input=True)
+        job.run_task(STAGE_X, {"events": 20}, _body(job), accept_input=True)
     with pytest.raises(ValueError, match="cannot both be set"):
         job.run_task(
-            "x", CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True, force=True
+            STAGE_X, CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True, force=True
         )
-    assert job.task_record("x") == done_record
+    assert job.task_record(STAGE_X) == done_record
 
 
 def test_accept_input_changes_nothing_for_a_task_that_is_not_done(
@@ -828,11 +874,13 @@ def test_accept_input_changes_nothing_for_a_task_that_is_not_done(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(RuntimeError, match="boom"):
-        job.run_task("x", PARAMETERS, _fail, accept_input=True)
-    failed_record = job.task_record("x")
+        job.run_task(STAGE_X, PARAMETERS, _fail, accept_input=True)
+    failed_record = job.task_record(STAGE_X)
     assert failed_record is not None
     assert failed_record.latest_run.status == "failed"
-    record = job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
+    record = job.run_task(
+        STAGE_X, CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True
+    )
     assert record.is_done and len(record.runs) == 1
     assert record.parameters == CHANGED_INPUT_PARAMETERS
     assert record.accepted_input is None
@@ -847,17 +895,17 @@ def test_a_task_run_again_after_an_acceptance_compares_the_input_it_ran_on(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.run_task("x", PARAMETERS, _body(job))
-    job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
-    (job.task_dir("x") / "out.txt").unlink()
+    job.run_task(STAGE_X, PARAMETERS, _body(job))
+    job.run_task(STAGE_X, CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
+    (job.task_dir(STAGE_X) / "out.txt").unlink()
     with pytest.raises(ValueError, match="input_fingerprint: expected v1:original"):
-        job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job))
-    rerun = job.run_task("x", PARAMETERS, _body(job))
+        job.run_task(STAGE_X, CHANGED_INPUT_PARAMETERS, _body(job))
+    rerun = job.run_task(STAGE_X, PARAMETERS, _body(job))
     assert len(rerun.runs) == 2
     assert rerun.accepted_input is None
     with pytest.raises(ValueError, match="input_fingerprint: expected v1:original"):
-        job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job))
-    forced = job.run_task("x", CHANGED_INPUT_PARAMETERS, _body(job), force=True)
+        job.run_task(STAGE_X, CHANGED_INPUT_PARAMETERS, _body(job))
+    forced = job.run_task(STAGE_X, CHANGED_INPUT_PARAMETERS, _body(job), force=True)
     assert (
         forced.parameters == CHANGED_INPUT_PARAMETERS and forced.accepted_input is None
     )
@@ -868,14 +916,16 @@ def test_two_jobs_opened_on_one_directory_keep_the_records_of_both_tasks(
 ) -> None:
     first = Job(specs["HToBB"], tmp_path, 1)
     second = Job(specs["HToBB"], tmp_path, 1)
-    x_record = first.run_task("x", {}, lambda overwrite, run_dir: _make_output(first))
+    x_record = first.run_task(
+        STAGE_X, {}, lambda overwrite, run_dir: _make_output(first)
+    )
     y_record = second.run_task(
-        "y", {}, lambda overwrite, run_dir: TaskOutcome(TaskResult())
+        STAGE_Y, {}, lambda overwrite, run_dir: TaskOutcome(TaskResult())
     )
     job = Job(specs["HToBB"], tmp_path, 1)
     assert job.task_names() == ["x", "y"]
-    assert job.task_record("x") == x_record
-    assert job.task_record("y") == y_record
+    assert job.task_record(STAGE_X) == x_record
+    assert job.task_record(STAGE_Y) == y_record
     assert set(Manifest.read(job.manifest_path).tasks) == {"x", "y"}
 
 
@@ -886,19 +936,19 @@ def test_the_manifest_lists_every_task_and_is_written_again_when_deleted(
         raise RuntimeError("boom")
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    x_record = job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job))
+    x_record = job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
     with pytest.raises(RuntimeError, match="boom"):
-        job.run_task("y", {}, failing)
-    y_record = job.task_record("y")
+        job.run_task(STAGE_Y, {}, failing)
+    y_record = job.task_record(STAGE_Y)
     assert y_record is not None
     manifest = Manifest(
         job.identity,
         {
             "x": TaskSummary(
-                "done", x_record.latest_run.run_id, 1, job.task_record_path("x")
+                "done", x_record.latest_run.run_id, 1, job.task_record_path(STAGE_X)
             ),
             "y": TaskSummary(
-                "failed", y_record.latest_run.run_id, 1, job.task_record_path("y")
+                "failed", y_record.latest_run.run_id, 1, job.task_record_path(STAGE_Y)
             ),
         },
     )
@@ -906,14 +956,15 @@ def test_the_manifest_lists_every_task_and_is_written_again_when_deleted(
 
     job.manifest_path.unlink()
     assert (
-        job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job)) == x_record
+        job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+        == x_record
     )
     assert not job.manifest_path.exists()
     z_record = job.run_task(
-        "z", {}, lambda overwrite, run_dir: TaskOutcome(TaskResult())
+        STAGE_Z, {}, lambda overwrite, run_dir: TaskOutcome(TaskResult())
     )
     entry = TaskSummary(
-        "done", z_record.latest_run.run_id, 1, job.task_record_path("z")
+        "done", z_record.latest_run.run_id, 1, job.task_record_path(STAGE_Z)
     )
     assert Manifest.read(job.manifest_path) == Manifest(
         job.identity, {**manifest.tasks, "z": entry}
@@ -924,9 +975,9 @@ def test_a_task_is_found_by_the_record_in_its_own_directory(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job))
-    record_path = job.task_record_path("x")
-    deeper_dir = job.task_dir("x") / "deeper"
+    job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+    record_path = job.task_record_path(STAGE_X)
+    deeper_dir = job.task_dir(STAGE_X) / "deeper"
     deeper_dir.mkdir()
     shutil.copy(record_path, deeper_dir / "task.json")
     shutil.copy(record_path, job.root_dir / "task.json")
@@ -944,16 +995,16 @@ def test_a_task_record_that_cannot_be_read_stops_every_task_of_the_job(
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.run_task("x", {}, body)
-    record_path = job.task_record_path("x")
+    job.run_task(STAGE_X, {}, body)
+    record_path = job.task_record_path(STAGE_X)
     record_path.write_text("{")
     unreadable = re.escape(f"{record_path} is not valid JSON")
     with pytest.raises(ValueError, match=unreadable):
-        job.task("x")
+        job.task(STAGE_X)
     with pytest.raises(ValueError, match=unreadable):
-        job.run_task("x", {}, body, force=True)
+        job.run_task(STAGE_X, {}, body, force=True)
     with pytest.raises(ValueError, match=unreadable):
-        job.run_task("y", {}, body)
+        job.run_task(STAGE_Y, {}, body)
     assert calls == [False]
     assert job.set_aside_folders() == []
 
@@ -962,7 +1013,7 @@ def test_the_first_task_writes_the_identity_of_the_job(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job))
+    job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
     assert json.loads(job.identity_path.read_text()) == {
         "schema": 1,
         "process": "HToBB",
@@ -982,7 +1033,7 @@ def test_a_later_task_keeps_the_identity_file(
     )
     created.create(job.identity_path)
     later = Job(specs["HToBB"], tmp_path, 1)
-    record = later.run_task("x", {}, lambda overwrite, run_dir: _make_output(later))
+    record = later.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(later))
     assert record.is_done
     assert JobIdentity.read(job.identity_path).omphjc_version == "0.0.1"
 
@@ -992,7 +1043,7 @@ def test_a_directory_of_another_job_is_refused(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     shifted = Job(replace(specs["HToBB"], seed_offset=20_000_000), tmp_path, 1)
-    job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job))
+    job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
     refusal = (
         "The current configuration is inconsistent with that of the existing"
         " job in .*job_1 \\(job.json\\):"
@@ -1002,7 +1053,7 @@ def test_a_directory_of_another_job_is_refused(
     )
     calls = []
     with pytest.raises(ValueError, match=refusal):
-        shifted.run_task("y", {}, calls.append, force=True)
+        shifted.run_task(STAGE_Y, {}, calls.append, force=True)
     assert calls == []
     with pytest.raises(ValueError, match=refusal):
         Job(shifted.spec, tmp_path, 1)
@@ -1040,7 +1091,7 @@ def test_a_job_directory_removed_during_a_task_is_not_recreated(
     with pytest.raises(
         FileNotFoundError, match="job.json was removed while the x task ran"
     ):
-        job.run_task("x", {}, remove_then_finish)
+        job.run_task(STAGE_X, {}, remove_then_finish)
     assert not job.identity_path.exists()
     assert not job.manifest_path.exists()
 
@@ -1049,7 +1100,7 @@ def test_a_job_directory_removed_during_a_task_is_not_recreated(
         raise RuntimeError("the program stopped")
 
     with pytest.raises(FileNotFoundError, match="is not recorded") as failure:
-        Job(specs["HToBB"], tmp_path, 1).run_task("x", {}, remove_then_fail)
+        Job(specs["HToBB"], tmp_path, 1).run_task(STAGE_X, {}, remove_then_fail)
     assert isinstance(failure.value.__context__, RuntimeError)
     assert not job.root_dir.exists()
 
@@ -1067,7 +1118,7 @@ def test_an_identity_file_that_cannot_be_read_is_refused(
         Job(specs["HToBB"], tmp_path, 1)
     job.identity_path.write_text("not json")
     with pytest.raises(ValueError, match="job.json is not valid JSON"):
-        job.run_task("x", {}, lambda overwrite, run_dir: _make_output(job))
+        job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
 
 
 def test_generate_records_what_madgraph_made(
@@ -1075,7 +1126,7 @@ def test_generate_records_what_madgraph_made(
 ) -> None:
     job = Job(specs["TTBar"], tmp_path, 3)
     record = generate(job, n_events=10, mg5_path=mg5_path)
-    assert job.task_record("generate") == record
+    assert job.task_record(GenerateStage()) == record
     assert record.is_done
     assert record.parameters == {"events": 10, "seed": 3}
     metadata = record.result.metadata
@@ -1168,7 +1219,7 @@ def test_a_failed_madgraph_run_is_recorded_and_retried(
     monkeypatch.setenv("FAKE_MG5_FAIL", "launch")
     with pytest.raises(MadGraphError):
         generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
-    record = Job(specs["HToBB"], tmp_path, 1).task_record("generate")
+    record = Job(specs["HToBB"], tmp_path, 1).task_record(GenerateStage())
     assert record is not None
     assert (
         record.latest_run.status == "failed" and record.latest_run.finished is not None
@@ -1209,7 +1260,7 @@ def test_shower_records_what_it_made_and_keeps_it(
     )
     job = Job(specs["HToBB"], tmp_path, 1)
     record = shower(job, delphes_pythia8_path=delphes_pythia8_path)
-    assert job.task_record("shower") == record
+    assert job.task_record(ShowerStage()) == record
     assert record.is_done
     assert record.parameters == {
         "events": 10000,
@@ -1299,13 +1350,13 @@ def test_a_stage_records_the_folder_its_run_set_aside(
     job = Job(specs["HToBB"], tmp_path, 1)
 
     def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
-        aside = job.task_dir("x") / "omphjc-set-aside" / "20260101T000000Z-abc"
+        aside = job.task_dir(STAGE_X) / "omphjc-set-aside" / "20260101T000000Z-abc"
         aside.mkdir(parents=True)
         return replace(_make_output(job), set_aside_dir=aside)
 
-    record = job.run_task("x", {"events": 10}, body)
+    record = job.run_task(STAGE_X, {"events": 10}, body)
     assert record.latest_run.set_aside == "x/omphjc-set-aside/20260101T000000Z-abc"
-    assert job.task_record("x") == record
+    assert job.task_record(STAGE_X) == record
 
 
 def test_a_job_lists_and_clears_what_its_stages_set_aside(
@@ -1331,8 +1382,8 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
     assert folders[0].size() > 0
     assert job.clear_set_aside_folders() == folders
     assert job.set_aside_folders() == []
-    assert not (job.task_dir("generate") / "omphjc-set-aside").exists()
-    assert job.task("generate").status is TaskStatus.DONE
+    assert not (job.task_dir(GenerateStage()) / "omphjc-set-aside").exists()
+    assert job.task(GenerateStage()).status is TaskStatus.DONE
 
 
 def test_simulate_needs_a_finished_shower_stage(
@@ -1384,7 +1435,7 @@ def test_a_stage_whose_input_events_changed_is_refused_unless_forced(
     )
     monkeypatch.setenv("FAKE_MG5_EVENTS", "2")
     generate(job, n_events=10, mg5_path=mg5_path, force=True)
-    lhe_fingerprint = job.require_events("generate").fingerprint
+    lhe_fingerprint = job.require_events(GenerateStage()).fingerprint
     assert lhe_fingerprint != generated.result.outputs[EVENTS_OUTPUT].fingerprint
     with pytest.raises(ValueError, match="input_fingerprint: expected lhe-v1:"):
         shower(job, delphes_pythia8_path=delphes_pythia8_path)
@@ -1414,7 +1465,7 @@ def test_an_accepted_input_keeps_a_stage_and_the_stages_after_it(
     )
     monkeypatch.setenv("FAKE_MG5_EVENTS", "2")
     generate(job, n_events=10, mg5_path=mg5_path, force=True)
-    lhe_fingerprint = job.require_events("generate").fingerprint
+    lhe_fingerprint = job.require_events(GenerateStage()).fingerprint
     accepted_record = shower(
         job, delphes_pythia8_path=delphes_pythia8_path, accept_input=True
     )
@@ -1443,7 +1494,7 @@ def test_a_kept_stage_reads_no_event_file(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     done = _run_all(job, mg5_path, delphes_pythia8_path, delphes_root_path)
-    for stage in ("generate", "shower", "simulate"):
+    for stage in (GenerateStage(), ShowerStage(), SimulateStage()):
         event_path = job.require_events(stage).path
         event_path.write_bytes(bytes(event_path.stat().st_size))
     job = Job(specs["HToBB"], tmp_path, 1)
@@ -1460,7 +1511,7 @@ def test_an_event_file_of_another_size_is_refused_by_its_stage_and_the_next(
     job = Job(specs["HToBB"], tmp_path, 1)
     generate(job, n_events=10, mg5_path=mg5_path)
     shower(job, delphes_pythia8_path=delphes_pythia8_path)
-    root_path = job.require_events("shower").path
+    root_path = job.require_events(ShowerStage()).path
     recorded = root_path.stat().st_size
     root_path.write_bytes(root_path.read_bytes()[: recorded // 2])
     refused = re.escape(
@@ -1556,21 +1607,21 @@ def test_simulate_counts_the_events_of_its_output(
     job = Job(specs["HToBB"], tmp_path, 1)
     generate(job, n_events=10, mg5_path=mg5_path)
     shower(job, delphes_pythia8_path=delphes_pythia8_path)
-    showered = job.require_events("shower")
+    showered = job.require_events(ShowerStage())
     # The fake DelphesROOT copies its input, so the simulated file holds three
     # events while the shower stage recorded one.
     pids = ak.Array([[2212, 211], [2212], [211, 211, 22]])
     write_delphes_file(showered.path, {"PID": pids}, omit=omit)
     # The shower stage is recorded with the size of the file put in its place.
-    record = job.task_record("shower")
+    record = job.task_record(ShowerStage())
     assert record is not None
     record.result.outputs[EVENTS_OUTPUT] = replace(
         showered, n_bytes=showered.path.stat().st_size
     )
-    record.write(job.task_record_path("shower"), root_dir=job.root_dir)
+    record.write(job.task_record_path(ShowerStage()), root_dir=job.root_dir)
     simulate(job, delphes_root_path=delphes_root_path)
     assert showered.n_events == 1
-    assert job.require_events("simulate").n_events == 3
+    assert job.require_events(SimulateStage()).n_events == 3
 
 
 def test_a_forced_rerun_of_each_program_leaves_the_record_of_its_task(
@@ -1582,13 +1633,13 @@ def test_a_forced_rerun_of_each_program_leaves_the_record_of_its_task(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     runs = {
-        "generate": lambda force: generate(
+        GenerateStage(): lambda force: generate(
             job, n_events=10, force=force, mg5_path=mg5_path
         ),
-        "shower": lambda force: shower(
+        ShowerStage(): lambda force: shower(
             job, force=force, delphes_pythia8_path=delphes_pythia8_path
         ),
-        "simulate": lambda force: simulate(
+        SimulateStage(): lambda force: simulate(
             job, force=force, delphes_root_path=delphes_root_path
         ),
     }
