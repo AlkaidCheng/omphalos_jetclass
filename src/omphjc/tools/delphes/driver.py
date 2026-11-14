@@ -76,7 +76,9 @@ class SimulationRun(ProgramRun):
     """
 
 
-def detector_card_text(spec: ProcessSpec, card_path: Path | None = None) -> str:
+def detector_card_text(
+    spec: ProcessSpec, detector_card_path: Path | None = None
+) -> str:
     """Return the text of the detector card a simulation of `spec` runs.
 
     Parameters
@@ -84,17 +86,17 @@ def detector_card_text(spec: ProcessSpec, card_path: Path | None = None) -> str:
     spec : ProcessSpec
         The process. Its catalogue names the card to use by default. When it
         names none, the official JetClass card is used.
-    card_path : Path or None, optional
+    detector_card_path : Path or None, optional
         A card to use instead of the card of the process.
 
     Raises
     ------
     FileNotFoundError
-        If `card_path` is given and is not a file.
+        If `detector_card_path` is given and is not a file.
     """
-    if card_path is not None:
-        require_file(card_path, what="Delphes card")
-        return card_path.read_text(encoding="utf-8")
+    if detector_card_path is not None:
+        require_file(detector_card_path, what="Delphes card")
+        return detector_card_path.read_text(encoding="utf-8")
     if spec.delphes_card is None:
         return reference_card_text()
     return spec.delphes_card.read_text(encoding="utf-8")
@@ -106,7 +108,7 @@ def simulate_events(
     events_path: Path,
     workdir: Path,
     seed: int | None,
-    card_path: Path | None = None,
+    detector_card_path: Path | None = None,
     timeout: float | None = None,
     overwrite: bool = False,
     log_dir: Path | None = None,
@@ -130,7 +132,7 @@ def simulate_events(
     seed : int or None
         Delphes's seed, appended to the card. With ``None``, Delphes seeds
         itself from the clock.
-    card_path : Path or None, optional
+    detector_card_path : Path or None, optional
         The detector card to use instead of the card of the process.
     timeout : float or None, optional
         Seconds the run may take. ``None`` sets no limit. At the limit,
@@ -162,8 +164,8 @@ def simulate_events(
         If `timeout` is not positive, `workdir` is a filesystem root, or a
         file of an earlier run is a symbolic link.
     FileNotFoundError
-        If `events_path` or `card_path` is not a file, or ``DelphesROOT`` cannot be
-        found.
+        If `events_path` or `detector_card_path` is not a file, or ``DelphesROOT``
+        cannot be found.
     FileExistsError
         If `workdir` already holds an output file and `overwrite` is false.
     StampError
@@ -191,7 +193,7 @@ def simulate_events(
         require_unoccupied(workspace.output_path, what="Output file")
     # Read before anything is removed, so that a missing card fails at once
     # and leaves earlier results in place.
-    card_text = detector_card_text(spec, card_path)
+    card_text = detector_card_text(spec, detector_card_path)
     if seed is not None:
         card_text = with_random_seed(card_text, seed)
 

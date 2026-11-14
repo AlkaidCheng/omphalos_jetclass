@@ -17,7 +17,8 @@ from delphes_records import write_delphes_file
 
 from omphjc import __version__
 from omphjc.comparison import Difference
-from omphjc.events import EventFormat
+from omphjc.data_files import Card
+from omphjc.events import EventFile, EventFormat
 from omphjc.events.delphes_root import DelphesROOTFile
 from omphjc.jobs import (
     EVENTS_OUTPUT,
@@ -47,10 +48,12 @@ from omphjc.jobs import (
     read_cards,
     shower,
     simulate,
+    task_parameters,
 )
 from omphjc.processes import ProcessSpec, get_process
 from omphjc.programs import available_cores
 from omphjc.stamps import COMPACT_UTC_FORMAT, read_stamp
+from omphjc.tools.delphes.adapter import DelphesSimulator
 from omphjc.tools.madgraph.driver import MadGraphError
 from omphjc.tools.madgraph.lhe_file import LHEFile
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
@@ -77,6 +80,13 @@ class FakeStage(Stage):
 STAGE_X = FakeStage("x")
 STAGE_Y = FakeStage("y")
 STAGE_Z = FakeStage("z")
+
+
+def _delphes_simulator(
+    job: Job, delphes_root_path: Path, **options: Any
+) -> DelphesSimulator:
+    """Return a Delphes simulator for the process of `job`."""
+    return DelphesSimulator(job.spec, delphes_root_path=delphes_root_path, **options)
 
 
 def _run(status: str, **fields: Any) -> TaskRun:
@@ -1386,11 +1396,117 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
     assert job.task(GenerateStage()).status is TaskStatus.DONE
 
 
+@dataclass(frozen=True)
+class FakeSimulator:
+    """A simulator for tests: it writes one small file and no events."""
+
+    name: ClassVar[str] = "fake-simulator"
+    log_name: ClassVar[str] = "fake.log"
+    card_classes: ClassVar[tuple[type[Card], ...]] = ()
+
+    input_formats: frozenset[EventFormat] = frozenset({EventFormat.DELPHES_ROOT})
+    extra_parameters: tuple[tuple[str, Any], ...] = ()
+
+    def parameters(self, *, seed: int) -> dict[str, Any]:
+        return {"seed": seed, **dict(self.extra_parameters)}
+
+    def simulate(
+        self,
+        event_file: EventFile,
+        *,
+        workdir: Path,
+        seed: int,
+        overwrite: bool,
+        log_dir: Path,
+    ) -> TaskOutcome:
+        workdir.mkdir(parents=True, exist_ok=True)
+        output_path = workdir / "simulated.txt"
+        output_path.write_text(f"{event_file.path.name} {seed}")
+        (log_dir / self.log_name).write_text("simulated")
+        output = TaskOutput(output_path, n_bytes=output_path.stat().st_size)
+        return TaskOutcome(
+            TaskResult(
+                outputs={"out": output},
+                metadata={"input_format": event_file.format.value},
+            )
+        )
+
+
+def _record_showered_events(job: Job, event_format: EventFormat) -> EventOutput:
+    """Record a done shower task of `job` whose events have `event_format`."""
+    events_path = job.task_dir(ShowerStage()) / "events.dat"
+
+    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+        events_path.parent.mkdir(parents=True, exist_ok=True)
+        events_path.write_text("events")
+        events = EventOutput(events_path, 6, event_format, 1, "fake-v1:abc")
+        return TaskOutcome(TaskResult(outputs={EVENTS_OUTPUT: events}))
+
+    record = job.run_task(ShowerStage(), {}, body)
+    assert record.events is not None
+    return record.events
+
+
+def test_simulate_runs_a_simulator_on_the_showered_events(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    events = _record_showered_events(job, EventFormat.DELPHES_ROOT)
+    record = simulate(job, FakeSimulator())
+    assert record.is_done
+    assert record.parameters == {
+        "input_fingerprint": events.fingerprint,
+        "seed": job.seed,
+    }
+    assert record.metadata == {"input_format": "delphes-root"}
+    simulate_dir = job.task_dir(SimulateStage())
+    assert (simulate_dir / "simulated.txt").read_text() == f"events.dat {job.seed}"
+    run_id = record.latest_run.run_id
+    assert record.latest_run.log == f"simulate/runs/{run_id}/fake.log"
+    assert (job.root_dir / record.latest_run.log).read_text() == "simulated"
+    assert simulate(job, FakeSimulator()) == record
+
+
+def test_simulate_refuses_events_the_simulator_cannot_read(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    _record_showered_events(job, EventFormat.LHE)
+    refusal = (
+        "fake-simulator reads delphes-root files, but the shower stage of "
+        f"{job.root_dir} made a lhe file"
+    )
+    with pytest.raises(ValueError, match=re.escape(refusal)):
+        simulate(job, FakeSimulator())
+    assert job.task_record(SimulateStage()) is None
+    assert not job.task_dir(SimulateStage()).exists()
+
+
+def test_simulate_refuses_a_simulator_that_uses_a_key_of_the_stage(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    _record_showered_events(job, EventFormat.DELPHES_ROOT)
+    simulator = FakeSimulator(extra_parameters=(("input_fingerprint", "mine"),))
+    refusal = "The parameters of fake-simulator use the keys of the stage"
+    with pytest.raises(ValueError, match=f"{refusal}: input_fingerprint"):
+        simulate(job, simulator)
+    assert job.task_record(SimulateStage()) is None
+
+
+def test_task_parameters_join_the_parameters_of_a_stage_and_its_tool() -> None:
+    joined = task_parameters({"events": 10}, {"seed": 7}, tool_name="tool")
+    assert joined == {"events": 10, "seed": 7}
+    with pytest.raises(ValueError, match="of tool use the keys of the stage: a, b"):
+        task_parameters({"a": 1, "b": 2, "c": 3}, {"b": 0, "a": 0}, tool_name="tool")
+
+
 def test_simulate_needs_a_finished_shower_stage(
     specs: Mapping[str, ProcessSpec], delphes_root_path: Path, tmp_path: Path
 ) -> None:
     with pytest.raises(ValueError, match="run omphjc shower first"):
-        simulate(Job(specs["HToBB"], tmp_path, 1), delphes_root_path=delphes_root_path)
+        job = Job(specs["HToBB"], tmp_path, 1)
+        simulate(job, _delphes_simulator(job, delphes_root_path))
     assert not (tmp_path / "HToBB" / "job_1" / "simulate").exists()
 
 
@@ -1400,7 +1516,7 @@ def _run_all(
     return (
         generate(job, n_events=10, mg5_path=mg5_path),
         shower(job, delphes_pythia8_path=delphes_pythia8_path),
-        simulate(job, delphes_root_path=delphes_root_path),
+        simulate(job, _delphes_simulator(job, delphes_root_path)),
     )
 
 
@@ -1418,7 +1534,7 @@ def test_a_stage_run_again_with_the_same_events_keeps_the_stages_after_it(
     generate(job, n_events=10, mg5_path=mg5_path, force=True)
     assert shower(job, delphes_pythia8_path=delphes_pythia8_path) == showered
     shower(job, delphes_pythia8_path=delphes_pythia8_path, force=True)
-    assert simulate(job, delphes_root_path=delphes_root_path) == simulated
+    assert simulate(job, _delphes_simulator(job, delphes_root_path)) == simulated
 
 
 def test_a_stage_whose_input_events_changed_is_refused_unless_forced(
@@ -1446,8 +1562,8 @@ def test_a_stage_whose_input_events_changed_is_refused_unless_forced(
     with pytest.raises(
         ValueError, match="input_fingerprint: expected delphes_root-v1:"
     ):
-        simulate(job, delphes_root_path=delphes_root_path)
-    forced = simulate(job, delphes_root_path=delphes_root_path, force=True)
+        simulate(job, _delphes_simulator(job, delphes_root_path))
+    forced = simulate(job, _delphes_simulator(job, delphes_root_path), force=True)
     assert forced.parameters["input_fingerprint"] == root_fingerprint
 
 
@@ -1474,15 +1590,15 @@ def test_an_accepted_input_keeps_a_stage_and_the_stages_after_it(
     assert accepted_record.parameters == showered.parameters
     assert accepted_record.runs == showered.runs
     assert shower(job, delphes_pythia8_path=delphes_pythia8_path) == accepted_record
-    assert simulate(job, delphes_root_path=delphes_root_path) == simulated
+    assert simulate(job, _delphes_simulator(job, delphes_root_path)) == simulated
     assert (
-        simulate(job, delphes_root_path=delphes_root_path, accept_input=True)
+        simulate(job, _delphes_simulator(job, delphes_root_path), accept_input=True)
         == simulated
     )
     with pytest.raises(ValueError, match="cannot both be set"):
         shower(job, accept_input=True, force=True)
     with pytest.raises(ValueError, match="cannot both be set"):
-        simulate(job, accept_input=True, force=True)
+        simulate(job, DelphesSimulator(job.spec), accept_input=True, force=True)
 
 
 def test_a_kept_stage_reads_no_event_file(
@@ -1521,9 +1637,9 @@ def test_an_event_file_of_another_size_is_refused_by_its_stage_and_the_next(
     with pytest.raises(ValueError, match=refused):
         shower(job, delphes_pythia8_path=delphes_pythia8_path)
     with pytest.raises(ValueError, match=refused):
-        simulate(job, delphes_root_path=delphes_root_path)
+        simulate(job, _delphes_simulator(job, delphes_root_path))
     shower(job, delphes_pythia8_path=delphes_pythia8_path, force=True)
-    assert simulate(job, delphes_root_path=delphes_root_path).is_done
+    assert simulate(job, _delphes_simulator(job, delphes_root_path)).is_done
 
 
 def test_simulate_records_what_it_made_and_keeps_it(
@@ -1536,7 +1652,7 @@ def test_simulate_records_what_it_made_and_keeps_it(
     job = Job(specs["HToBB"], tmp_path, 1)
     generate(job, n_events=10, mg5_path=mg5_path)
     showered = shower(job, delphes_pythia8_path=delphes_pythia8_path)
-    record = simulate(job, delphes_root_path=delphes_root_path)
+    record = simulate(job, _delphes_simulator(job, delphes_root_path))
     assert record.is_done
     assert record.parameters["seed"] == job.seed
     assert (
@@ -1546,6 +1662,8 @@ def test_simulate_records_what_it_made_and_keeps_it(
     assert len(record.parameters["card"]) == 64
     card_path = job.root_dir / "simulate" / "delphes_card.tcl"
     assert record.cards == {"detector_card": TaskCard.from_path(card_path)}
+    card_names = {card_class.card_name for card_class in DelphesSimulator.card_classes}
+    assert set(record.cards) == card_names
     assert record.metadata == {}
     root_path = job.root_dir / "simulate" / "delphes.root"
     assert root_path.is_file()
@@ -1567,23 +1685,21 @@ def test_simulate_records_what_it_made_and_keeps_it(
     log = (job.root_dir / record.latest_run.log).read_text()
     assert f"** Reading {job.root_dir / 'shower' / 'particles.root'}" in log
 
-    kept = simulate(
-        Job(specs["HToBB"], tmp_path, 1), delphes_root_path=delphes_root_path
+    reopened_job = Job(specs["HToBB"], tmp_path, 1)
+    assert (
+        simulate(reopened_job, _delphes_simulator(reopened_job, delphes_root_path))
+        == record
     )
-    assert kept == record
     other = tmp_path / "other.tcl"
     other.write_text("set ExecutionPath {\n  TreeWriter\n}\n")
     with pytest.raises(ValueError, match="card: expected "):
         simulate(
-            Job(specs["HToBB"], tmp_path, 1),
-            card_path=other,
-            delphes_root_path=delphes_root_path,
+            job, _delphes_simulator(job, delphes_root_path, detector_card_path=other)
         )
     forced = simulate(
-        Job(specs["HToBB"], tmp_path, 1),
-        card_path=other,
+        job,
+        _delphes_simulator(job, delphes_root_path, detector_card_path=other),
         force=True,
-        delphes_root_path=delphes_root_path,
     )
     assert forced.is_done and forced.parameters["card"] != record.parameters["card"]
     assert (
@@ -1619,7 +1735,7 @@ def test_simulate_counts_the_events_of_its_output(
         showered, n_bytes=showered.path.stat().st_size
     )
     record.write(job.task_record_path(ShowerStage()), root_dir=job.root_dir)
-    simulate(job, delphes_root_path=delphes_root_path)
+    simulate(job, _delphes_simulator(job, delphes_root_path))
     assert showered.n_events == 1
     assert job.require_events(SimulateStage()).n_events == 3
 
@@ -1640,7 +1756,7 @@ def test_a_forced_rerun_of_each_program_leaves_the_record_of_its_task(
             job, force=force, delphes_pythia8_path=delphes_pythia8_path
         ),
         SimulateStage(): lambda force: simulate(
-            job, force=force, delphes_root_path=delphes_root_path
+            job, _delphes_simulator(job, delphes_root_path), force=force
         ),
     }
     for stage, run in runs.items():

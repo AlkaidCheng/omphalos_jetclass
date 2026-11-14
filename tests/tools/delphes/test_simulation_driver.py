@@ -82,7 +82,7 @@ def test_another_card_can_be_run_and_no_seed_leaves_it_alone(
         events_path=events_path,
         workdir=tmp_path / "simulate",
         seed=None,
-        card_path=card,
+        detector_card_path=card,
         delphes_root_path=delphes_root_path,
     )
     assert run.card_paths["detector_card"].read_text() == card.read_text()
