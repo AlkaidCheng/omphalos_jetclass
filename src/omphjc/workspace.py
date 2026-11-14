@@ -298,8 +298,6 @@ class ProgramWorkspace(Workspace):
     """How the program is called in messages, for example ``"MadGraph's bin/mg5_aMC"``."""
     log_name: ClassVar[str]
     """Name of the log file in the directory."""
-    error_type: ClassVar[type[ProgramError]] = ProgramError
-    """The exception a failed run raises; a subclass names its own."""
 
     def __init__(
         self,
@@ -359,7 +357,7 @@ class ProgramWorkspace(Workspace):
         ------
         ProgramError
             If the program exits with a failing status or is still active at
-            the deadline. The error is of the workspace's `error_type`.
+            the deadline.
         """
         timeout = (
             None
@@ -374,10 +372,10 @@ class ProgramWorkspace(Workspace):
                 timeout=timeout,
             )
         except ProgramError as error:
-            raise self.error_type(f"{failure_message}: {error}") from error
+            raise ProgramError(f"{failure_message}: {error}") from error
         self.usage = self.usage.combined_with(usage)
         return usage
 
     def make_error(self, message: str) -> ProgramError:
-        """Return an error of the workspace's type with `message` and the log's end."""
-        return self.error_type(f"{message}\n{log_tail(self.log_path)}")
+        """Return an error with `message` and the last lines of the log."""
+        return ProgramError(f"{message}\n{log_tail(self.log_path)}")

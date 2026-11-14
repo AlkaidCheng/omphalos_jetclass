@@ -187,6 +187,8 @@
   `SimulateStage`) in place of the name of the task. (#75)
 - `omphjc.jobs.simulate` takes a detector simulator, such as
   `omphjc.tools.delphes.adapter.DelphesSimulator`. (#76)
+- Every tool raises `omphjc.programs.ProgramError`; `MadGraphError`,
+  `ShowerError` and `SimulationError` are removed. (#78)
 
 ### Fixed
 

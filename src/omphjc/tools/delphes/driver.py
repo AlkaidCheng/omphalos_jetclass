@@ -38,7 +38,6 @@ from pathlib import Path
 from typing import ClassVar
 
 from omphjc.processes.catalogue import ProcessSpec
-from omphjc.programs import ProgramError
 from omphjc.safe_paths import normalize_path, require_file, require_unoccupied
 from omphjc.tools.delphes.card import (
     DetectorCard,
@@ -46,10 +45,6 @@ from omphjc.tools.delphes.card import (
     with_random_seed,
 )
 from omphjc.workspace import ProgramRun, ProgramWorkspace
-
-
-class SimulationError(ProgramError):
-    """``DelphesROOT`` failed, ran past its time limit or wrote nothing."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -168,7 +163,7 @@ def simulate_events(
         - it holds something other than a stamp where the stamp belongs.
 
         Nothing is changed in that case.
-    SimulationError
+    ProgramError
         If ``DelphesROOT`` exits with an error, is still running at the time
         limit, or writes no output. The message ends with the last lines of
         the log.
@@ -249,7 +244,6 @@ class SimulationWorkspace(ProgramWorkspace):
     log_name = "simulate.log"
     output_file_name: ClassVar[str] = "delphes.root"
     """The file of the simulated events in the directory."""
-    error_type = SimulationError
 
     def __init__(
         self,
@@ -291,7 +285,7 @@ class SimulationWorkspace(ProgramWorkspace):
 
         Raises
         ------
-        SimulationError
+        ProgramError
             If ``DelphesROOT`` exits with a failing status or is still running
             at the deadline.
         """

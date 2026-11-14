@@ -66,7 +66,6 @@ from pathlib import Path
 from typing import ClassVar
 
 from omphjc.processes.catalogue import ProcessSpec, SettingValue
-from omphjc.programs import ProgramError
 from omphjc.safe_paths import require_file, require_unoccupied
 from omphjc.tools.delphes.card import ParticlesCard, particles_card_text
 from omphjc.tools.pythia.cmnd import PythiaCmnd
@@ -79,10 +78,6 @@ _PYTHIA_VERSION = re.compile(r"This is PYTHIA version\s+(\d+\.\d+)")
 _STATISTICS_SUM = re.compile(
     r"^\s*\|\s*sum\s*\|\s*(\d+)\s+(\d+)\s+(\d+)\s*\|", re.MULTILINE
 )
-
-
-class ShowerError(ProgramError):
-    """``DelphesPythia8`` failed, gave up, ran past its time limit or wrote nothing."""
 
 
 @dataclass(frozen=True)
@@ -233,7 +228,7 @@ def shower_events(
         - it holds something other than a stamp where the stamp belongs.
 
         Nothing is changed in that case.
-    ShowerError
+    ProgramError
         If ``DelphesPythia8`` exits with an error, gives up after too many
         failed events, is still running at the time limit, or writes no
         output. The message ends with the last lines of the log.
@@ -325,7 +320,6 @@ class ShowerWorkspace(ProgramWorkspace):
     program = "DelphesPythia8"
     description = f"Delphes's {program}"
     log_name = "shower.log"
-    error_type = ShowerError
     input_file_name: ClassVar[str] = "events.lhe"
     """The file of the input events in the directory, uncompressed."""
     output_file_name: ClassVar[str] = "particles.root"
@@ -385,7 +379,7 @@ class ShowerWorkspace(ProgramWorkspace):
 
         Raises
         ------
-        ShowerError
+        ProgramError
             If ``DelphesPythia8`` exits with a failing status or is still
             running at the deadline.
         """

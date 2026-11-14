@@ -5,10 +5,10 @@ from pathlib import Path
 import pytest
 
 from omphjc.processes import ProcessSpec
+from omphjc.programs import ProgramError
 from omphjc.stamps import read_stamp
 from omphjc.tools.delphes.card import DelphesCard, particles_card_text
 from omphjc.tools.pythia.driver import (
-    ShowerError,
     ShowerWorkspace,
     parse_statistics,
     shower_events,
@@ -121,7 +121,7 @@ def test_a_run_that_gave_up_raises(
 ) -> None:
     lhe_path = _write_lhe(tmp_path / "events.lhe.gz", 1)
     monkeypatch.setenv("FAKE_DP8_FAIL", "abort")
-    with pytest.raises(ShowerError, match="gave up"):
+    with pytest.raises(ProgramError, match="gave up"):
         shower_events(
             specs["HToBB"],
             lhe_path=lhe_path,

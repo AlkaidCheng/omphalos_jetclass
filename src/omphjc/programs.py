@@ -38,7 +38,7 @@ _LOG_TAIL_LINES = 20
 
 
 class ProgramError(RuntimeError):
-    """An external program failed or ran past its time limit."""
+    """An external program failed, ran past its time limit or did not make its output."""
 
 
 def available_cores() -> int:

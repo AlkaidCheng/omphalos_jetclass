@@ -163,16 +163,11 @@ if fail == "exit":
 """
 
 
-class ToolError(ProgramError):
-    pass
-
-
 class ToolWorkspace(ProgramWorkspace):
     purpose = PURPOSE
     program = "fake-tool"
     description = "the fake tool"
     log_name = "tool.log"
-    error_type = ToolError
 
     def __init__(
         self,
@@ -251,17 +246,16 @@ def test_runs_append_to_one_log_and_their_usage_adds_up(
     assert stamp is not None and "tool.log" in stamp.artifacts
 
 
-def test_a_failing_program_raises_the_workspaces_error(
+def test_a_failing_program_raises_an_error_with_the_failure_message(
     tool_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = ToolWorkspace("HToBB", tmp_path, tool_path=tool_path)
     monkeypatch.setenv("FAKE_TOOL_FAIL", "exit")
-    with pytest.raises(ToolError, match="tool failed: "), workspace.sealed_run():
+    with pytest.raises(ProgramError, match="tool failed: "), workspace.sealed_run():
         workspace.run([tool_path], failure_message="tool failed")
     error = workspace.make_error("tool wrote nothing")
-    assert isinstance(error, ToolError)
     assert str(error).startswith("tool wrote nothing\n")
     assert "tool ran with" in str(error)
 
@@ -274,6 +268,6 @@ def test_a_program_still_running_at_the_deadline_is_stopped(
     workspace = ToolWorkspace("HToBB", tmp_path, tool_path=tool_path, timeout=0.1)
     monkeypatch.setenv("FAKE_TOOL_FAIL", "hang")
     started = time.monotonic()
-    with pytest.raises(ToolError, match="tool failed: "), workspace.sealed_run():
+    with pytest.raises(ProgramError, match="tool failed: "), workspace.sealed_run():
         workspace.run([tool_path], failure_message="tool failed")
     assert time.monotonic() - started < 30
