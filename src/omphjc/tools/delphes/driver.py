@@ -35,6 +35,7 @@ delete.
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import ProgramError
@@ -45,15 +46,6 @@ from omphjc.tools.delphes.card import (
     with_random_seed,
 )
 from omphjc.workspace import ProgramRun, ProgramWorkspace
-
-# Delphes's program running a card on the generator record of a Delphes ROOT file.
-_DELPHES_ROOT = "DelphesROOT"
-
-_OUTPUT_FILE = "delphes.root"
-_LOG_FILE = "simulate.log"
-
-# The purpose written in the stamp of a working directory.
-_RUN_PURPOSE = "delphes-simulation"
 
 
 class SimulationError(ProgramError):
@@ -248,11 +240,15 @@ class SimulationWorkspace(ProgramWorkspace):
         ``DelphesROOT``.
     """
 
-    purpose = _RUN_PURPOSE
+    purpose = "delphes-simulation"
     card_classes = (DetectorCard,)
-    program = _DELPHES_ROOT
-    description = f"Delphes's {_DELPHES_ROOT}"
-    log_name = _LOG_FILE
+    # Delphes's program that runs a card on the generator record of a
+    # Delphes ROOT file.
+    program = "DelphesROOT"
+    description = f"Delphes's {program}"
+    log_name = "simulate.log"
+    output_file_name: ClassVar[str] = "delphes.root"
+    """The file of the simulated events in the directory."""
     error_type = SimulationError
 
     def __init__(
@@ -280,11 +276,11 @@ class SimulationWorkspace(ProgramWorkspace):
     @property
     def output_path(self) -> Path:
         """The Delphes ROOT file the run writes."""
-        return self.workdir / _OUTPUT_FILE
+        return self.workdir / self.output_file_name
 
     @property
     def artifacts(self) -> list[str]:
-        return [_OUTPUT_FILE, *super().artifacts]
+        return [self.output_file_name, *super().artifacts]
 
     def write_card(self, card_text: str) -> None:
         """Write the detector card the run uses."""
@@ -303,7 +299,7 @@ class SimulationWorkspace(ProgramWorkspace):
             [
                 self.program_path,
                 DetectorCard.file_name,
-                _OUTPUT_FILE,
+                self.output_file_name,
                 normalize_path(events_path),
             ],
             failure_message="DelphesROOT failed",
