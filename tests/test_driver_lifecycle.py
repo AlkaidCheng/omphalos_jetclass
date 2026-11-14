@@ -18,8 +18,19 @@ import pytest
 import omphjc.workspace as workspace
 from omphjc.processes import ProcessSpec
 from omphjc.stamps import read_stamp
+from omphjc.tools.delphes.card import (
+    DelphesCard,
+    DetectorCard,
+    ParticlesCard,
+    particles_card_text,
+)
 from omphjc.tools.delphes.driver import SimulationWorkspace, simulate_events
 from omphjc.tools.madgraph.driver import MadGraphWorkspace, generate_events
+from omphjc.tools.madgraph.madspin_card import MadSpinCard
+from omphjc.tools.madgraph.proc_card import ProcCard
+from omphjc.tools.madgraph.run_card import RunCard
+from omphjc.tools.madgraph.slha_card import ParamCard
+from omphjc.tools.pythia.cmnd import PythiaCmnd
 from omphjc.tools.pythia.driver import ShowerWorkspace, shower_events
 from omphjc.workspace import ProgramRun, ProgramWorkspace
 
@@ -128,6 +139,34 @@ def workdir(tmp_path: Path) -> Path:
 
 def _commands(log_path: Path) -> list[str]:
     return [line for line in log_path.read_text().splitlines() if line[:2] == "$ "]
+
+
+CARD_CLASSES = (
+    ProcCard,
+    RunCard,
+    ParamCard,
+    MadSpinCard,
+    PythiaCmnd,
+    ParticlesCard,
+    DetectorCard,
+)
+
+
+def test_each_card_class_names_its_card_and_its_file() -> None:
+    card_names = [card_class.card_name for card_class in CARD_CLASSES]
+    file_names = [card_class.file_name for card_class in CARD_CLASSES]
+    assert len(set(card_names)) == len(set(file_names)) == len(CARD_CLASSES)
+    for card_class in CARD_CLASSES:
+        assert card_class.description.endswith(".")
+
+
+def test_a_card_of_a_tool_is_parsed_as_its_format() -> None:
+    text = particles_card_text()
+    particles_card = ParticlesCard.from_text(text)
+    assert isinstance(particles_card, ParticlesCard)
+    assert particles_card.fingerprint() == DelphesCard.from_text(text).fingerprint()
+    assert DetectorCard.format_name == ParticlesCard.format_name == "delphes_card"
+    assert DetectorCard.card_name != ParticlesCard.card_name
 
 
 def test_an_occupied_output_is_refused_and_left_as_it_was(

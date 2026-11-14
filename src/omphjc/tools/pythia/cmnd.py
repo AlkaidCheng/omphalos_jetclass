@@ -102,6 +102,9 @@ class PythiaCmnd(Card):
 
     format_name: ClassVar[str] = "pythia_cmnd"
     record_version: ClassVar[int] = 1
+    card_name: ClassVar[str] = "command_file"
+    file_name: ClassVar[str] = "pythia.cmnd"
+    description: ClassVar[str] = "The Pythia command file: the settings of the shower."
 
     settings: dict[str, str]
 

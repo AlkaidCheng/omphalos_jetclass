@@ -39,13 +39,16 @@ from pathlib import Path
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.programs import ProgramError
 from omphjc.safe_paths import normalize_path, require_file, require_unoccupied
-from omphjc.tools.delphes.card import reference_card_text, with_random_seed
+from omphjc.tools.delphes.card import (
+    DetectorCard,
+    reference_card_text,
+    with_random_seed,
+)
 from omphjc.workspace import ProgramRun, ProgramWorkspace
 
 # Delphes's program running a card on the generator record of a Delphes ROOT file.
 _DELPHES_ROOT = "DelphesROOT"
 
-_CARD_FILE = "delphes_card.tcl"
 _OUTPUT_FILE = "delphes.root"
 _LOG_FILE = "simulate.log"
 
@@ -271,7 +274,7 @@ class SimulationWorkspace(ProgramWorkspace):
     @property
     def card_path(self) -> Path:
         """The detector card of the run."""
-        return self.workdir / _CARD_FILE
+        return self.workdir / DetectorCard.file_name
 
     @property
     def output_path(self) -> Path:
@@ -280,7 +283,7 @@ class SimulationWorkspace(ProgramWorkspace):
 
     @property
     def artifacts(self) -> list[str]:
-        return [_CARD_FILE, _OUTPUT_FILE, *super().artifacts]
+        return [DetectorCard.file_name, _OUTPUT_FILE, *super().artifacts]
 
     def write_card(self, card_text: str) -> None:
         """Write the detector card the run uses."""
@@ -296,6 +299,11 @@ class SimulationWorkspace(ProgramWorkspace):
             at the deadline.
         """
         self.run(
-            [self.program_path, _CARD_FILE, _OUTPUT_FILE, normalize_path(events_path)],
+            [
+                self.program_path,
+                DetectorCard.file_name,
+                _OUTPUT_FILE,
+                normalize_path(events_path),
+            ],
             failure_message="DelphesROOT failed",
         )

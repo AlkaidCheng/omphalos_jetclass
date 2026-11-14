@@ -81,7 +81,28 @@ class DataFile(ABC):
 
 
 class Card(DataFile):
-    """The parsed content of a text file that holds settings or commands."""
+    """The parsed content of a text file that holds settings or commands.
+
+    A class may also name one card of a tool: the card that the tool's
+    program reads in a run. Such a class states the three attributes below.
+    A class that describes a format alone leaves them out, and a card of a
+    tool that has this format derives from it.
+
+    Attributes
+    ----------
+    card_name : str
+        The name of the card among the cards of its tool, such as
+        ``"run_card"``. The record of a task lists the card under this name.
+    file_name : str
+        The name of the file of the card in the directory where a run keeps
+        its cards.
+    description : str
+        One sentence that says what the card is.
+    """
+
+    card_name: ClassVar[str]
+    file_name: ClassVar[str]
+    description: ClassVar[str]
 
     @classmethod
     @abstractmethod

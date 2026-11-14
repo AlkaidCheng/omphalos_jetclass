@@ -105,6 +105,9 @@ class RunCard(InputCard):
     format_name: ClassVar[str] = "run_card"
     record_version: ClassVar[int] = 1
     reference_file_name: ClassVar[str] = "run_card.dat"
+    card_name: ClassVar[str] = "run_card"
+    file_name: ClassVar[str] = "run_card.dat"
+    description: ClassVar[str] = "The run card of the launch, as MadGraph kept it."
 
     settings: dict[str, RunCardValue]
 

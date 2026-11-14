@@ -77,3 +77,11 @@ class SLHACard(Card):
             item="entry",
             text=lambda entry: " ".join(str(word) for word in entry),
         )
+
+
+class ParamCard(SLHACard):
+    """The parameter card of a MadGraph run, which has the SLHA format."""
+
+    card_name: ClassVar[str] = "param_card"
+    file_name: ClassVar[str] = "param_card.dat"
+    description: ClassVar[str] = "The parameter card of the model."
