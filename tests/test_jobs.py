@@ -51,10 +51,9 @@ from omphjc.jobs import (
     task_parameters,
 )
 from omphjc.processes import ProcessSpec, get_process
-from omphjc.programs import available_cores
+from omphjc.programs import ProgramError, available_cores
 from omphjc.stamps import COMPACT_UTC_FORMAT, read_stamp
 from omphjc.tools.delphes.adapter import DelphesSimulator
-from omphjc.tools.madgraph.driver import MadGraphError
 from omphjc.tools.madgraph.lhe_file import LHEFile
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
 
@@ -1227,7 +1226,7 @@ def test_a_failed_madgraph_run_is_recorded_and_retried(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("FAKE_MG5_FAIL", "launch")
-    with pytest.raises(MadGraphError):
+    with pytest.raises(ProgramError):
         generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
     record = Job(specs["HToBB"], tmp_path, 1).task_record(GenerateStage())
     assert record is not None

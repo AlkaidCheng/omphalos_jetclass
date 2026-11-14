@@ -7,11 +7,10 @@ import pytest
 
 from omphjc.config_paths import export_config
 from omphjc.processes import ProcessSpec, read_catalogue
-from omphjc.programs import available_cores
+from omphjc.programs import ProgramError, available_cores
 from omphjc.stamps import StampError, read_stamp
 from omphjc.tools.madgraph.cards import launch_commands, madspin_card_text
 from omphjc.tools.madgraph.driver import (
-    MadGraphError,
     MadGraphWorkspace,
     generate_events,
 )
@@ -78,7 +77,7 @@ def test_a_failed_command_raises_with_the_end_of_the_log(
     failing: str,
 ) -> None:
     monkeypatch.setenv("FAKE_MG5_FAIL", failing)
-    with pytest.raises(MadGraphError, match=f"Command {failing} interrupted"):
+    with pytest.raises(ProgramError, match=f"Command {failing} interrupted"):
         generate_events(
             specs["HToBB"],
             workdir=tmp_path,
@@ -201,7 +200,7 @@ def test_a_failed_launch_is_sealed_and_replaced(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("FAKE_MG5_FAIL", "launch")
-    with pytest.raises(MadGraphError):
+    with pytest.raises(ProgramError, match="MadGraph wrote no event file"):
         generate_events(
             specs["HToWW4Q"],
             workdir=tmp_path,

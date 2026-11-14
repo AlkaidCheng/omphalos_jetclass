@@ -90,7 +90,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from omphjc.processes.catalogue import ProcessSpec
-from omphjc.programs import ProgramError, RaisedOpenFileLimit, available_cores
+from omphjc.programs import RaisedOpenFileLimit, available_cores
 from omphjc.safe_paths import inside, require_unoccupied
 from omphjc.tools.madgraph.banner import Banner
 from omphjc.tools.madgraph.cards import (
@@ -117,10 +117,6 @@ _ME5_CONFIGURATION = "me5_configuration.txt"
 # after another, 1 submits them to a batch system; set2_run_mode in
 # madgraph/interface/madgraph_interface.py, 3.8.1).
 _MULTICORE_RUN_MODE = 2
-
-
-class MadGraphError(ProgramError):
-    """MadGraph failed, ran past its time limit or did not write its output."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -239,7 +235,7 @@ def generate_events(
         Nothing is changed in that case.
     FileNotFoundError
         If MadGraph cannot be found.
-    MadGraphError
+    ProgramError
         If MadGraph exits with an error, is still running at the time limit,
         or does not write the process directory or the event file. The
         message ends with the last lines of MadGraph's log.
@@ -345,7 +341,6 @@ class MadGraphWorkspace(ProgramWorkspace):
     program = "mg5_aMC"
     description = f"MadGraph's bin/{program}"
     log_name = "madgraph.log"
-    error_type = MadGraphError
     process_script_name: ClassVar[str] = "process.mg5"
     """The script that makes the process directory."""
     launch_script_name: ClassVar[str] = "launch.mg5"
@@ -472,7 +467,7 @@ class MadGraphWorkspace(ProgramWorkspace):
 
         Raises
         ------
-        MadGraphError
+        ProgramError
             If MadGraph exits with a failing status or is still running at the
             deadline.
         """
@@ -491,7 +486,7 @@ class MadGraphWorkspace(ProgramWorkspace):
 
         Raises
         ------
-        MadGraphError
+        ProgramError
             If MadGraph wrote no process directory.
         """
         cards_dir = self.cards_dir

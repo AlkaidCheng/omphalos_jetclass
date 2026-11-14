@@ -17,6 +17,7 @@ import pytest
 
 import omphjc.workspace as workspace
 from omphjc.processes import ProcessSpec
+from omphjc.programs import ProgramError
 from omphjc.stamps import read_stamp
 from omphjc.tools.delphes.card import (
     DelphesCard,
@@ -243,9 +244,7 @@ def test_a_failed_run_is_sealed_and_replaced(
 ) -> None:
     workspace_type = driver.workspace_type
     monkeypatch.setenv(driver.fail_variable, failure)
-    with pytest.raises(
-        workspace_type.error_type, match=f"{re.escape(driver.failure)} {outcome}"
-    ):
+    with pytest.raises(ProgramError, match=f"{re.escape(driver.failure)} {outcome}"):
         driver.run(workdir=workdir, seed=1, timeout=timeout)
     stamp = read_stamp(workdir)
     assert stamp is not None and stamp.purpose == workspace_type.purpose
