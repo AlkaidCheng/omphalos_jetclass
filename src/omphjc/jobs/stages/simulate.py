@@ -1,11 +1,14 @@
 """The simulation stage: Delphes on the showered events, through ``DelphesROOT``."""
 
 import hashlib
+from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from omphjc.events.formats import EventFormat
 from omphjc.jobs.job import Job
-from omphjc.jobs.stages.shower import SHOWER
+from omphjc.jobs.stage import Stage
+from omphjc.jobs.stages.shower import ShowerStage
 from omphjc.jobs.task import (
     EVENTS_OUTPUT,
     INPUT_FINGERPRINT_PARAMETER,
@@ -21,8 +24,19 @@ from omphjc.tools.delphes.driver import (
     simulate_events,
 )
 
-SIMULATE = "simulate"
-"""The stage's name and directory, ``<job>/simulate/``."""
+
+@dataclass(frozen=True)
+class SimulateStage(Stage):
+    """The detector simulation of a job, which reads the showered events.
+
+    Its task is named ``simulate`` and works in ``<job>/simulate/``.
+    """
+
+    name: ClassVar[str] = "simulate"
+
+    @property
+    def upstream_stage(self) -> ShowerStage:
+        return ShowerStage()
 
 
 def simulate(
@@ -81,8 +95,9 @@ def simulate(
     FileNotFoundError
         If `card_path` is given and is not a file.
     """
-    events = job.require_events(SHOWER)
-    task_dir = job.task_dir(SIMULATE)
+    stage = SimulateStage()
+    events = job.require_events(stage.upstream_stage)
+    task_dir = job.task_dir(stage)
     card_text = detector_card_text(job.spec, card_path)
     card_hash = hashlib.sha256(card_text.encode("utf-8")).hexdigest()
 
@@ -126,7 +141,7 @@ def simulate(
         INPUT_FINGERPRINT_PARAMETER: events.fingerprint,
     }
     return job.run_task(
-        SIMULATE,
+        stage,
         parameters,
         body,
         log_name=SimulationWorkspace.log_name,

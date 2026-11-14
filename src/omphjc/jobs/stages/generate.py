@@ -2,10 +2,13 @@
 
 import shutil
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from omphjc.events.formats import EventFormat
 from omphjc.jobs.job import Job
+from omphjc.jobs.stage import Stage
 from omphjc.jobs.task import (
     EVENTS_OUTPUT,
     EventOutput,
@@ -17,8 +20,16 @@ from omphjc.jobs.task import (
 from omphjc.tools.madgraph.driver import MadGraphWorkspace, generate_events
 from omphjc.tools.madgraph.lhe_file import LHEFile
 
-GENERATE = "generate"
-"""The stage's name and directory, ``<job>/generate/``."""
+
+@dataclass(frozen=True)
+class GenerateStage(Stage):
+    """The generation of parton-level events, the first stage of a job.
+
+    Its task is named ``generate`` and works in ``<job>/generate/``.
+    """
+
+    name: ClassVar[str] = "generate"
+
 
 _CARDS_DIR = "cards"
 
@@ -75,7 +86,8 @@ def generate(
     TaskRecord
         The stage's record, kept or new.
     """
-    task_dir = job.task_dir(GENERATE)
+    stage = GenerateStage()
+    task_dir = job.task_dir(stage)
 
     def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
         run = generate_events(
@@ -115,7 +127,7 @@ def generate(
 
     parameters = {"events": n_events, "seed": job.seed}
     return job.run_task(
-        GENERATE, parameters, body, log_name=MadGraphWorkspace.log_name, force=force
+        stage, parameters, body, log_name=MadGraphWorkspace.log_name, force=force
     )
 
 

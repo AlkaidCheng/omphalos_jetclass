@@ -20,7 +20,10 @@ The modules, by what they hold::
     manifest.py     Manifest, the content of manifest.json, which lists a
                     TaskSummary of each task's record
     record_file.py  RecordFile, the base class of the job's JSON files
-    stages/         one function per stage: generate, shower, simulate
+    stage.py        Stage, the base class of each stage's class: the name of
+                    its task and the stage whose events it reads
+    stages/         one function and one Stage class per stage: generate,
+                    shower, simulate
 
 How a stage is recorded:
 
@@ -47,7 +50,15 @@ from omphjc.jobs.job import (
     job_seed,
 )
 from omphjc.jobs.manifest import Manifest, TaskSummary
-from omphjc.jobs.stages import GENERATE, SHOWER, SIMULATE, generate, shower, simulate
+from omphjc.jobs.stage import Stage
+from omphjc.jobs.stages import (
+    GenerateStage,
+    ShowerStage,
+    SimulateStage,
+    generate,
+    shower,
+    simulate,
+)
 from omphjc.jobs.task import (
     DONE,
     EVENTS_OUTPUT,
@@ -72,18 +83,19 @@ __all__ = [
     "DONE",
     "EVENTS_OUTPUT",
     "FAILED",
-    "GENERATE",
     "INPUT_FINGERPRINT_PARAMETER",
     "INTERRUPTED",
     "RUNNING",
-    "SHOWER",
-    "SIMULATE",
     "TaskRun",
     "AcceptedInput",
     "EventOutput",
+    "GenerateStage",
     "Job",
     "JobIdentity",
     "Manifest",
+    "ShowerStage",
+    "SimulateStage",
+    "Stage",
     "Task",
     "TaskCard",
     "TaskOutcome",
