@@ -13,7 +13,7 @@ from omphjc.jobs.task import (
     TaskOutcome,
     TaskRecord,
     TaskResult,
-    read_cards,
+    record_cards,
 )
 from omphjc.tools.madgraph.driver import MadGraphWorkspace, generate_events
 from omphjc.tools.madgraph.lhe_file import LHEFile
@@ -103,7 +103,7 @@ def generate(
         return TaskOutcome(
             TaskResult(
                 outputs={EVENTS_OUTPUT: LHEFile.record_file(run.output_path)},
-                cards=read_cards(card_copy_paths),
+                cards=record_cards(card_copy_paths, MadGraphWorkspace.card_classes),
                 metadata={
                     "madgraph_version": run.banner.version,
                     "cross_section_pb": run.banner.cross_section_pb,

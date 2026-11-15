@@ -193,6 +193,9 @@
   (`DataFile.record_file`) as an `omphjc.data_files.FileRecord`, or an
   `omphjc.events.EventFileRecord` for an event file, in place of
   `TaskOutput` and `EventOutput` of `omphjc.jobs`. (#79)
+- A task's cards are recorded by their card classes (`record_cards`) with
+  the fingerprint of their parsed content, in place of `TaskCard` and the
+  SHA-256 of the file. (#80)
 
 ### Fixed
 

@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import re
@@ -32,7 +31,6 @@ from omphjc.jobs import (
     SimulateStage,
     Stage,
     Task,
-    TaskCard,
     TaskOutcome,
     TaskRecord,
     TaskResult,
@@ -43,7 +41,7 @@ from omphjc.jobs import (
     exception_on_termination,
     generate,
     job_seed,
-    read_cards,
+    record_cards,
     shower,
     simulate,
     task_parameters,
@@ -52,8 +50,11 @@ from omphjc.processes import ProcessSpec, get_process
 from omphjc.programs import ProgramError, available_cores
 from omphjc.stamps import COMPACT_UTC_FORMAT, read_stamp
 from omphjc.tools.delphes.adapter import DelphesSimulator
+from omphjc.tools.delphes.card import DetectorCard, ParticlesCard
 from omphjc.tools.madgraph.lhe_file import LHEFile
-from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
+from omphjc.tools.madgraph.proc_card import ProcCard
+from omphjc.tools.madgraph.run_card import RunCard
+from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT, PythiaCmnd
 
 RUN_ID = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]{8}")
 
@@ -154,7 +155,11 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
                     tmp_path / "x" / "summary.txt", n_bytes=3, fingerprint=None
                 ),
             },
-            cards={"run_card": TaskCard(tmp_path / "x" / "run_card.dat", "abc")},
+            cards={
+                "run_card": FileRecord(
+                    tmp_path / "x" / "run_card.dat", 5, "run_card-v1:abc"
+                )
+            },
             metadata={"version": "1.0"},
         ),
     )
@@ -189,7 +194,13 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
             },
             "summary": {"path": "x/summary.txt", "n_bytes": 3, "fingerprint": None},
         },
-        "cards": {"run_card": {"path": "x/run_card.dat", "sha256": "abc"}},
+        "cards": {
+            "run_card": {
+                "path": "x/run_card.dat",
+                "n_bytes": 5,
+                "fingerprint": "run_card-v1:abc",
+            }
+        },
         "metadata": {"version": "1.0"},
     }
     assert TaskRecord.read(path, root_dir=tmp_path) == record
@@ -278,7 +289,7 @@ def test_a_task_record_refuses_a_path_outside_its_root_directory(
     )
     with pytest.raises(ValueError, match="elsewhere"):
         record.write(path, root_dir=tmp_path / "job")
-    card_elsewhere = TaskCard(tmp_path / "elsewhere" / "card.dat", "abc")
+    card_elsewhere = FileRecord(tmp_path / "elsewhere" / "card.dat", 5, None)
     record = TaskRecord(
         parameters={},
         runs=(_run("done"),),
@@ -336,14 +347,18 @@ def _make_output(job: Job) -> TaskOutcome:
     )
 
 
-def test_a_card_is_recorded_with_the_hash_of_its_file(tmp_path: Path) -> None:
+def test_a_card_is_recorded_by_its_class_with_the_fingerprint_of_its_content(
+    tmp_path: Path,
+) -> None:
     card_path = tmp_path / "run_card.dat"
-    card_path.write_text("10 = nevents\n")
-    card = TaskCard.from_path(card_path)
-    assert card.path == card_path
-    assert card.sha256 == hashlib.sha256(b"10 = nevents\n").hexdigest()
-    assert read_cards({"run_card": card_path}) == {"run_card": card}
-    assert read_cards({}) == {}
+    card_path.write_text("10 = nevents ! events\n")
+    other_path = tmp_path / "notes.txt"
+    other_path.write_text("not a card")
+    card_paths = {"run_card": card_path, "notes": other_path}
+    cards = record_cards(card_paths, (RunCard, ProcCard))
+    fingerprint = RunCard.from_text("10 = nevents\n").fingerprint()
+    assert cards == {"run_card": FileRecord(card_path, 22, fingerprint)}
+    assert record_cards({}, (RunCard,)) == {}
 
 
 def test_a_changed_or_deleted_card_leaves_the_task_done(
@@ -355,11 +370,11 @@ def test_a_changed_or_deleted_card_leaves_the_task_done(
     def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
         outcome = _make_output(job)
         card_path.write_text("as run")
-        cards = {"card": TaskCard.from_path(card_path)}
+        cards = {"card": FileRecord(card_path, len("as run"), None)}
         return replace(outcome, result=replace(outcome.result, cards=cards))
 
     record = job.run_task(STAGE_X, {}, body)
-    assert record.cards == {"card": TaskCard.from_path(card_path)}
+    assert record.cards == {"card": FileRecord(card_path, len("as run"), None)}
     card_path.write_text("edited since")
     assert job.task(STAGE_X).status is TaskStatus.DONE
     card_path.unlink()
@@ -1166,9 +1181,7 @@ def test_generate_records_what_madgraph_made(
     )
     card = job.root_dir / "generate" / "cards" / "proc_card_mg5.dat"
     assert card.is_file()
-    assert record.cards["proc_card"] == TaskCard(
-        card, hashlib.sha256(card.read_bytes()).hexdigest()
-    )
+    assert record.cards["proc_card"] == ProcCard.record_file(card)
     assert set(record.cards) == {"proc_card", "madspin_card"}
     assert "cards" not in metadata
     assert (card.parent / "madspin_card.dat").is_file()
@@ -1282,8 +1295,8 @@ def test_shower_records_what_it_made_and_keeps_it(
     assert metadata["events_read"] == 1
     assert "matching_efficiency" not in metadata
     assert record.cards == {
-        "command_file": TaskCard.from_path(job.root_dir / "shower" / "pythia.cmnd"),
-        "particles_card": TaskCard.from_path(
+        "command_file": PythiaCmnd.record_file(job.root_dir / "shower" / "pythia.cmnd"),
+        "particles_card": ParticlesCard.record_file(
             job.root_dir / "shower" / "particles_card.tcl"
         ),
     }
@@ -1660,7 +1673,7 @@ def test_simulate_records_what_it_made_and_keeps_it(
     )
     assert len(record.parameters["card"]) == 64
     card_path = job.root_dir / "simulate" / "delphes_card.tcl"
-    assert record.cards == {"detector_card": TaskCard.from_path(card_path)}
+    assert record.cards == {"detector_card": DetectorCard.record_file(card_path)}
     card_names = {card_class.card_name for card_class in DelphesSimulator.card_classes}
     assert set(record.cards) == card_names
     assert record.metadata == {}
