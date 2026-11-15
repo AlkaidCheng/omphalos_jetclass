@@ -62,7 +62,7 @@ Every path in the record is relative to the job directory. The top-level
 keys are:
 
 ``schema``
-    The layout version of the file (:mod:`omphjc.jobs.record_file`).
+    The layout version of the file (:mod:`omphjc.jobs.job_file`).
 ``parameters``
     What the task was asked for, including the seed when its stage uses one.
     A later run compares its own parameters with these to decide whether the
@@ -174,7 +174,7 @@ from typing import Any, ClassVar
 
 from omphjc.data_files import FileRecord
 from omphjc.events.formats import EventFileRecord
-from omphjc.jobs.record_file import RecordFile
+from omphjc.jobs.job_file import JobFile
 from omphjc.runs import RunResult
 from omphjc.stamps import COMPACT_UTC_FORMAT
 
@@ -269,7 +269,7 @@ class AcceptedInput:
 
 
 @dataclass(frozen=True)
-class TaskRecord(RecordFile):
+class TaskRecord(JobFile):
     """What one task did; the module docstring describes the fields.
 
     Raises

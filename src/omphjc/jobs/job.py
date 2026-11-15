@@ -223,7 +223,7 @@ class Job:
         return list(self._task_record_paths())
 
     def _task_record_paths(self) -> dict[str, Path]:
-        """Return the record file of each task that has one, by the name of the task.
+        """Return the path of the record of each task that has one, by the task's name.
 
         The tasks are those of :meth:`task_names`, in the same order.
         """

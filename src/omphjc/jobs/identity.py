@@ -12,7 +12,7 @@ task changes it::
     }
 
 ``omphjc_version`` is the version of omphjc that wrote the file.
-:mod:`omphjc.jobs.record_file` describes ``schema``.
+:mod:`omphjc.jobs.job_file` describes ``schema``.
 """
 
 from dataclasses import asdict, dataclass, field, fields
@@ -21,11 +21,11 @@ from typing import Any, ClassVar
 
 from omphjc import __version__
 from omphjc.comparison import Difference
-from omphjc.jobs.record_file import RecordFile
+from omphjc.jobs.job_file import JobFile
 
 
 @dataclass(frozen=True)
-class JobIdentity(RecordFile):
+class JobIdentity(JobFile):
     """The process, the job number and the seed of one job.
 
     Two identities are equal when these three values are equal. The omphjc
