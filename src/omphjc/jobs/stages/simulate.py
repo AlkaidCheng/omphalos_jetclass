@@ -93,7 +93,7 @@ class DetectorSimulator(Protocol):
         -------
         TaskOutcome
             The simulated events as the output named
-            :data:`~omphjc.jobs.task.EVENTS_OUTPUT`, the simulator's cards
+            :data:`~omphjc.runs.EVENTS_OUTPUT`, the simulator's cards
             and metadata, and what the run took and set aside.
         """
         ...

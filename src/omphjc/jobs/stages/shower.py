@@ -8,14 +8,9 @@ from typing import ClassVar
 from omphjc.jobs.job import Job
 from omphjc.jobs.stage import Stage
 from omphjc.jobs.stages.generate import GenerateStage
-from omphjc.jobs.task import (
-    EVENTS_OUTPUT,
-    INPUT_FINGERPRINT_PARAMETER,
-    TaskOutcome,
-    TaskRecord,
-    TaskResult,
-)
+from omphjc.jobs.task import INPUT_FINGERPRINT_PARAMETER, TaskOutcome, TaskRecord
 from omphjc.processes.catalogue import SettingValue
+from omphjc.runs import EVENTS_OUTPUT, RunResult
 from omphjc.tools.pythia.driver import ShowerWorkspace, shower_events
 
 
@@ -125,7 +120,7 @@ def shower(
                 statistics.events_accepted / statistics.events_read
             )
         return TaskOutcome(
-            TaskResult(
+            RunResult(
                 outputs={EVENTS_OUTPUT: DelphesROOTFile.record_file(run.output_path)},
                 cards=dict(run.cards),
                 metadata=metadata,

@@ -201,6 +201,8 @@
   of `Run.card_paths`, `Workspace.card_paths` and `record_cards`. (#81)
 - `FileRecord.from_record` and `EventFileRecord.from_record` read a file
   record back from `task.json` by the fields of its class. (#82)
+- The result of a task is an `omphjc.runs.RunResult`, with `EVENTS_OUTPUT`,
+  in place of `TaskResult` of `omphjc.jobs`. (#83)
 
 ### Fixed
 

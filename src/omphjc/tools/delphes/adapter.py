@@ -13,12 +13,9 @@ from typing import Any, ClassVar
 from omphjc.data_files import Card
 from omphjc.events.delphes_root import DelphesROOTFile
 from omphjc.events.formats import EventFile, EventFormat
-from omphjc.jobs.task import (
-    EVENTS_OUTPUT,
-    TaskOutcome,
-    TaskResult,
-)
+from omphjc.jobs.task import TaskOutcome
 from omphjc.processes.catalogue import ProcessSpec
+from omphjc.runs import EVENTS_OUTPUT, RunResult
 from omphjc.tools.delphes.driver import (
     SimulationWorkspace,
     detector_card_text,
@@ -99,7 +96,7 @@ class DelphesSimulator:
             delphes_root_path=self.delphes_root_path,
         )
         return TaskOutcome(
-            TaskResult(
+            RunResult(
                 outputs={EVENTS_OUTPUT: DelphesROOTFile.record_file(run.output_path)},
                 cards=dict(run.cards),
             ),

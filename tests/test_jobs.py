@@ -20,7 +20,6 @@ from omphjc.data_files import Card, FileRecord
 from omphjc.events import EventFile, EventFileRecord, EventFormat
 from omphjc.events.delphes_root import DelphesROOTFile
 from omphjc.jobs import (
-    EVENTS_OUTPUT,
     AcceptedInput,
     GenerateStage,
     Job,
@@ -33,7 +32,6 @@ from omphjc.jobs import (
     Task,
     TaskOutcome,
     TaskRecord,
-    TaskResult,
     TaskRun,
     TaskStatus,
     TaskSummary,
@@ -47,6 +45,7 @@ from omphjc.jobs import (
 )
 from omphjc.processes import ProcessSpec, get_process
 from omphjc.programs import ProgramError, available_cores
+from omphjc.runs import EVENTS_OUTPUT, RunResult
 from omphjc.stamps import COMPACT_UTC_FORMAT, read_stamp
 from omphjc.tools.delphes.adapter import DelphesSimulator
 from omphjc.tools.delphes.card import DetectorCard, ParticlesCard
@@ -140,7 +139,7 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
     record = TaskRecord(
         parameters={"events": 10},
         runs=(_run("done", finished="u"),),
-        result=TaskResult(
+        result=RunResult(
             outputs={
                 EVENTS_OUTPUT: EventFileRecord(
                     output_path,
@@ -242,7 +241,7 @@ def test_a_task_record_needs_a_run_and_a_result_that_fits_its_status(
     with pytest.raises(
         ValueError, match="has status 'failed' but the record has a result"
     ):
-        TaskRecord(parameters={}, runs=(failed,), result=TaskResult())
+        TaskRecord(parameters={}, runs=(failed,), result=RunResult())
     with pytest.raises(ValueError, match="unknown run status 'paused'"):
         _run("paused")
     path = tmp_path / "x" / "task.json"
@@ -260,11 +259,11 @@ def test_a_record_gives_its_outputs_only_when_its_latest_run_is_done(
     done = TaskRecord(
         parameters={},
         runs=(_run("done"),),
-        result=TaskResult(outputs={EVENTS_OUTPUT: events}, metadata={"n": 1}),
+        result=RunResult(outputs={EVENTS_OUTPUT: events}, metadata={"n": 1}),
     )
     assert done.events == events and done.metadata == {"n": 1}
     assert done.is_done
-    no_events = TaskRecord({}, (_run("done"),), TaskResult())
+    no_events = TaskRecord({}, (_run("done"),), RunResult())
     assert no_events.events is None
     failed = TaskRecord({}, (_run("failed", error="boom"),))
     assert not failed.is_done
@@ -281,7 +280,7 @@ def test_a_task_record_refuses_a_path_outside_its_root_directory(
     record = TaskRecord(
         parameters={},
         runs=(_run("done"),),
-        result=TaskResult(
+        result=RunResult(
             outputs={"out": FileRecord(tmp_path / "elsewhere" / "out", 0, None)}
         ),
     )
@@ -291,7 +290,7 @@ def test_a_task_record_refuses_a_path_outside_its_root_directory(
     record = TaskRecord(
         parameters={},
         runs=(_run("done"),),
-        result=TaskResult(cards={"card": card_elsewhere}),
+        result=RunResult(cards={"card": card_elsewhere}),
     )
     with pytest.raises(ValueError, match="elsewhere"):
         record.write(path, root_dir=tmp_path / "job")
@@ -338,7 +337,7 @@ def _make_output(job: Job) -> TaskOutcome:
     output = directory / "out.txt"
     output.write_text("made")
     return TaskOutcome(
-        TaskResult(
+        RunResult(
             outputs={"out": FileRecord(output, len("made"), None)},
             metadata={"n": 1},
         )
@@ -381,7 +380,7 @@ def test_a_stage_runs_once_and_its_result_is_kept(
     assert record.is_done and record.latest_run.finished is not None
     assert len(record.runs) == 1
     assert record.parameters == {"events": 10}
-    assert record.result == TaskResult(
+    assert record.result == RunResult(
         outputs={"out": FileRecord(job.root_dir / "x" / "out.txt", 4, None)},
         metadata={"n": 1},
     )
@@ -533,7 +532,7 @@ def test_an_output_of_another_size_is_reported_before_a_missing_one(
         for name, path in (("first", first_path), ("second", second_path)):
             path.write_text("made")
             outputs[name] = FileRecord(path, len("made"), None)
-        return TaskOutcome(TaskResult(outputs=outputs))
+        return TaskOutcome(RunResult(outputs=outputs))
 
     record = job.run_task(STAGE_X, {}, body)
     first_path.unlink()
@@ -569,7 +568,7 @@ def test_require_events_returns_the_events_a_done_stage_made(
         STAGE_X,
         {},
         lambda overwrite, run_dir: TaskOutcome(
-            TaskResult(outputs={EVENTS_OUTPUT: events})
+            RunResult(outputs={EVENTS_OUTPUT: events})
         ),
         force=True,
     )
@@ -928,7 +927,7 @@ def test_two_jobs_opened_on_one_directory_keep_the_records_of_both_tasks(
         STAGE_X, {}, lambda overwrite, run_dir: _make_output(first)
     )
     y_record = second.run_task(
-        STAGE_Y, {}, lambda overwrite, run_dir: TaskOutcome(TaskResult())
+        STAGE_Y, {}, lambda overwrite, run_dir: TaskOutcome(RunResult())
     )
     job = Job(specs["HToBB"], tmp_path, 1)
     assert job.task_names() == ["x", "y"]
@@ -969,7 +968,7 @@ def test_the_manifest_lists_every_task_and_is_written_again_when_deleted(
     )
     assert not job.manifest_path.exists()
     z_record = job.run_task(
-        STAGE_Z, {}, lambda overwrite, run_dir: TaskOutcome(TaskResult())
+        STAGE_Z, {}, lambda overwrite, run_dir: TaskOutcome(RunResult())
     )
     entry = TaskSummary(
         "done", z_record.latest_run.run_id, 1, job.task_record_path(STAGE_Z)
@@ -1421,7 +1420,7 @@ class FakeSimulator:
         (log_dir / self.log_name).write_text("simulated")
         output = FileRecord(output_path, output_path.stat().st_size, None)
         return TaskOutcome(
-            TaskResult(
+            RunResult(
                 outputs={"out": output},
                 metadata={"input_format": event_file.format.value},
             )
@@ -1436,7 +1435,7 @@ def _record_showered_events(job: Job, event_format: EventFormat) -> EventFileRec
         events_path.parent.mkdir(parents=True, exist_ok=True)
         events_path.write_text("events")
         events = EventFileRecord(events_path, 6, "fake-v1:abc", event_format, 1)
-        return TaskOutcome(TaskResult(outputs={EVENTS_OUTPUT: events}))
+        return TaskOutcome(RunResult(outputs={EVENTS_OUTPUT: events}))
 
     record = job.run_task(ShowerStage(), {}, body)
     assert record.events is not None

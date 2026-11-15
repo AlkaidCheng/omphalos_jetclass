@@ -14,7 +14,7 @@ The modules, by what they hold::
                     whether a task runs again (Job.run_task)
     task.py         Task and TaskStatus, a task as found on disk; TaskRecord, the
                     content of task.json, with a TaskRun for each run, and
-                    what a task makes: TaskResult, TaskOutcome
+                    TaskOutcome, what a stage function returns
     identity.py     JobIdentity, the content of job.json
     manifest.py     Manifest, the content of manifest.json, which lists a
                     TaskSummary of each task's record
@@ -31,9 +31,9 @@ How a stage is recorded:
    run record with absolute paths. The simulation stage calls its simulator
    (:class:`DetectorSimulator`), which calls the driver of its tool.
 2. The stage function, or the simulator, builds a :class:`TaskOutcome` from
-   the run record. The outcome holds the :class:`TaskResult` and the usage of
-   the run. The result holds the task's outputs and cards by name, and its
-   metadata. An output is a :class:`~omphjc.data_files.FileRecord`, or an
+   the run record. The outcome holds the result of the run
+   (:class:`omphjc.runs.RunResult`) and its usage. The result holds the
+   task's outputs and cards by name, and its metadata. An output is a :class:`~omphjc.data_files.FileRecord`, or an
    :class:`~omphjc.events.formats.EventFileRecord` for an event file. A card
    is a :class:`~omphjc.data_files.FileRecord` that the driver's workspace
    made (:meth:`omphjc.workspace.Workspace.card_records`).
@@ -65,7 +65,6 @@ from omphjc.jobs.stages import (
 )
 from omphjc.jobs.task import (
     DONE,
-    EVENTS_OUTPUT,
     FAILED,
     INPUT_FINGERPRINT_PARAMETER,
     INTERRUPTED,
@@ -74,14 +73,12 @@ from omphjc.jobs.task import (
     Task,
     TaskOutcome,
     TaskRecord,
-    TaskResult,
     TaskRun,
     TaskStatus,
 )
 
 __all__ = [
     "DONE",
-    "EVENTS_OUTPUT",
     "FAILED",
     "INPUT_FINGERPRINT_PARAMETER",
     "INTERRUPTED",
@@ -99,7 +96,6 @@ __all__ = [
     "Task",
     "TaskOutcome",
     "TaskRecord",
-    "TaskResult",
     "TaskStatus",
     "TaskSummary",
     "ReplacedRunError",
