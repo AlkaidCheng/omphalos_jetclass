@@ -199,6 +199,8 @@
 - A driver's run record carries the record of each card
   (`omphjc.workspace.Run.cards`), made by `Workspace.card_records`, in place
   of `Run.card_paths`, `Workspace.card_paths` and `record_cards`. (#81)
+- `FileRecord.from_record` and `EventFileRecord.from_record` read a file
+  record back from `task.json` by the fields of its class. (#82)
 
 ### Fixed
 

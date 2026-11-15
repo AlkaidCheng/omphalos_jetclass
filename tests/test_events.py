@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -289,6 +290,14 @@ def test_a_delphes_file_has_the_same_fingerprint_whatever_time_its_events_took(
     assert content.fingerprint().startswith("delphes_root-v1:")
     assert "Event.Number" in content.leaves
     assert not {"Event.ReadTime", "Event.ProcTime"} & set(content.leaves)
+
+
+def test_an_event_file_record_reads_its_format_back_from_its_value(
+    tmp_path: Path,
+) -> None:
+    record = EventFileRecord(tmp_path / "e.lhe", 7, "lhe-v1:a", EventFormat.LHE, 3)
+    written = {**asdict(record), "path": "e.lhe", "format": "lhe"}
+    assert EventFileRecord.from_record(written, tmp_path) == record
 
 
 def test_the_record_of_a_delphes_file_counts_the_entries_of_its_tree(
