@@ -12,7 +12,7 @@ from typing import Any, ClassVar
 
 from omphjc.data_files import Card
 from omphjc.events.delphes_root import DelphesROOTFile
-from omphjc.events.formats import EventFile, EventFormat
+from omphjc.events.formats import EventFormat, EventSource
 from omphjc.jobs.task import TaskOutcome
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.runs import EVENTS_OUTPUT, RunResult
@@ -67,14 +67,14 @@ class DelphesSimulator:
 
     def simulate(
         self,
-        event_file: EventFile,
+        source: EventSource,
         *,
         workdir: Path,
         seed: int,
         overwrite: bool,
         log_dir: Path,
     ) -> TaskOutcome:
-        """Simulate the detector on the events in `event_file` with Delphes.
+        """Simulate the detector on the events in `source` with Delphes.
 
         The events of the outcome are the ROOT file Delphes wrote, with the
         number of entries in its tree and the fingerprint of its content
@@ -86,7 +86,7 @@ class DelphesSimulator:
         """
         run = simulate_events(
             self.spec,
-            events_path=event_file.path,
+            events_path=source.path,
             workdir=workdir,
             seed=seed,
             detector_card_path=self.detector_card_path,

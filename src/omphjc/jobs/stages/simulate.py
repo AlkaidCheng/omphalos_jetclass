@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Protocol
 
 from omphjc.data_files import Card
-from omphjc.events.formats import EventFile, EventFormat
+from omphjc.events.formats import EventFormat, EventSource
 from omphjc.jobs.job import Job, task_parameters
 from omphjc.jobs.stage import Stage
 from omphjc.jobs.stages.shower import ShowerStage
@@ -67,18 +67,18 @@ class DetectorSimulator(Protocol):
 
     def simulate(
         self,
-        event_file: EventFile,
+        source: EventSource,
         *,
         workdir: Path,
         seed: int,
         overwrite: bool,
         log_dir: Path,
     ) -> TaskOutcome:
-        """Simulate the detector on the events in `event_file`.
+        """Simulate the detector on the events in `source`.
 
         Parameters
         ----------
-        event_file : EventFile
+        source : EventSource
             The showered events, in one of :attr:`input_formats`.
         workdir : Path
             The directory of the task, where the simulator works.
@@ -152,7 +152,7 @@ def simulate(
 
     def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
         return simulator.simulate(
-            EventFile(events.path, events.format),
+            EventSource(events.path, events.format),
             workdir=workdir,
             seed=job.seed,
             overwrite=overwrite,
