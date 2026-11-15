@@ -1,13 +1,13 @@
 """The JSON files in which a job records what it is and what it ran.
 
 Each kind of file has one class, and every such class is a
-:class:`RecordFile`. An object of the class holds the content of one file.
+:class:`JobFile`. An object of the class holds the content of one file.
 The class states how the content is written down as JSON values
-(:meth:`RecordFile.as_record`) and how it is built from them
-(:meth:`RecordFile.from_record`). Writing and reading are the same for every
+(:meth:`JobFile.as_record`) and how it is built from them
+(:meth:`JobFile.from_record`). Writing and reading are the same for every
 kind of file.
 
-Every file holds the field ``schema``, which numbers the layout of the record
+Every file holds the field ``schema``, which numbers the layout of the job
 files. A file of another schema is refused.
 """
 
@@ -20,10 +20,10 @@ from typing import Any, ClassVar, TypeVar
 
 SCHEMA_VERSION = 1
 
-_RecordFileT = TypeVar("_RecordFileT", bound="RecordFile")
+_JobFileT = TypeVar("_JobFileT", bound="JobFile")
 
 
-class RecordFile(ABC):
+class JobFile(ABC):
     """The content of one JSON file of a job.
 
     Attributes
@@ -45,8 +45,8 @@ class RecordFile(ABC):
     @classmethod
     @abstractmethod
     def from_record(
-        cls: type[_RecordFileT], record: dict[str, Any], root_dir: Path
-    ) -> _RecordFileT:
+        cls: type[_JobFileT], record: dict[str, Any], root_dir: Path
+    ) -> _JobFileT:
         """Return the content that `record` describes.
 
         Parameters
@@ -99,8 +99,8 @@ class RecordFile(ABC):
 
     @classmethod
     def read(
-        cls: type[_RecordFileT], path: Path, *, root_dir: Path | None = None
-    ) -> _RecordFileT:
+        cls: type[_JobFileT], path: Path, *, root_dir: Path | None = None
+    ) -> _JobFileT:
         """Return the content of the file at `path`.
 
         Parameters

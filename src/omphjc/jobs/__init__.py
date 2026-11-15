@@ -18,7 +18,7 @@ The modules, by what they hold::
     identity.py     JobIdentity, the content of job.json
     manifest.py     Manifest, the content of manifest.json, which lists a
                     TaskSummary of each task's record
-    record_file.py  RecordFile, the base class of the job's JSON files
+    job_file.py     JobFile, the base class of the job's JSON files
     stage.py        Stage, the base class of each stage's class: the name of
                     its task and the stage whose events it reads
     stages/         one function and one Stage class per stage: generate,

@@ -203,6 +203,9 @@
   record back from `task.json` by the fields of its class. (#82)
 - The result of a task is an `omphjc.runs.RunResult`, with `EVENTS_OUTPUT`,
   in place of `TaskResult` of `omphjc.jobs`. (#83)
+- `omphjc.jobs.job_file.JobFile` is the base class of `job.json`,
+  `manifest.json` and `task.json`, in place of
+  `omphjc.jobs.record_file.RecordFile`. (#84)
 
 ### Fixed
 
