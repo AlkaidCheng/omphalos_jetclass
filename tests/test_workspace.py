@@ -1,11 +1,13 @@
 import sys
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from omphjc.data_files import Card
+from omphjc.comparison import Difference
+from omphjc.data_files import Card, FileRecord
 from omphjc.programs import ProgramError
 from omphjc.stamps import SET_ASIDE_DIR, StampError, read_stamp, write_stamp
 from omphjc.workspace import ProgramWorkspace, Workspace
@@ -24,12 +26,28 @@ class PlainWorkspace(Workspace):
         return ARTIFACTS
 
 
+@dataclass(frozen=True)
 class NoteCard(Card):
-    """A card for the tests, which is never parsed."""
+    """A card for the tests: its lines, without comments after ``#``."""
 
+    format_name = "note"
+    record_version = 1
     card_name = "note_card"
     file_name = "note.dat"
     description = "A note that steers nothing."
+
+    lines: tuple[str, ...]
+
+    @classmethod
+    def from_text(cls, text: str) -> "NoteCard":
+        lines = (line.split("#", 1)[0].strip() for line in text.splitlines())
+        return cls(tuple(line for line in lines if line))
+
+    def content_record(self) -> list[str]:
+        return list(self.lines)
+
+    def differences(self, reference: "NoteCard") -> list[Difference]:
+        return []
 
 
 class CardWorkspace(Workspace):
@@ -59,7 +77,7 @@ def test_the_cards_in_the_working_directory_are_artifacts(tmp_path: Path) -> Non
         card_path.write_text("a note")
     stamp = read_stamp(workspace.workdir)
     assert stamp is not None and list(stamp.artifacts) == ["note.dat"]
-    assert workspace.card_paths == {"note_card": card_path}
+    assert workspace.card_records() == {"note_card": NoteCard.record_file(card_path)}
     with workspace.sealed_run():
         assert not card_path.exists()
 
@@ -70,9 +88,23 @@ def test_cards_in_another_directory_are_not_listed_again(tmp_path: Path) -> None
     with workspace.sealed_run():
         workspace.cards_dir.mkdir()
         (workspace.cards_dir / "note.dat").write_text("a note")
-    assert workspace.card_paths == {"note_card": workspace.cards_dir / "note.dat"}
+    card_path = workspace.cards_dir / "note.dat"
+    assert workspace.card_records() == {"note_card": NoteCard.record_file(card_path)}
     stamp = read_stamp(workspace.workdir)
     assert stamp is not None and list(stamp.artifacts) == ["cards"]
+
+
+def test_a_card_is_recorded_by_its_class_with_the_fingerprint_of_its_content(
+    tmp_path: Path,
+) -> None:
+    workspace = CardWorkspace("HToBB", tmp_path / "run")
+    with workspace.sealed_run():
+        (workspace.workdir / "note.dat").write_text("a note  # for the reader\n")
+        (workspace.workdir / "other.dat").write_text("not a card of the run")
+    fingerprint = NoteCard.from_text("a note\n").fingerprint()
+    assert fingerprint.startswith("note-v1:")
+    record = FileRecord(workspace.workdir / "note.dat", 25, fingerprint)
+    assert workspace.card_records() == {"note_card": record}
 
 
 def test_entering_sealed_run_creates_and_stamps_the_directory(tmp_path: Path) -> None:
@@ -80,7 +112,7 @@ def test_entering_sealed_run_creates_and_stamps_the_directory(tmp_path: Path) ->
     workspace = PlainWorkspace("HToBB", workdir)
     assert workspace.workdir == workdir.resolve()
     assert workspace.artifacts == ARTIFACTS
-    assert workspace.card_paths == {}
+    assert workspace.card_records() == {}
     with workspace.sealed_run() as set_aside:
         stamp = read_stamp(workdir)
         assert stamp is not None and stamp.purpose == PURPOSE

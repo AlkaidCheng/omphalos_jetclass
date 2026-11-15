@@ -17,7 +17,6 @@ from omphjc.jobs.task import (
     EVENTS_OUTPUT,
     TaskOutcome,
     TaskResult,
-    record_cards,
 )
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.tools.delphes.driver import (
@@ -102,7 +101,7 @@ class DelphesSimulator:
         return TaskOutcome(
             TaskResult(
                 outputs={EVENTS_OUTPUT: DelphesROOTFile.record_file(run.output_path)},
-                cards=record_cards(run.card_paths, self.card_classes),
+                cards=dict(run.cards),
             ),
             usage=run.usage.as_record(),
             set_aside_dir=run.set_aside,

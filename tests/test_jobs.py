@@ -41,7 +41,6 @@ from omphjc.jobs import (
     exception_on_termination,
     generate,
     job_seed,
-    record_cards,
     shower,
     simulate,
     task_parameters,
@@ -53,7 +52,6 @@ from omphjc.tools.delphes.adapter import DelphesSimulator
 from omphjc.tools.delphes.card import DetectorCard, ParticlesCard
 from omphjc.tools.madgraph.lhe_file import LHEFile
 from omphjc.tools.madgraph.proc_card import ProcCard
-from omphjc.tools.madgraph.run_card import RunCard
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT, PythiaCmnd
 
 RUN_ID = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]{8}")
@@ -345,20 +343,6 @@ def _make_output(job: Job) -> TaskOutcome:
             metadata={"n": 1},
         )
     )
-
-
-def test_a_card_is_recorded_by_its_class_with_the_fingerprint_of_its_content(
-    tmp_path: Path,
-) -> None:
-    card_path = tmp_path / "run_card.dat"
-    card_path.write_text("10 = nevents ! events\n")
-    other_path = tmp_path / "notes.txt"
-    other_path.write_text("not a card")
-    card_paths = {"run_card": card_path, "notes": other_path}
-    cards = record_cards(card_paths, (RunCard, ProcCard))
-    fingerprint = RunCard.from_text("10 = nevents\n").fingerprint()
-    assert cards == {"run_card": FileRecord(card_path, 22, fingerprint)}
-    assert record_cards({}, (RunCard,)) == {}
 
 
 def test_a_changed_or_deleted_card_leaves_the_task_done(

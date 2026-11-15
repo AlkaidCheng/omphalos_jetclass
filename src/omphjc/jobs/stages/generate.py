@@ -2,10 +2,11 @@
 
 import shutil
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import ClassVar
 
+from omphjc.data_files import FileRecord
 from omphjc.jobs.job import Job
 from omphjc.jobs.stage import Stage
 from omphjc.jobs.task import (
@@ -13,7 +14,6 @@ from omphjc.jobs.task import (
     TaskOutcome,
     TaskRecord,
     TaskResult,
-    record_cards,
 )
 from omphjc.tools.madgraph.driver import MadGraphWorkspace, generate_events
 from omphjc.tools.madgraph.lhe_file import LHEFile
@@ -99,11 +99,10 @@ def generate(
             log_dir=run_dir,
             mg5_path=mg5_path,
         )
-        card_copy_paths = _copy_cards(run.card_paths, task_dir / _CARDS_DIR)
         return TaskOutcome(
             TaskResult(
                 outputs={EVENTS_OUTPUT: LHEFile.record_file(run.output_path)},
-                cards=record_cards(card_copy_paths, MadGraphWorkspace.card_classes),
+                cards=_copy_cards(run.cards, task_dir / _CARDS_DIR),
                 metadata={
                     "madgraph_version": run.banner.version,
                     "cross_section_pb": run.banner.cross_section_pb,
@@ -121,14 +120,19 @@ def generate(
     )
 
 
-def _copy_cards(card_paths: Mapping[str, Path], target_dir: Path) -> dict[str, Path]:
-    """Copy each card of `card_paths` into `target_dir`.
+def _copy_cards(
+    cards: Mapping[str, FileRecord], target_dir: Path
+) -> dict[str, FileRecord]:
+    """Copy the file of each card of `cards` into `target_dir`.
 
-    The copies are returned under the names of the cards.
+    The record of each copy is returned under the name of the card. A copy
+    has the size and the content of its card, so its record differs only in
+    its path.
     """
     target_dir.mkdir(parents=True, exist_ok=True)
-    copy_paths = {}
-    for name, card_path in card_paths.items():
-        copy_paths[name] = target_dir / card_path.name
-        shutil.copyfile(card_path, copy_paths[name])
-    return copy_paths
+    copies = {}
+    for name, card in cards.items():
+        copy_path = target_dir / card.path.name
+        shutil.copyfile(card.path, copy_path)
+        copies[name] = replace(card, path=copy_path)
+    return copies

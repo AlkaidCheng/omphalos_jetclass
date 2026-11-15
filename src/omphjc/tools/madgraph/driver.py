@@ -138,8 +138,8 @@ class MadGraphRun(ProgramRun):
         the cross section and the run card.
     n_cores : int
         Number of cores MadGraph ran its jobs on.
-    card_paths : Mapping[str, Path]
-        The cards in the ``Cards`` directory of `process_dir`:
+    cards : Mapping[str, FileRecord]
+        The records of the cards in the ``Cards`` directory of `process_dir`:
         ``proc_card``, ``run_card``, ``param_card`` and, with MadSpin,
         ``madspin_card``. A card that MadGraph did not write is left out.
     """
@@ -278,7 +278,7 @@ def generate_events(
         output_path=output_path,
         banner=Banner.read(output_path),
         n_cores=n_cores,
-        card_paths=workspace.card_paths,
+        cards=workspace.card_records(),
         log_path=workspace.log_path,
         usage=workspace.usage,
         set_aside=set_aside,

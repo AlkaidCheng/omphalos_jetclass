@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from omphjc.data_files import Card
+from omphjc.data_files import Card, FileRecord
 from omphjc.programs import (
     ProgramError,
     ProgramUsage,
@@ -65,15 +65,15 @@ class Run:
         Folder in the working directory that holds what an earlier run left
         and this run could not confirm as its own. This run moved it there
         instead of deleting it. It is ``None`` when nothing was set aside.
-    card_paths : Mapping[str, Path]
-        The cards of the run, as the run used them, by the name of each card
-        (:attr:`Workspace.card_paths`). A card is a file that steers the
-        run's program.
+    cards : Mapping[str, FileRecord]
+        The record of each card of the run, as the run used it, by the name
+        of the card (:meth:`Workspace.card_records`). A card is a file that
+        steers the run's program.
     """
 
     output_path: Path
     set_aside: Path | None = None
-    card_paths: Mapping[str, Path] = field(default_factory=dict)
+    cards: Mapping[str, FileRecord] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -162,18 +162,19 @@ class Workspace:
             return []
         return [card_class.file_name for card_class in self.card_classes]
 
-    @property
-    def card_paths(self) -> dict[str, Path]:
-        """The cards of a run that exist, by the name of each card.
+    def card_records(self) -> dict[str, FileRecord]:
+        """Return the record of each card of a run that exists, by its name.
 
-        The names and the files are those of :attr:`card_classes`. The run
-        record of the driver carries the mapping (:attr:`Run.card_paths`).
+        The names and the files are those of :attr:`card_classes`, and each
+        card is recorded by its class (:meth:`Card.record_file`), with the
+        fingerprint of its parsed content. The run record of the driver
+        carries the records (:attr:`Run.cards`).
         """
-        card_paths = {
-            card_class.card_name: self.cards_dir / card_class.file_name
+        return {
+            card_class.card_name: card_class.record_file(path)
             for card_class in self.card_classes
+            if (path := self.cards_dir / card_class.file_name).is_file()
         }
-        return {name: path for name, path in card_paths.items() if path.is_file()}
 
     @contextmanager
     def sealed_run(self) -> Iterator[Path | None]:

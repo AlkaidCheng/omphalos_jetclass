@@ -48,11 +48,10 @@ def test_madspin_events_are_the_decayed_sample(
     )
     assert run.output_path.parent.name == "run_01_decayed_1"
     cards_dir = run.process_dir / "Cards"
-    assert run.card_paths["madspin_card"] == cards_dir / "madspin_card.dat"
-    assert run.card_paths["madspin_card"].read_text() == madspin_card_text(spec)
-    assert run.card_paths["proc_card"] == cards_dir / "proc_card_mg5.dat"
-    for card_path in run.card_paths.values():
-        assert card_path.is_file()
+    assert run.cards["madspin_card"].path == cards_dir / "madspin_card.dat"
+    assert run.cards["madspin_card"].path.read_text() == madspin_card_text(spec)
+    assert run.cards["proc_card"].path == cards_dir / "proc_card_mg5.dat"
+    assert all(card.path.is_file() for card in run.cards.values())
 
 
 def test_a_vendored_model_is_imported_from_a_copy(

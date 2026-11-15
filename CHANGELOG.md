@@ -196,6 +196,9 @@
 - A task's cards are recorded by their card classes (`record_cards`) with
   the fingerprint of their parsed content, in place of `TaskCard` and the
   SHA-256 of the file. (#80)
+- A driver's run record carries the record of each card
+  (`omphjc.workspace.Run.cards`), made by `Workspace.card_records`, in place
+  of `Run.card_paths`, `Workspace.card_paths` and `record_cards`. (#81)
 
 ### Fixed
 
