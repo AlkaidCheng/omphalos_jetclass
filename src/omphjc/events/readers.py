@@ -8,7 +8,7 @@ The record and its fields are described in :mod:`omphjc.events.particles`.
 """
 
 from omphjc.events.delphes_root import DelphesRootReader
-from omphjc.events.formats import EventFile, EventFormat, EventReader
+from omphjc.events.formats import EventFormat, EventReader, EventSource
 
 READERS: dict[EventFormat, type[EventReader]] = {
     EventFormat.DELPHES_ROOT: DelphesRootReader,
@@ -16,8 +16,8 @@ READERS: dict[EventFormat, type[EventReader]] = {
 """The reader class of each readable format."""
 
 
-def reader_for(event_file: EventFile) -> EventReader:
-    """Return a reader of `event_file`, of the class that reads its format.
+def reader_for(source: EventSource) -> EventReader:
+    """Return a reader of `source`, of the class that reads its format.
 
     Raises
     ------
@@ -25,11 +25,11 @@ def reader_for(event_file: EventFile) -> EventReader:
         If no reader reads the file's format.
     """
     try:
-        reader = READERS[event_file.format]
+        reader = READERS[source.format]
     except KeyError:
         readable = ", ".join(sorted(fmt.value for fmt in READERS))
         raise ValueError(
-            f"cannot read particles from {event_file.format.value} files; readable"
+            f"cannot read particles from {source.format.value} files; readable"
             f" formats: {readable}"
         ) from None
-    return reader(event_file.path)
+    return reader(source.path)

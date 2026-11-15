@@ -38,8 +38,11 @@ class EventFormat(str, Enum):
 
 
 @dataclass(frozen=True)
-class EventFile:
-    """An event file and its format.
+class EventSource:
+    """Where events are: a file and its format, which is what a reader needs.
+
+    Its content is an :class:`EventDataFile` and its record an
+    :class:`EventFileRecord`.
 
     Attributes
     ----------

@@ -17,7 +17,7 @@ from delphes_records import write_delphes_file
 from omphjc import __version__
 from omphjc.comparison import Difference
 from omphjc.data_files import Card, FileRecord
-from omphjc.events import EventFile, EventFileRecord, EventFormat
+from omphjc.events import EventFileRecord, EventFormat, EventSource
 from omphjc.events.delphes_root import DelphesROOTFile
 from omphjc.jobs import (
     AcceptedInput,
@@ -1407,7 +1407,7 @@ class FakeSimulator:
 
     def simulate(
         self,
-        event_file: EventFile,
+        source: EventSource,
         *,
         workdir: Path,
         seed: int,
@@ -1416,13 +1416,13 @@ class FakeSimulator:
     ) -> TaskOutcome:
         workdir.mkdir(parents=True, exist_ok=True)
         output_path = workdir / "simulated.txt"
-        output_path.write_text(f"{event_file.path.name} {seed}")
+        output_path.write_text(f"{source.path.name} {seed}")
         (log_dir / self.log_name).write_text("simulated")
         output = FileRecord(output_path, output_path.stat().st_size, None)
         return TaskOutcome(
             RunResult(
                 outputs={"out": output},
-                metadata={"input_format": event_file.format.value},
+                metadata={"input_format": source.format.value},
             )
         )
 

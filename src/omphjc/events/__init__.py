@@ -11,15 +11,15 @@ rest is in these modules:
 
 from omphjc.events.formats import (
     EventDataFile,
-    EventFile,
     EventFileRecord,
     EventFormat,
     EventReader,
+    EventSource,
 )
 
 __all__ = [
     "EventDataFile",
-    "EventFile",
+    "EventSource",
     "EventFileRecord",
     "EventFormat",
     "EventReader",
