@@ -25,7 +25,8 @@ cards of one class are compared part by part (:meth:`Card.differences`).
 import hashlib
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, ClassVar, TypeVar
 
@@ -33,6 +34,7 @@ from omphjc.comparison import Difference
 
 _DataFileT = TypeVar("_DataFileT", bound="DataFile")
 _CardT = TypeVar("_CardT", bound="Card")
+_FileRecordT = TypeVar("_FileRecordT", bound="FileRecord")
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,19 @@ class FileRecord:
     path: Path
     n_bytes: int
     fingerprint: str | None
+
+    @classmethod
+    def from_record(
+        cls: type[_FileRecordT], record: Mapping[str, Any], root_dir: Path
+    ) -> _FileRecordT:
+        """Return the file record that `record` holds, with its path under `root_dir`.
+
+        `record` maps each field of the class to its value, as
+        :func:`dataclasses.asdict` writes it, with the path relative to
+        `root_dir`. A subclass whose field is not a JSON value converts it.
+        """
+        values = {field.name: record[field.name] for field in fields(cls)}
+        return cls(**{**values, "path": root_dir / values["path"]})
 
 
 class DataFile(ABC):

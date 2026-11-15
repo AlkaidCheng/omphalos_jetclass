@@ -173,7 +173,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from omphjc.data_files import FileRecord
-from omphjc.events.formats import EventFileRecord, EventFormat
+from omphjc.events.formats import EventFileRecord
 from omphjc.jobs.record_file import RecordFile
 from omphjc.stamps import COMPACT_UTC_FORMAT
 
@@ -221,28 +221,18 @@ class TaskResult:
     def from_record(cls, record: Mapping[str, Any], root_dir: Path) -> "TaskResult":
         """Return the result that `record` describes, with its paths under `root_dir`.
 
-        An output recorded with an event count is an
-        :class:`~omphjc.events.formats.EventFileRecord`.
+        Each file is read back by its record class (:meth:`FileRecord.from_record
+        <omphjc.data_files.FileRecord.from_record>`). An output recorded with a
+        format is an :class:`~omphjc.events.formats.EventFileRecord`.
         """
-        outputs: dict[str, FileRecord] = {}
-        for name, output in record["outputs"].items():
-            path = root_dir / output["path"]
-            if "n_events" in output:
-                outputs[name] = EventFileRecord(
-                    path,
-                    output["n_bytes"],
-                    output["fingerprint"],
-                    EventFormat(output["format"]),
-                    output["n_events"],
-                )
-            else:
-                outputs[name] = FileRecord(
-                    path, output["n_bytes"], output["fingerprint"]
-                )
-        cards = {
-            name: FileRecord(
-                root_dir / card["path"], card["n_bytes"], card["fingerprint"]
+        outputs = {
+            name: (EventFileRecord if "format" in output else FileRecord).from_record(
+                output, root_dir
             )
+            for name, output in record["outputs"].items()
+        }
+        cards = {
+            name: FileRecord.from_record(card, root_dir)
             for name, card in record["cards"].items()
         }
         return cls(outputs=outputs, cards=cards, metadata=record["metadata"])

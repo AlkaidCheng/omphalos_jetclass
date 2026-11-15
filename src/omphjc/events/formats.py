@@ -15,11 +15,11 @@ a module with a subclass of :class:`EventReader`.
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from omphjc.data_files import DataFile, FileRecord
 
@@ -76,6 +76,18 @@ class EventFileRecord(FileRecord):
     fingerprint: str
     format: EventFormat
     n_events: int
+
+    @classmethod
+    def from_record(
+        cls, record: Mapping[str, Any], root_dir: Path
+    ) -> "EventFileRecord":
+        """Return the event file record that `record` holds, as the base class does.
+
+        The format is recorded by its value, such as ``"lhe"``.
+        """
+        return super().from_record(
+            {**record, "format": EventFormat(record["format"])}, root_dir
+        )
 
 
 class EventDataFile(DataFile):
