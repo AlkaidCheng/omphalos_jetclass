@@ -9,6 +9,18 @@ rest is in these modules:
 - :mod:`omphjc.events.stable_particles` holds the stable-particle definition.
 """
 
-from omphjc.events.formats import EventFile, EventFormat, EventReader
+from omphjc.events.formats import (
+    EventDataFile,
+    EventFile,
+    EventFileRecord,
+    EventFormat,
+    EventReader,
+)
 
-__all__ = ["EventFile", "EventFormat", "EventReader"]
+__all__ = [
+    "EventDataFile",
+    "EventFile",
+    "EventFileRecord",
+    "EventFormat",
+    "EventReader",
+]

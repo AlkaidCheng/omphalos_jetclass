@@ -14,6 +14,10 @@ content record holds what the program that reads the file gets from it. The
 layout of the file and its comments are left out. Two files with equal content
 records have the same fingerprint (:meth:`DataFile.fingerprint`).
 
+A :class:`FileRecord` identifies a file on disk by its path, its size and the
+fingerprint of its content; :meth:`DataFile.record_file` makes the record of a
+file in a format.
+
 A :class:`Card` is a data file made of text, with settings or commands. Two
 cards of one class are compared part by part (:meth:`Card.differences`).
 """
@@ -21,6 +25,7 @@ cards of one class are compared part by part (:meth:`Card.differences`).
 import hashlib
 import json
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, TypeVar
 
@@ -28,6 +33,28 @@ from omphjc.comparison import Difference
 
 _DataFileT = TypeVar("_DataFileT", bound="DataFile")
 _CardT = TypeVar("_CardT", bound="Card")
+
+
+@dataclass(frozen=True)
+class FileRecord:
+    """The record of a file: where it is, its size and what it holds.
+
+    Parameters
+    ----------
+    path : Path
+        The file.
+    n_bytes : int
+        The size of the file in bytes when it was recorded. A job compares it
+        with the file to tell whether the file has changed since.
+    fingerprint : str or None
+        The fingerprint of the file's content in its format
+        (:meth:`DataFile.fingerprint`), or ``None`` for a file recorded
+        without being read.
+    """
+
+    path: Path
+    n_bytes: int
+    fingerprint: str | None
 
 
 class DataFile(ABC):
@@ -78,6 +105,14 @@ class DataFile(ABC):
         )
         content_sha256 = hashlib.sha256(canonical.encode()).hexdigest()
         return f"{self.format_name}-v{self.record_version}:{content_sha256}"
+
+    @classmethod
+    def record_file(cls, path: Path) -> FileRecord:
+        """Return the record of the file at `path`, with the fingerprint of its content.
+
+        The file is read once, by :meth:`read`.
+        """
+        return FileRecord(path, path.stat().st_size, cls.read(path).fingerprint())
 
 
 class Card(DataFile):
