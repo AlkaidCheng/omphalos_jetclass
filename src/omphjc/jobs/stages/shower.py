@@ -5,14 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from omphjc.events.formats import EventFormat
 from omphjc.jobs.job import Job
 from omphjc.jobs.stage import Stage
 from omphjc.jobs.stages.generate import GenerateStage
 from omphjc.jobs.task import (
     EVENTS_OUTPUT,
     INPUT_FINGERPRINT_PARAMETER,
-    EventOutput,
     TaskOutcome,
     TaskRecord,
     TaskResult,
@@ -129,15 +127,7 @@ def shower(
             )
         return TaskOutcome(
             TaskResult(
-                outputs={
-                    EVENTS_OUTPUT: EventOutput(
-                        run.output_path,
-                        n_bytes=run.output_path.stat().st_size,
-                        format=EventFormat.DELPHES_ROOT,
-                        n_events=statistics.events_accepted,
-                        fingerprint=DelphesROOTFile.read(run.output_path).fingerprint(),
-                    )
-                },
+                outputs={EVENTS_OUTPUT: DelphesROOTFile.record_file(run.output_path)},
                 cards=read_cards(run.card_paths),
                 metadata=metadata,
             ),

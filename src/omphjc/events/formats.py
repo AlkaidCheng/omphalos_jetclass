@@ -5,6 +5,10 @@ It does not name the reconstructed collections that the file carries. For
 example, DelphesPythia8's record of the shower and DelphesROOT's output are
 both ``delphes-root`` files.
 
+The content of a file in a format is an :class:`EventDataFile`, whose record
+(:meth:`EventDataFile.record_file`) is an :class:`EventFileRecord`: the
+record of a file with its format and its event count.
+
 :class:`EventReader` is the interface for reading the particle record of a
 file. It is defined here, with the formats it serves. Each readable format has
 a module with a subclass of :class:`EventReader`.
@@ -15,7 +19,9 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
+
+from omphjc.data_files import DataFile, FileRecord
 
 if TYPE_CHECKING:
     import awkward as ak
@@ -45,6 +51,66 @@ class EventFile:
 
     path: Path
     format: EventFormat
+
+
+@dataclass(frozen=True)
+class EventFileRecord(FileRecord):
+    """The record of an event file.
+
+    Parameters
+    ----------
+    path : Path
+        The file.
+    n_bytes : int
+        The size of the file in bytes when it was recorded.
+    fingerprint : str
+        The fingerprint of the events (:meth:`EventDataFile.fingerprint`).
+        Two files with the same events have the same fingerprint, which the
+        next stage compares to tell whether its input has changed.
+    format : EventFormat
+        The format of the file.
+    n_events : int
+        The number of events the file holds.
+    """
+
+    fingerprint: str
+    format: EventFormat
+    n_events: int
+
+
+class EventDataFile(DataFile):
+    """The parsed content of a file that holds events.
+
+    A subclass is one event format. It states :attr:`event_format` and gives
+    the number of events, :attr:`n_events`.
+
+    Attributes
+    ----------
+    event_format : EventFormat
+        The format of the file.
+    """
+
+    event_format: ClassVar[EventFormat]
+
+    @property
+    @abstractmethod
+    def n_events(self) -> int:
+        """The number of events the file holds."""
+
+    @classmethod
+    def record_file(cls, path: Path) -> EventFileRecord:
+        """Return the record of the event file at `path`.
+
+        The file is read once, by :meth:`read`.
+        """
+        content = cls.read(path)
+        return EventFileRecord(
+            path,
+            path.stat().st_size,
+            content.fingerprint(),
+            cls.event_format,
+            content.n_events,
+        )
 
 
 class EventReader(ABC):

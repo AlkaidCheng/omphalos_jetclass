@@ -15,7 +15,6 @@ from omphjc.events.delphes_root import DelphesROOTFile
 from omphjc.events.formats import EventFile, EventFormat
 from omphjc.jobs.task import (
     EVENTS_OUTPUT,
-    EventOutput,
     TaskOutcome,
     TaskResult,
     read_cards,
@@ -100,17 +99,9 @@ class DelphesSimulator:
             log_dir=log_dir,
             delphes_root_path=self.delphes_root_path,
         )
-        delphes_file = DelphesROOTFile.read(run.output_path)
-        events = EventOutput(
-            run.output_path,
-            n_bytes=run.output_path.stat().st_size,
-            format=EventFormat.DELPHES_ROOT,
-            n_events=delphes_file.n_entries,
-            fingerprint=delphes_file.fingerprint(),
-        )
         return TaskOutcome(
             TaskResult(
-                outputs={EVENTS_OUTPUT: events},
+                outputs={EVENTS_OUTPUT: DelphesROOTFile.record_file(run.output_path)},
                 cards=read_cards(run.card_paths),
             ),
             usage=run.usage.as_record(),

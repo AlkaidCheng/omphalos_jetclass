@@ -17,13 +17,12 @@ from delphes_records import write_delphes_file
 
 from omphjc import __version__
 from omphjc.comparison import Difference
-from omphjc.data_files import Card
-from omphjc.events import EventFile, EventFormat
+from omphjc.data_files import Card, FileRecord
+from omphjc.events import EventFile, EventFileRecord, EventFormat
 from omphjc.events.delphes_root import DelphesROOTFile
 from omphjc.jobs import (
     EVENTS_OUTPUT,
     AcceptedInput,
-    EventOutput,
     GenerateStage,
     Job,
     JobIdentity,
@@ -35,7 +34,6 @@ from omphjc.jobs import (
     Task,
     TaskCard,
     TaskOutcome,
-    TaskOutput,
     TaskRecord,
     TaskResult,
     TaskRun,
@@ -145,14 +143,16 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
         runs=(_run("done", finished="u"),),
         result=TaskResult(
             outputs={
-                EVENTS_OUTPUT: EventOutput(
+                EVENTS_OUTPUT: EventFileRecord(
                     output_path,
                     n_bytes=7,
+                    fingerprint="lhe-v1:abc",
                     format=EventFormat.LHE,
                     n_events=10,
-                    fingerprint="lhe-v1:abc",
                 ),
-                "summary": TaskOutput(tmp_path / "x" / "summary.txt", n_bytes=3),
+                "summary": FileRecord(
+                    tmp_path / "x" / "summary.txt", n_bytes=3, fingerprint=None
+                ),
             },
             cards={"run_card": TaskCard(tmp_path / "x" / "run_card.dat", "abc")},
             metadata={"version": "1.0"},
@@ -183,11 +183,11 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
             "events": {
                 "path": "x/out",
                 "n_bytes": 7,
+                "fingerprint": "lhe-v1:abc",
                 "format": "lhe",
                 "n_events": 10,
-                "fingerprint": "lhe-v1:abc",
             },
-            "summary": {"path": "x/summary.txt", "n_bytes": 3},
+            "summary": {"path": "x/summary.txt", "n_bytes": 3, "fingerprint": None},
         },
         "cards": {"run_card": {"path": "x/run_card.dat", "sha256": "abc"}},
         "metadata": {"version": "1.0"},
@@ -247,7 +247,7 @@ def test_a_task_record_needs_a_run_and_a_result_that_fits_its_status(
 def test_a_record_gives_its_outputs_only_when_its_latest_run_is_done(
     tmp_path: Path,
 ) -> None:
-    events = EventOutput(tmp_path / "e.lhe", 7, EventFormat.LHE, 10, "lhe-v1:abc")
+    events = EventFileRecord(tmp_path / "e.lhe", 7, "lhe-v1:abc", EventFormat.LHE, 10)
     done = TaskRecord(
         parameters={},
         runs=(_run("done"),),
@@ -273,7 +273,7 @@ def test_a_task_record_refuses_a_path_outside_its_root_directory(
         parameters={},
         runs=(_run("done"),),
         result=TaskResult(
-            outputs={"out": TaskOutput(tmp_path / "elsewhere" / "out", n_bytes=0)}
+            outputs={"out": FileRecord(tmp_path / "elsewhere" / "out", 0, None)}
         ),
     )
     with pytest.raises(ValueError, match="elsewhere"):
@@ -330,7 +330,7 @@ def _make_output(job: Job) -> TaskOutcome:
     output.write_text("made")
     return TaskOutcome(
         TaskResult(
-            outputs={"out": TaskOutput(output, n_bytes=len("made"))},
+            outputs={"out": FileRecord(output, len("made"), None)},
             metadata={"n": 1},
         )
     )
@@ -383,7 +383,7 @@ def test_a_stage_runs_once_and_its_result_is_kept(
     assert len(record.runs) == 1
     assert record.parameters == {"events": 10}
     assert record.result == TaskResult(
-        outputs={"out": TaskOutput(job.root_dir / "x" / "out.txt", n_bytes=4)},
+        outputs={"out": FileRecord(job.root_dir / "x" / "out.txt", 4, None)},
         metadata={"n": 1},
     )
     assert record.latest_run.log is None
@@ -533,7 +533,7 @@ def test_an_output_of_another_size_is_reported_before_a_missing_one(
         outputs = {}
         for name, path in (("first", first_path), ("second", second_path)):
             path.write_text("made")
-            outputs[name] = TaskOutput(path, n_bytes=len("made"))
+            outputs[name] = FileRecord(path, len("made"), None)
         return TaskOutcome(TaskResult(outputs=outputs))
 
     record = job.run_task(STAGE_X, {}, body)
@@ -559,12 +559,12 @@ def test_require_events_returns_the_events_a_done_stage_made(
     with pytest.raises(ValueError, match="The x stage of .* made no event file"):
         job.require_events(STAGE_X)
 
-    events = EventOutput(
+    events = EventFileRecord(
         job.task_dir(STAGE_X) / "out.txt",
         n_bytes=len("made"),
+        fingerprint="lhe-v1:abc",
         format=EventFormat.LHE,
         n_events=3,
-        fingerprint="lhe-v1:abc",
     )
     job.run_task(
         STAGE_X,
@@ -1152,12 +1152,12 @@ def test_generate_records_what_madgraph_made(
     )
     assert lhe_path.is_file()
     assert record.result.outputs == {
-        EVENTS_OUTPUT: EventOutput(
+        EVENTS_OUTPUT: EventFileRecord(
             lhe_path,
             n_bytes=lhe_path.stat().st_size,
+            fingerprint=LHEFile.read(lhe_path).fingerprint(),
             format=EventFormat.LHE,
             n_events=10000,
-            fingerprint=LHEFile.read(lhe_path).fingerprint(),
         )
     }
     assert (
@@ -1291,12 +1291,12 @@ def test_shower_records_what_it_made_and_keeps_it(
     root_path = job.root_dir / "shower" / "particles.root"
     assert root_path.is_file()
     assert record.result.outputs == {
-        EVENTS_OUTPUT: EventOutput(
+        EVENTS_OUTPUT: EventFileRecord(
             root_path,
             n_bytes=root_path.stat().st_size,
+            fingerprint=DelphesROOTFile.read(root_path).fingerprint(),
             format=EventFormat.DELPHES_ROOT,
             n_events=1,
-            fingerprint=DelphesROOTFile.read(root_path).fingerprint(),
         )
     }
     assert record.latest_run.log == f"shower/runs/{record.latest_run.run_id}/shower.log"
@@ -1422,7 +1422,7 @@ class FakeSimulator:
         output_path = workdir / "simulated.txt"
         output_path.write_text(f"{event_file.path.name} {seed}")
         (log_dir / self.log_name).write_text("simulated")
-        output = TaskOutput(output_path, n_bytes=output_path.stat().st_size)
+        output = FileRecord(output_path, output_path.stat().st_size, None)
         return TaskOutcome(
             TaskResult(
                 outputs={"out": output},
@@ -1431,14 +1431,14 @@ class FakeSimulator:
         )
 
 
-def _record_showered_events(job: Job, event_format: EventFormat) -> EventOutput:
+def _record_showered_events(job: Job, event_format: EventFormat) -> EventFileRecord:
     """Record a done shower task of `job` whose events have `event_format`."""
     events_path = job.task_dir(ShowerStage()) / "events.dat"
 
     def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
         events_path.parent.mkdir(parents=True, exist_ok=True)
         events_path.write_text("events")
-        events = EventOutput(events_path, 6, event_format, 1, "fake-v1:abc")
+        events = EventFileRecord(events_path, 6, "fake-v1:abc", event_format, 1)
         return TaskOutcome(TaskResult(outputs={EVENTS_OUTPUT: events}))
 
     record = job.run_task(ShowerStage(), {}, body)
@@ -1667,12 +1667,12 @@ def test_simulate_records_what_it_made_and_keeps_it(
     root_path = job.root_dir / "simulate" / "delphes.root"
     assert root_path.is_file()
     assert record.result.outputs == {
-        EVENTS_OUTPUT: EventOutput(
+        EVENTS_OUTPUT: EventFileRecord(
             root_path,
             n_bytes=root_path.stat().st_size,
+            fingerprint=DelphesROOTFile.read(root_path).fingerprint(),
             format=EventFormat.DELPHES_ROOT,
             n_events=1,
-            fingerprint=DelphesROOTFile.read(root_path).fingerprint(),
         )
     }
     assert (

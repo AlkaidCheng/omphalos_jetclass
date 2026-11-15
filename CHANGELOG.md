@@ -189,6 +189,10 @@
   `omphjc.tools.delphes.adapter.DelphesSimulator`. (#76)
 - Every tool raises `omphjc.programs.ProgramError`; `MadGraphError`,
   `ShowerError` and `SimulationError` are removed. (#78)
+- A task's outputs are recorded by their format class
+  (`DataFile.record_file`) as an `omphjc.data_files.FileRecord`, or an
+  `omphjc.events.EventFileRecord` for an event file, in place of
+  `TaskOutput` and `EventOutput` of `omphjc.jobs`. (#79)
 
 ### Fixed
 

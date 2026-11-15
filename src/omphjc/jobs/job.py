@@ -26,13 +26,12 @@ from types import FrameType
 from typing import Any, Protocol
 
 from omphjc.comparison import Difference
-from omphjc.events.formats import EventFormat
+from omphjc.events.formats import EventFileRecord, EventFormat
 from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.stage import Stage
 from omphjc.jobs.task import (
     INPUT_FINGERPRINT_PARAMETER,
-    EventOutput,
     Task,
     TaskOutcome,
     TaskRecord,
@@ -294,7 +293,7 @@ class Job:
 
     def require_events(
         self, stage: Stage, *, for_tool: EventReadingTool | None = None
-    ) -> EventOutput:
+    ) -> EventFileRecord:
         """Return the events that the task of `stage` made.
 
         The task must be done with its outputs intact.

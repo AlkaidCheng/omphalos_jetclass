@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from omphjc.events import EventFileRecord, EventFormat
 from omphjc.tools.madgraph.banner import Banner
 from omphjc.tools.madgraph.lhe_file import LHEFile
 
@@ -87,6 +88,19 @@ def test_the_events_hash_covers_the_init_block_and_the_events(tmp_path: Path) ->
     lhe_file = LHEFile.read(tmp_path / "events.lhe")
     assert lhe_file.events_sha256 == hashlib.sha256(covered).hexdigest()
     assert lhe_file.content_record()["events"] == lhe_file.events_sha256
+
+
+def test_the_record_of_an_lhe_file_has_its_format_and_the_banner_event_count(
+    tmp_path: Path,
+) -> None:
+    path = _write(tmp_path / "events.lhe.gz")
+    assert LHEFile.record_file(path) == EventFileRecord(
+        path,
+        path.stat().st_size,
+        _fingerprint(path),
+        EventFormat.LHE,
+        Banner.read(path).n_events,
+    )
 
 
 def test_an_lhe_fingerprint_starts_with_its_format_and_version(tmp_path: Path) -> None:

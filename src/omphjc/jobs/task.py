@@ -11,9 +11,9 @@ A task is the work of one stage in a job. Its record is the file
           "events": {
             "path": "generate/HToBB/Events/run_01/unweighted_events.lhe.gz",
             "n_bytes": 12345678,
+            "fingerprint": "lhe-v1:<sha256>",
             "format": "lhe",
-            "n_events": 1000,
-            "fingerprint": "lhe-v1:<sha256>"
+            "n_events": 1000
           }
         },
         "cards": {
@@ -73,10 +73,13 @@ keys are:
     ``null`` when there is none.
 
 **The result.** ``outputs`` holds the files the task made, under the names
-the stage gives them. Each output has its ``path`` and its size in bytes,
-``n_bytes``. An event file also has its ``format``, the number of events it
-holds and the ``fingerprint`` of its content. The next task reads the output
-named ``events``.
+the stage gives them. Each output has its ``path``, its size in bytes,
+``n_bytes``, and the ``fingerprint`` of its content in its format, which is
+``null`` for a file recorded without being read
+(:class:`~omphjc.data_files.FileRecord`). An event file also has its
+``format`` and the number of events it holds
+(:class:`~omphjc.events.formats.EventFileRecord`). The next task reads the
+output named ``events``.
 
 ``cards`` holds the cards of the task, under the names its stage gives them.
 A card is a file that steers the task's program, such as a run card or a
@@ -164,7 +167,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar
 
-from omphjc.events.formats import EventFormat
+from omphjc.data_files import FileRecord
+from omphjc.events.formats import EventFileRecord, EventFormat
 from omphjc.jobs.record_file import RecordFile
 from omphjc.stamps import COMPACT_UTC_FORMAT
 
@@ -183,47 +187,6 @@ EVENTS_OUTPUT = "events"
 """The name of the output that holds the events the next task reads."""
 INPUT_FINGERPRINT_PARAMETER = "input_fingerprint"
 """The parameter that holds the fingerprint of the events a task reads."""
-
-
-@dataclass(frozen=True)
-class TaskOutput:
-    """A file a task made.
-
-    Parameters
-    ----------
-    path : Path
-        The file, inside the job directory.
-    n_bytes : int
-        The size of the file in bytes when the task finished.
-    """
-
-    path: Path
-    n_bytes: int
-
-
-@dataclass(frozen=True)
-class EventOutput(TaskOutput):
-    """An event file a task made.
-
-    Parameters
-    ----------
-    path : Path
-        The file, inside the job directory.
-    n_bytes : int
-        The size of the file in bytes when the task finished.
-    format : EventFormat
-        The format of the file.
-    n_events : int
-        The number of events the file holds.
-    fingerprint : str
-        The fingerprint of the file's content
-        (:meth:`omphjc.data_files.DataFile.fingerprint`). Two files with the
-        same events have the same fingerprint.
-    """
-
-    format: EventFormat
-    n_events: int
-    fingerprint: str
 
 
 @dataclass(frozen=True)
@@ -262,10 +225,11 @@ class TaskResult:
 
     Parameters
     ----------
-    outputs : dict[str, TaskOutput]
-        The task's outputs under the names its stage gives them. The next
-        task reads the :class:`EventOutput` named :data:`EVENTS_OUTPUT`. A
-        task that makes no events has no such output.
+    outputs : dict[str, FileRecord]
+        The record of each file the task made, under the name its stage
+        gives it. The next task reads the
+        :class:`~omphjc.events.formats.EventFileRecord` named
+        :data:`EVENTS_OUTPUT`. A task that makes no events has no such output.
     cards : dict[str, TaskCard]
         The cards the task's program read, under the names its stage gives
         them.
@@ -274,7 +238,7 @@ class TaskResult:
         The stage chooses the keys.
     """
 
-    outputs: dict[str, TaskOutput] = field(default_factory=dict)
+    outputs: dict[str, FileRecord] = field(default_factory=dict)
     cards: dict[str, TaskCard] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -282,21 +246,24 @@ class TaskResult:
     def from_record(cls, record: Mapping[str, Any], root_dir: Path) -> "TaskResult":
         """Return the result that `record` describes, with its paths under `root_dir`.
 
-        An output recorded with an event count is an :class:`EventOutput`.
+        An output recorded with an event count is an
+        :class:`~omphjc.events.formats.EventFileRecord`.
         """
-        outputs: dict[str, TaskOutput] = {}
+        outputs: dict[str, FileRecord] = {}
         for name, output in record["outputs"].items():
             path = root_dir / output["path"]
             if "n_events" in output:
-                outputs[name] = EventOutput(
+                outputs[name] = EventFileRecord(
                     path,
                     output["n_bytes"],
+                    output["fingerprint"],
                     EventFormat(output["format"]),
                     output["n_events"],
-                    output["fingerprint"],
                 )
             else:
-                outputs[name] = TaskOutput(path, output["n_bytes"])
+                outputs[name] = FileRecord(
+                    path, output["n_bytes"], output["fingerprint"]
+                )
         cards = {
             name: TaskCard(root_dir / card["path"], card["sha256"])
             for name, card in record["cards"].items()
@@ -427,7 +394,7 @@ class TaskRecord(RecordFile):
         return self.latest_run.status == DONE
 
     @property
-    def outputs(self) -> dict[str, TaskOutput]:
+    def outputs(self) -> dict[str, FileRecord]:
         """The outputs of the task, under the names its stage gives them.
 
         Raises
@@ -438,7 +405,7 @@ class TaskRecord(RecordFile):
         return self._done_result().outputs
 
     @property
-    def events(self) -> EventOutput | None:
+    def events(self) -> EventFileRecord | None:
         """The event file the task made, which the next task reads.
 
         It is ``None`` when the task made no event file.
@@ -449,7 +416,7 @@ class TaskRecord(RecordFile):
             If the latest run is not done.
         """
         events = self.outputs.get(EVENTS_OUTPUT)
-        return events if isinstance(events, EventOutput) else None
+        return events if isinstance(events, EventFileRecord) else None
 
     @property
     def cards(self) -> dict[str, TaskCard]:

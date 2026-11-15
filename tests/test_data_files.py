@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from omphjc.comparison import Difference
-from omphjc.data_files import Card
+from omphjc.data_files import Card, FileRecord
 
 
 @dataclass(frozen=True)
@@ -53,3 +53,12 @@ def test_a_card_is_read_from_a_file_as_utf8_text(tmp_path: Path) -> None:
     path = tmp_path / "card.dat"
     path.write_text("label = caf\u00e9\n", encoding="utf-8")
     assert SettingsCard.read(path) == SettingsCard(settings={"label": "caf\u00e9"})
+
+
+def test_the_record_of_a_file_holds_its_size_and_its_fingerprint(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "card.dat"
+    path.write_text("ptj = 20  # cut\n")
+    fingerprint = SettingsCard.from_text("ptj = 20\n").fingerprint()
+    assert SettingsCard.record_file(path) == FileRecord(path, 16, fingerprint)

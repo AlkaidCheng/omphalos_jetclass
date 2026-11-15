@@ -8,7 +8,7 @@ import pytest
 import uproot
 from delphes_records import EVENT_DTYPES, PARTICLE_DTYPES, write_delphes_file
 
-from omphjc.events import EventFile, EventFormat
+from omphjc.events import EventFile, EventFileRecord, EventFormat
 from omphjc.events.delphes_root import (
     SPEED_OF_LIGHT_MM_PER_S,
     DelphesROOTFile,
@@ -289,6 +289,19 @@ def test_a_delphes_file_has_the_same_fingerprint_whatever_time_its_events_took(
     assert content.fingerprint().startswith("delphes_root-v1:")
     assert "Event.Number" in content.leaves
     assert not {"Event.ReadTime", "Event.ProcTime"} & set(content.leaves)
+
+
+def test_the_record_of_a_delphes_file_counts_the_entries_of_its_tree(
+    record_file: EventFile,
+) -> None:
+    path = record_file.path
+    assert DelphesROOTFile.record_file(path) == EventFileRecord(
+        path,
+        path.stat().st_size,
+        DelphesROOTFile.read(path).fingerprint(),
+        EventFormat.DELPHES_ROOT,
+        len(EVENTS["Number"]),
+    )
 
 
 def test_a_missing_branch_is_named(write_file: Callable[..., EventFile]) -> None:

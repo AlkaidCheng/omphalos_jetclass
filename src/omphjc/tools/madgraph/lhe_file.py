@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
-from omphjc.data_files import DataFile
+from omphjc.events.formats import EventDataFile, EventFormat
 from omphjc.tools.madgraph.banner import Banner
 from omphjc.tools.madgraph.madspin_card import MadSpinCard
 from omphjc.tools.madgraph.proc_card import ProcCard
@@ -45,7 +45,7 @@ _READ_BYTES = 1 << 20
 
 
 @dataclass(frozen=True)
-class LHEFile(DataFile):
+class LHEFile(EventDataFile):
     """The content of an LHE file written by MadGraph.
 
     Parameters
@@ -61,9 +61,15 @@ class LHEFile(DataFile):
 
     format_name: ClassVar[str] = "lhe"
     record_version: ClassVar[int] = 1
+    event_format: ClassVar[EventFormat] = EventFormat.LHE
 
     banner: Banner
     events_sha256: str
+
+    @property
+    def n_events(self) -> int:
+        """The number of events the file holds, as its header records it."""
+        return self.banner.n_events
 
     @classmethod
     def read(cls, path: Path) -> "LHEFile":

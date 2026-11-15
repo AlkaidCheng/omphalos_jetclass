@@ -17,7 +17,7 @@ from typing import Any, ClassVar
 import awkward as ak
 import numpy as np
 
-from omphjc.events.formats import EventReader
+from omphjc.events.formats import EventDataFile, EventFormat, EventReader
 from omphjc.events.particles import build_record
 from omphjc.root_files import ROOTFile
 from omphjc.root_io import count_entries, iterate_branches, read_branches
@@ -72,7 +72,7 @@ PARTICLE_BRANCHES = {
 BRANCHES = (*EVENT_BRANCHES.values(), *PARTICLE_BRANCHES.values())
 
 
-class DelphesROOTFile(ROOTFile):
+class DelphesROOTFile(ROOTFile, EventDataFile):
     """The content of a ROOT file written by Delphes.
 
     The fields ``ReadTime`` and ``ProcTime`` are left out of the content. They
@@ -81,6 +81,7 @@ class DelphesROOTFile(ROOTFile):
     """
 
     format_name: ClassVar[str] = "delphes_root"
+    event_format: ClassVar[EventFormat] = EventFormat.DELPHES_ROOT
     tree_name: ClassVar[str] = TREE_NAME
     # ReadTime and ProcTime are members of Event, the base class of the event
     # header on the branches Event and EventLHEF (Delphes 3.5.1,
@@ -90,6 +91,11 @@ class DelphesROOTFile(ROOTFile):
     # and classes/DelphesLHEFReader.cc#L249-L250), and DelphesROOT copies them
     # (readers/DelphesROOT.cpp#L195-L196).
     excluded_fields: ClassVar[frozenset[str]] = frozenset({"ReadTime", "ProcTime"})
+
+    @property
+    def n_events(self) -> int:
+        """The number of events the file holds: the entries of its tree."""
+        return self.n_entries
 
 
 class DelphesRootReader(EventReader):

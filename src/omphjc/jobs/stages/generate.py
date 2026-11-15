@@ -6,12 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from omphjc.events.formats import EventFormat
 from omphjc.jobs.job import Job
 from omphjc.jobs.stage import Stage
 from omphjc.jobs.task import (
     EVENTS_OUTPUT,
-    EventOutput,
     TaskOutcome,
     TaskRecord,
     TaskResult,
@@ -104,15 +102,7 @@ def generate(
         card_copy_paths = _copy_cards(run.card_paths, task_dir / _CARDS_DIR)
         return TaskOutcome(
             TaskResult(
-                outputs={
-                    EVENTS_OUTPUT: EventOutput(
-                        run.output_path,
-                        n_bytes=run.output_path.stat().st_size,
-                        format=EventFormat.LHE,
-                        n_events=run.banner.n_events,
-                        fingerprint=LHEFile.read(run.output_path).fingerprint(),
-                    )
-                },
+                outputs={EVENTS_OUTPUT: LHEFile.record_file(run.output_path)},
                 cards=read_cards(card_copy_paths),
                 metadata={
                     "madgraph_version": run.banner.version,
