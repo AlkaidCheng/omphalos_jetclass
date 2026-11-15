@@ -68,7 +68,7 @@ keys are:
     A later run compares its own parameters with these to decide whether the
     result can be kept.
 ``result``
-    What the task made (:class:`TaskResult`). It is ``null`` unless the
+    What the task made (:class:`~omphjc.runs.RunResult`). It is ``null`` unless the
     latest run is done.
 ``runs``
     The runs of the task, oldest first.
@@ -175,6 +175,7 @@ from typing import Any, ClassVar
 from omphjc.data_files import FileRecord
 from omphjc.events.formats import EventFileRecord
 from omphjc.jobs.record_file import RecordFile
+from omphjc.runs import RunResult
 from omphjc.stamps import COMPACT_UTC_FORMAT
 
 # How a run ended, or that it is still running.
@@ -188,54 +189,8 @@ _STATUSES = (RUNNING, DONE, FAILED, INTERRUPTED)
 _RUN_ID_RANDOM_BYTES = 4
 """Random bytes in a run ID, written as twice as many hexadecimal digits."""
 
-EVENTS_OUTPUT = "events"
-"""The name of the output that holds the events the next task reads."""
 INPUT_FINGERPRINT_PARAMETER = "input_fingerprint"
 """The parameter that holds the fingerprint of the events a task reads."""
-
-
-@dataclass(frozen=True)
-class TaskResult:
-    """What a task made.
-
-    Parameters
-    ----------
-    outputs : dict[str, FileRecord]
-        The record of each file the task made, under the name its stage
-        gives it. The next task reads the
-        :class:`~omphjc.events.formats.EventFileRecord` named
-        :data:`EVENTS_OUTPUT`. A task that makes no events has no such output.
-    cards : dict[str, FileRecord]
-        The record of each card the task's program read, under the name of
-        the card (:meth:`omphjc.workspace.Workspace.card_records`).
-    metadata : dict
-        What is known about the task and the sample it made, as JSON values.
-        The stage chooses the keys.
-    """
-
-    outputs: dict[str, FileRecord] = field(default_factory=dict)
-    cards: dict[str, FileRecord] = field(default_factory=dict)
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_record(cls, record: Mapping[str, Any], root_dir: Path) -> "TaskResult":
-        """Return the result that `record` describes, with its paths under `root_dir`.
-
-        Each file is read back by its record class (:meth:`FileRecord.from_record
-        <omphjc.data_files.FileRecord.from_record>`). An output recorded with a
-        format is an :class:`~omphjc.events.formats.EventFileRecord`.
-        """
-        outputs = {
-            name: (EventFileRecord if "format" in output else FileRecord).from_record(
-                output, root_dir
-            )
-            for name, output in record["outputs"].items()
-        }
-        cards = {
-            name: FileRecord.from_record(card, root_dir)
-            for name, card in record["cards"].items()
-        }
-        return cls(outputs=outputs, cards=cards, metadata=record["metadata"])
 
 
 @dataclass(frozen=True)
@@ -244,7 +199,7 @@ class TaskOutcome:
 
     Parameters
     ----------
-    result : TaskResult
+    result : RunResult
         What the task made.
     usage : dict[str, float]
         Resources the task's program used, such as ``cpu_seconds`` and
@@ -255,7 +210,7 @@ class TaskOutcome:
         (:mod:`omphjc.stamps`). It is ``None`` when nothing was moved.
     """
 
-    result: TaskResult
+    result: RunResult
     usage: dict[str, float] = field(default_factory=dict)
     set_aside_dir: Path | None = None
 
@@ -329,7 +284,7 @@ class TaskRecord(RecordFile):
 
     parameters: dict[str, Any]
     runs: tuple[TaskRun, ...]
-    result: TaskResult | None = None
+    result: RunResult | None = None
     accepted_input: AcceptedInput | None = None
 
     def __post_init__(self) -> None:
@@ -382,8 +337,7 @@ class TaskRecord(RecordFile):
         ValueError
             If the latest run is not done.
         """
-        events = self.outputs.get(EVENTS_OUTPUT)
-        return events if isinstance(events, EventFileRecord) else None
+        return self._done_result().events
 
     @property
     def cards(self) -> dict[str, FileRecord]:
@@ -435,7 +389,7 @@ class TaskRecord(RecordFile):
         return cls(
             **fields,
             runs=runs,
-            result=None if result is None else TaskResult.from_record(result, root_dir),
+            result=None if result is None else RunResult.from_record(result, root_dir),
             accepted_input=(
                 None if accepted_input is None else AcceptedInput(**accepted_input)
             ),
@@ -522,7 +476,7 @@ class TaskRecord(RecordFile):
         """Return the runs, the latest with its fields replaced by `changes`."""
         return (*self.runs[:-1], replace(self.latest_run, **changes))
 
-    def _done_result(self) -> TaskResult:
+    def _done_result(self) -> RunResult:
         """Return the result of a record whose latest run is done."""
         if self.result is None:
             raise ValueError(

@@ -33,6 +33,11 @@ SHARED_MODULES = (
     "omphjc.workspace",
 )
 
+# The modules between the shared modules and the tools and the jobs layer:
+# they describe what a run makes and may name an event format, and know no
+# catalogue, tool, stage or command.
+RUN_CONTRACT_MODULES = ("omphjc.runs",)
+
 # The modules omphjc.events may import besides its own: the event-file
 # contracts know no tool, stage or command.
 EVENTS_IMPORTS = (
@@ -157,6 +162,24 @@ def test_shared_modules_and_the_catalogue_import_no_tool_stage_or_command() -> N
         if any(
             _within(target, layer)
             for layer in ("omphjc.tools", "omphjc.jobs", "omphjc.cli")
+        )
+    }
+    assert reaches == set()
+
+
+def test_the_run_contract_modules_import_no_catalogue_tool_stage_or_command() -> None:
+    reaches = {
+        (name, target)
+        for name in RUN_CONTRACT_MODULES
+        for target in IMPORTS[name]
+        if any(
+            _within(target, layer)
+            for layer in (
+                "omphjc.processes",
+                "omphjc.tools",
+                "omphjc.jobs",
+                "omphjc.cli",
+            )
         )
     }
     assert reaches == set()

@@ -9,12 +9,8 @@ from typing import ClassVar
 from omphjc.data_files import FileRecord
 from omphjc.jobs.job import Job
 from omphjc.jobs.stage import Stage
-from omphjc.jobs.task import (
-    EVENTS_OUTPUT,
-    TaskOutcome,
-    TaskRecord,
-    TaskResult,
-)
+from omphjc.jobs.task import TaskOutcome, TaskRecord
+from omphjc.runs import EVENTS_OUTPUT, RunResult
 from omphjc.tools.madgraph.driver import MadGraphWorkspace, generate_events
 from omphjc.tools.madgraph.lhe_file import LHEFile
 
@@ -100,7 +96,7 @@ def generate(
             mg5_path=mg5_path,
         )
         return TaskOutcome(
-            TaskResult(
+            RunResult(
                 outputs={EVENTS_OUTPUT: LHEFile.record_file(run.output_path)},
                 cards=_copy_cards(run.cards, task_dir / _CARDS_DIR),
                 metadata={
