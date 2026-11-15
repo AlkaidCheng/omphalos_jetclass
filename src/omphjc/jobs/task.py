@@ -17,7 +17,11 @@ A task is the work of one stage in a job. Its record is the file
           }
         },
         "cards": {
-          "run_card": {"path": "generate/cards/run_card.dat", "sha256": "<sha256>"}
+          "run_card": {
+            "path": "generate/cards/run_card.dat",
+            "n_bytes": 18446,
+            "fingerprint": "run_card-v1:<sha256>"
+          }
         },
         "metadata": {
           "madgraph_version": "3.8.1",
@@ -81,11 +85,13 @@ the stage gives them. Each output has its ``path``, its size in bytes,
 (:class:`~omphjc.events.formats.EventFileRecord`). The next task reads the
 output named ``events``.
 
-``cards`` holds the cards of the task, under the names its stage gives them.
-A card is a file that steers the task's program, such as a run card or a
-detector card. Each card has its ``path`` and the ``sha256`` of the file as
-the run used it. The cards are a record for the reader: they do not count
-when the status of the task is judged.
+``cards`` holds the cards of the task, under the names their classes give
+them. A card is a file that steers the task's program, such as a run card or
+a detector card. Each card is recorded as an output is, with the fingerprint
+of its parsed content (:class:`~omphjc.data_files.Card`), so that two cards
+that differ only in comments and layout have one fingerprint. The cards are
+a record for the reader: they do not count when the status of the task is
+judged.
 
 ``metadata`` is what is known about the task and the sample it made. The
 stage chooses its keys.
@@ -157,17 +163,16 @@ files into account. A task whose latest run is done has
 :attr:`TaskStatus.DONE` only while its outputs are intact.
 """
 
-import hashlib
 import secrets
 import socket
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar
 
-from omphjc.data_files import FileRecord
+from omphjc.data_files import Card, FileRecord
 from omphjc.events.formats import EventFileRecord, EventFormat
 from omphjc.jobs.record_file import RecordFile
 from omphjc.stamps import COMPACT_UTC_FORMAT
@@ -189,34 +194,21 @@ INPUT_FINGERPRINT_PARAMETER = "input_fingerprint"
 """The parameter that holds the fingerprint of the events a task reads."""
 
 
-@dataclass(frozen=True)
-class TaskCard:
-    """A card of a task: a file that steered the task's program.
+def record_cards(
+    card_paths: Mapping[str, Path], card_classes: Iterable[type[Card]]
+) -> dict[str, FileRecord]:
+    """Return the record of each card of `card_classes` in `card_paths`.
 
-    Parameters
-    ----------
-    path : Path
-        The file as the run used it, inside the job directory.
-    sha256 : str
-        The SHA-256 of the file, as hexadecimal digits.
+    A card is found in `card_paths` under its :attr:`~omphjc.data_files.Card.card_name`
+    and recorded by its class (:meth:`~omphjc.data_files.DataFile.record_file`),
+    so its fingerprint is that of its parsed content. A driver's run record
+    gives the paths (:attr:`omphjc.workspace.Run.card_paths`).
     """
-
-    path: Path
-    sha256: str
-
-    @classmethod
-    def from_path(cls, path: Path) -> "TaskCard":
-        """Return the card at `path`, with the SHA-256 of the file as it is."""
-        return cls(path, hashlib.sha256(path.read_bytes()).hexdigest())
-
-
-def read_cards(card_paths: Mapping[str, Path]) -> dict[str, TaskCard]:
-    """Return the card at each of `card_paths`, under the same name.
-
-    Each card is recorded with the SHA-256 of its file as it is. A driver's
-    run record gives the paths (:attr:`omphjc.workspace.Run.card_paths`).
-    """
-    return {name: TaskCard.from_path(path) for name, path in card_paths.items()}
+    return {
+        card_class.card_name: card_class.record_file(card_paths[card_class.card_name])
+        for card_class in card_classes
+        if card_class.card_name in card_paths
+    }
 
 
 @dataclass(frozen=True)
@@ -230,16 +222,16 @@ class TaskResult:
         gives it. The next task reads the
         :class:`~omphjc.events.formats.EventFileRecord` named
         :data:`EVENTS_OUTPUT`. A task that makes no events has no such output.
-    cards : dict[str, TaskCard]
-        The cards the task's program read, under the names its stage gives
-        them.
+    cards : dict[str, FileRecord]
+        The record of each card the task's program read, under the name of
+        the card (:func:`record_cards`).
     metadata : dict
         What is known about the task and the sample it made, as JSON values.
         The stage chooses the keys.
     """
 
     outputs: dict[str, FileRecord] = field(default_factory=dict)
-    cards: dict[str, TaskCard] = field(default_factory=dict)
+    cards: dict[str, FileRecord] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -265,7 +257,9 @@ class TaskResult:
                     path, output["n_bytes"], output["fingerprint"]
                 )
         cards = {
-            name: TaskCard(root_dir / card["path"], card["sha256"])
+            name: FileRecord(
+                root_dir / card["path"], card["n_bytes"], card["fingerprint"]
+            )
             for name, card in record["cards"].items()
         }
         return cls(outputs=outputs, cards=cards, metadata=record["metadata"])
@@ -419,7 +413,7 @@ class TaskRecord(RecordFile):
         return events if isinstance(events, EventFileRecord) else None
 
     @property
-    def cards(self) -> dict[str, TaskCard]:
+    def cards(self) -> dict[str, FileRecord]:
         """The cards the task's program read, under the names its stage gives them.
 
         Raises

@@ -14,7 +14,7 @@ The modules, by what they hold::
                     whether a task runs again (Job.run_task)
     task.py         Task and TaskStatus, a task as found on disk; TaskRecord, the
                     content of task.json, with a TaskRun for each run, and
-                    what a task makes: TaskResult, TaskCard, TaskOutcome
+                    what a task makes: TaskResult, TaskOutcome
     identity.py     JobIdentity, the content of job.json
     manifest.py     Manifest, the content of manifest.json, which lists a
                     TaskSummary of each task's record
@@ -35,7 +35,8 @@ How a stage is recorded:
    the run. The result holds the task's outputs and cards by name, and its
    metadata. An output is a :class:`~omphjc.data_files.FileRecord`, or an
    :class:`~omphjc.events.formats.EventFileRecord` for an event file. A card
-   is a :class:`TaskCard`.
+   is a :class:`~omphjc.data_files.FileRecord` made by its card class
+   (:func:`record_cards`).
 3. :meth:`Job.run_task` records the run as a :class:`TaskRun`, with its
    status, start and finish times, log and usage. It writes the run, the
    parameters and the result to ``task.json`` as a :class:`TaskRecord`, with
@@ -71,13 +72,12 @@ from omphjc.jobs.task import (
     RUNNING,
     AcceptedInput,
     Task,
-    TaskCard,
     TaskOutcome,
     TaskRecord,
     TaskResult,
     TaskRun,
     TaskStatus,
-    read_cards,
+    record_cards,
 )
 
 __all__ = [
@@ -98,7 +98,6 @@ __all__ = [
     "SimulateStage",
     "Stage",
     "Task",
-    "TaskCard",
     "TaskOutcome",
     "TaskRecord",
     "TaskResult",
@@ -109,7 +108,7 @@ __all__ = [
     "exception_on_termination",
     "generate",
     "job_seed",
-    "read_cards",
+    "record_cards",
     "shower",
     "simulate",
     "task_parameters",

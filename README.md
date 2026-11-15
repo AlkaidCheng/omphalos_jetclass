@@ -424,8 +424,9 @@ file's format, number of events and fingerprint. Two event files with the same
 events have the same fingerprint
 ([Same events, different files](docs/reproducibility.md#same-events-different-files)).
 The result also names the stage's cards, the files that steered its program as
-the run used them, each with its path and SHA-256, and holds the metadata of
-what the stage made.
+the run used them, each with its path, its size and the fingerprint of its
+settings as the program reads them, so that comments and layout do not count.
+It holds the metadata of what the stage made as well.
 
 | Stage | Parameters | Cards | Metadata |
 |---|---|---|---|

@@ -14,7 +14,7 @@ from omphjc.jobs.task import (
     TaskOutcome,
     TaskRecord,
     TaskResult,
-    read_cards,
+    record_cards,
 )
 from omphjc.processes.catalogue import SettingValue
 from omphjc.tools.pythia.driver import ShowerWorkspace, shower_events
@@ -128,7 +128,7 @@ def shower(
         return TaskOutcome(
             TaskResult(
                 outputs={EVENTS_OUTPUT: DelphesROOTFile.record_file(run.output_path)},
-                cards=read_cards(run.card_paths),
+                cards=record_cards(run.card_paths, ShowerWorkspace.card_classes),
                 metadata=metadata,
             ),
             usage=run.usage.as_record(),
