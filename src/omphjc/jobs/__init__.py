@@ -35,8 +35,8 @@ How a stage is recorded:
    the run. The result holds the task's outputs and cards by name, and its
    metadata. An output is a :class:`~omphjc.data_files.FileRecord`, or an
    :class:`~omphjc.events.formats.EventFileRecord` for an event file. A card
-   is a :class:`~omphjc.data_files.FileRecord` made by its card class
-   (:func:`record_cards`).
+   is a :class:`~omphjc.data_files.FileRecord` that the driver's workspace
+   made (:meth:`omphjc.workspace.Workspace.card_records`).
 3. :meth:`Job.run_task` records the run as a :class:`TaskRun`, with its
    status, start and finish times, log and usage. It writes the run, the
    parameters and the result to ``task.json`` as a :class:`TaskRecord`, with
@@ -77,7 +77,6 @@ from omphjc.jobs.task import (
     TaskResult,
     TaskRun,
     TaskStatus,
-    record_cards,
 )
 
 __all__ = [
@@ -108,7 +107,6 @@ __all__ = [
     "exception_on_termination",
     "generate",
     "job_seed",
-    "record_cards",
     "shower",
     "simulate",
     "task_parameters",

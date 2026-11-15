@@ -165,14 +165,14 @@ files into account. A task whose latest run is done has
 
 import secrets
 import socket
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar
 
-from omphjc.data_files import Card, FileRecord
+from omphjc.data_files import FileRecord
 from omphjc.events.formats import EventFileRecord, EventFormat
 from omphjc.jobs.record_file import RecordFile
 from omphjc.stamps import COMPACT_UTC_FORMAT
@@ -194,23 +194,6 @@ INPUT_FINGERPRINT_PARAMETER = "input_fingerprint"
 """The parameter that holds the fingerprint of the events a task reads."""
 
 
-def record_cards(
-    card_paths: Mapping[str, Path], card_classes: Iterable[type[Card]]
-) -> dict[str, FileRecord]:
-    """Return the record of each card of `card_classes` in `card_paths`.
-
-    A card is found in `card_paths` under its :attr:`~omphjc.data_files.Card.card_name`
-    and recorded by its class (:meth:`~omphjc.data_files.DataFile.record_file`),
-    so its fingerprint is that of its parsed content. A driver's run record
-    gives the paths (:attr:`omphjc.workspace.Run.card_paths`).
-    """
-    return {
-        card_class.card_name: card_class.record_file(card_paths[card_class.card_name])
-        for card_class in card_classes
-        if card_class.card_name in card_paths
-    }
-
-
 @dataclass(frozen=True)
 class TaskResult:
     """What a task made.
@@ -224,7 +207,7 @@ class TaskResult:
         :data:`EVENTS_OUTPUT`. A task that makes no events has no such output.
     cards : dict[str, FileRecord]
         The record of each card the task's program read, under the name of
-        the card (:func:`record_cards`).
+        the card (:meth:`omphjc.workspace.Workspace.card_records`).
     metadata : dict
         What is known about the task and the sample it made, as JSON values.
         The stage chooses the keys.

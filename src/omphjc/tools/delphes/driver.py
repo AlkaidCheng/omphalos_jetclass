@@ -58,8 +58,9 @@ class SimulationRun(ProgramRun):
     ----------
     output_path : Path
         The Delphes ROOT file.
-    card_paths : Mapping[str, Path]
-        One card, ``detector_card``: the detector card that the run used.
+    cards : Mapping[str, FileRecord]
+        The record of one card, ``detector_card``: the detector card that the
+        run used.
     """
 
 
@@ -194,7 +195,7 @@ def simulate_events(
         )
     return SimulationRun(
         output_path=workspace.output_path,
-        card_paths=workspace.card_paths,
+        cards=workspace.card_records(),
         log_path=workspace.log_path,
         usage=workspace.usage,
         set_aside=set_aside,

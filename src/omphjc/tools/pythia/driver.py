@@ -115,10 +115,10 @@ class ShowerRun(ProgramRun):
     output_path : Path
         The showered events. This is a Delphes ROOT file that holds the
         generator record of every event in its ``Particle`` branch.
-    card_paths : Mapping[str, Path]
-        Two cards, as the run used them: ``command_file``, the Pythia command
-        file, and ``particles_card``, the Delphes card that writes the
-        generator record.
+    cards : Mapping[str, FileRecord]
+        The records of two cards, as the run used them: ``command_file``, the
+        Pythia command file, and ``particles_card``, the Delphes card that
+        writes the generator record.
     statistics : ShowerStatistics
         Pythia's version and event counts, read from the log.
     """
@@ -272,7 +272,7 @@ def shower_events(
         raise workspace.make_error(f"DelphesPythia8 did not finish: {error}") from None
     return ShowerRun(
         output_path=workspace.output_path,
-        card_paths=workspace.card_paths,
+        cards=workspace.card_records(),
         log_path=workspace.log_path,
         statistics=statistics,
         usage=workspace.usage,

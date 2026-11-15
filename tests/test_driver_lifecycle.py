@@ -151,16 +151,17 @@ def test_a_run_names_the_cards_its_workspace_declares(
     }
     assert len(card_classes) == len(driver.workspace_type.card_classes)
     run = driver.run(workdir=workdir, seed=1)
-    assert run.card_paths and set(run.card_paths) <= set(card_classes)
-    for card_name, card_path in run.card_paths.items():
+    assert run.cards and set(run.cards) <= set(card_classes)
+    for card_name, card in run.cards.items():
         card_class = card_classes[card_name]
-        assert card_path.name == card_class.file_name
-        card = card_class.read(card_path)
-        assert card.fingerprint().startswith(f"{card_class.format_name}-v")
+        assert card.path.name == card_class.file_name
+        assert card == card_class.record_file(card.path)
+        assert card.fingerprint is not None
+        assert card.fingerprint.startswith(f"{card_class.format_name}-v")
     stamp = read_stamp(workdir)
     assert stamp is not None
-    for card_path in run.card_paths.values():
-        assert card_path.relative_to(workdir.resolve()).parts[0] in stamp.artifacts
+    for card in run.cards.values():
+        assert card.path.relative_to(workdir.resolve()).parts[0] in stamp.artifacts
 
 
 CARD_CLASSES = (
