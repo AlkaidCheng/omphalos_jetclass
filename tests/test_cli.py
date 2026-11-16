@@ -60,6 +60,18 @@ def test_a_custom_catalogue_is_used_by_every_command(tmp_path: Path) -> None:
     assert "HToBB: run_card.misset: expected 450.0, got 400.0" in check.output
 
 
+def test_check_cards_reports_a_definition_that_madgraph_refuses(tmp_path: Path) -> None:
+    custom = export_config(tmp_path / "config") / "jetclass.yaml"
+    text = custom.read_text(encoding="utf-8")
+    assert '"wpm = w+ w-"' in text
+    custom.write_text(text.replace('"wpm = w+ w-"', '"wpm ="'), encoding="utf-8")
+
+    check = CliRunner().invoke(cli, ["--catalogue", str(custom), "check-cards"])
+    assert check.exit_code == 1
+    assert isinstance(check.exception, SystemExit), check.exception
+    assert 'Error: MadGraph cannot read "define wpm ="' in check.output
+
+
 def test_the_catalogue_can_come_from_the_environment(tmp_path: Path) -> None:
     custom = tmp_path / "one.yaml"
     custom.write_text(

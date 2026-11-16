@@ -199,7 +199,11 @@ omphjc check-cards            # differences from the official cards, if any
 `check-cards` compares, value by value, every process that names
 `reference_cards` with those cards: it reports each physics setting that
 differs from the official cards and each tracked official setting the entry
-leaves out, and it lists the processes without reference cards. The default
+leaves out, and it lists the processes without reference cards. The
+multiparticle definitions are compared by the members each multiparticle ends
+up with, read as MadGraph reads `define`: the official `define p = p b b~`
+adds to the `p` that MadGraph wrote at the top of the same card, so it equals
+a definition that names the same particles in the same order. The default
 catalogue reports no differences.
 
 ### Seeds

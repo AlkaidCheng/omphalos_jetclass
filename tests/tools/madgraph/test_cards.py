@@ -108,10 +108,30 @@ def test_another_process_definition_is_reported(
         **{**original.__dict__, "processes": ("p p > ve ve~ h, h > c c~",)}
     )
     assert [str(d) for d in compare_process(altered)] == [
-        "proc_card.commands: expected import model heft | define p = p b b~ | "
-        "define j = j b b~ | generate p p > ve ve~ h, h > b b~, "
-        "got import model heft | define p = p b b~ | "
-        "define j = j b b~ | generate p p > ve ve~ h, h > c c~"
+        "proc_card.commands: expected import model heft | "
+        "generate p p > ve ve~ h, h > b b~, got import model heft | "
+        "generate p p > ve ve~ h, h > c c~"
+    ]
+
+
+def test_a_definition_is_compared_by_its_members(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    original = specs["HToWW2Q1L"]
+    assert original.definitions[2:] == ("lep = l+ l-", "nu = vl vl~")
+    respelled = ("p = p b b~", "j = p", "lep = e+ mu+ l-", "nu = vl vl~")
+    assert compare_process(replace(original, definitions=respelled)) == []
+
+
+def test_a_proton_without_a_flavour_is_reported(
+    specs: Mapping[str, ProcessSpec],
+) -> None:
+    original = specs["HToCC"]
+    without_charm = "p = g u d s u~ d~ s~ b b~"
+    altered = replace(original, definitions=(without_charm, *original.definitions[1:]))
+    assert [str(d) for d in compare_process(altered)] == [
+        "proc_card.define p: expected g u c d s u~ c~ d~ s~ b b~, "
+        "got g u d s u~ d~ s~ b b~"
     ]
 
 

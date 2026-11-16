@@ -101,7 +101,10 @@ def check_cards(specs: Catalogue) -> None:
     unchecked = [spec.name for spec in specs.values() if spec.reference_cards is None]
     if unchecked:
         click.echo(f"Without reference cards, not checked: {', '.join(unchecked)}")
-    differences = compare_all(checked)
+    try:
+        differences = compare_all(checked)
+    except ValueError as error:
+        raise click.ClickException(str(error)) from error
     if not differences:
         click.echo(f"{len(checked)} processes match their reference cards.")
         return
