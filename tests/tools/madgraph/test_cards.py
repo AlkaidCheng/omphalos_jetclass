@@ -82,8 +82,8 @@ def test_proc_card_commands_for_a_matched_process(
     commands = proc_card_commands(specs["ZJetsToNuNu"], output_dir=Path("out"))
     assert commands == [
         "import model sm",
-        "define p = p b b~",
-        "define j = j b b~",
+        "define p = g u c d s u~ c~ d~ s~ b b~",
+        "define j = g u c d s u~ c~ d~ s~ b b~",
         "generate p p > ve ve~ j @0",
         "add process p p > ve ve~ j j @1",
         "output out",

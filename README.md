@@ -182,11 +182,16 @@ such as `models/zprime/restrict_m2tev.dat` and use `model: zprime-m2tev`.
 `heft_c_mass_jetclass` because the HToCC charm-mass model exists only inside
 the official gridpack.
 
-MadGraph includes the b quark in its own `p` and `j` only when the model's b
-is massless. Every model in the default catalogue keeps it massive (4.7 GeV),
-so `common.definitions` adds b and b̄ to both, as the official production
-does; without it, ZToQQ would contain no Z → bb̄ decays. An entry can redefine
-either name in its own `definitions`, which are written after the common ones.
+MadGraph adjusts its own `p` and `j` to the quarks that are massless in the
+model: MadGraph 3.1.1, which produced JetClass, did so for the b quark alone,
+and 3.8.1 does so for the charm as well. Every model in the default catalogue
+has a massive b (4.7 GeV), and `heft_c_mass_jetclass` a massive charm.
+`common.definitions` therefore names the members of both: the gluon and the
+five flavours u, d, s, c and b, which is what the official cards'
+`define p = p b b~` gave on 3.1.1. Left to MadGraph 3.8.1, ZToQQ would contain
+no Z → bb̄ decays and HToCC no charm-initiated production. An entry can
+redefine either name in its own `definitions`, which are written after the
+common ones.
 
 ## Processes
 

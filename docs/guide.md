@@ -42,8 +42,8 @@ each process; `omphjc processes show HToBB` prints them:
 ```
 process script:
   import model …/config/models/heft
-  define p = p b b~
-  define j = j b b~
+  define p = g u c d s u~ c~ d~ s~ b b~
+  define j = g u c d s u~ c~ d~ s~ b b~
   generate p p > ve ve~ h, h > b b~
   output HToBB
 
@@ -76,8 +76,8 @@ afterwards), and the `set` lines fix run-card values before generation starts.
 |---|---|---|
 | `a b > c d` | Initial state, then final state | `p p > t t~` |
 | `~` | Antiparticle | `t~`, `b~`, `ve~` |
-| `p`, `j`, `l+`, `l-`, `vl`, `vl~` | Multiparticle labels. MadGraph starts with `p = j = g u c d s u~ c~ d~ s~`, `l+ = e+ mu+`, `l- = e- mu-`, `vl = ve vm vt` | `p p > ve ve~ j` |
-| `define x = …` | A new label, or an extended one | `define p = p b b~` adds b quarks to the proton (five-flavour scheme); `define lep = l+ l-` |
+| `p`, `j`, `l+`, `l-`, `vl`, `vl~` | Multiparticle labels. MadGraph starts with `p = j = g u c d s u~ c~ d~ s~`, `l+ = e+ mu+`, `l- = e- mu-`, `vl = ve vm vt`, and on loading a model it adjusts `p` and `j` to the quarks that are massless there | `p p > ve ve~ j` |
+| `define x = …` | A new label, or a label with new members | `define p = g u c d s u~ c~ d~ s~ b b~` names the gluon and five quark flavours of the proton (five-flavour scheme), whatever MadGraph's own `p` holds; `define p = p b b~` would add b quarks to that `p`; `define lep = l+ l-` |
 | `, x > …` | Decay chain: produce `x` on its mass shell, then decay it. `bwcutoff` in the run card sets how far off-shell it may be | `p p > ve ve~ h, h > b b~` |
 | `> x y >` | Required intermediate particles: the diagrams must contain `x` and `y` as propagators, which may be off-shell | `h > w+ w- > j j j j` (H → WW* → four quarks) |
 | `@N` | A tag on a process line. With MLM matching, the line with the most jets is the highest multiplicity (§3.3) | `p p > ve ve~ j @0` |

@@ -122,8 +122,8 @@ def test_the_card_of_a_process_holds_its_definition_without_the_output(
 ) -> None:
     assert ProcCard.from_process(specs["HToBB"]).commands == (
         "import model heft",
-        "define p = p b b~",
-        "define j = j b b~",
+        f"define p = {FIVE_FLAVOURS}",
+        f"define j = {FIVE_FLAVOURS}",
         "generate p p > ve ve~ h, h > b b~",
     )
 
