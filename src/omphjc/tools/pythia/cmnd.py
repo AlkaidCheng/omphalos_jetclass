@@ -281,7 +281,7 @@ def max_matched_jets(spec: ProcessSpec) -> int:
 
     A jet is a ``j`` in the final state of a process line. ``j`` is MadGraph's
     multiparticle label for a light parton: a gluon or a light quark, and
-    also a b quark where the catalogue's ``definitions`` add it.
+    also a b quark where the catalogue's ``definitions`` name it.
 
     Only the hard process is counted, which is the part of the line before
     any decay chain. For example, ``p p > ve ve~ j j @1`` asks for 2 jets.

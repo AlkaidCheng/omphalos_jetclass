@@ -63,8 +63,9 @@ def test_seed_offsets_follow_the_official_driver(
 def test_common_settings_are_merged_into_every_process(
     specs: Mapping[str, ProcessSpec],
 ) -> None:
+    five_flavours = "g u c d s u~ c~ d~ s~ b b~"
     for spec in specs.values():
-        assert spec.definitions[:2] == ("p = p b b~", "j = j b b~")
+        assert spec.definitions[:2] == (f"p = {five_flavours}", f"j = {five_flavours}")
         assert spec.run_card["ebeam1"] == 6500.0
         assert spec.run_card["pdlabel"] == "nn23lo1"
         assert spec.run_card["maxjetflavor"] == 5

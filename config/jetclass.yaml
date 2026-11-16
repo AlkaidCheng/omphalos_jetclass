@@ -20,11 +20,14 @@ common:
   delphes_card: delphes/delphes_card_JetClass.tcl
 
   # MadGraph multiparticle definitions written for every process, before the
-  # entry's own, from the official proc cards
-  # (references/jetclass/<process>/proc_card_mg5.dat).
+  # entry's own. The official proc cards
+  # (references/jetclass/<process>/proc_card_mg5.dat) read "p = p b b~" on top
+  # of the default "p = g u c d s u~ c~ d~ s~" of MadGraph 3.1.1. The flavours
+  # are named here because that default depends on the MadGraph version:
+  # 3.8.1 takes a massive charm out of it (HToCC).
   definitions:
-    - "p = p b b~"   # five-flavour proton
-    - "j = j b b~"   # five-flavour jet
+    - "p = g u c d s u~ c~ d~ s~ b b~"   # five-flavour proton
+    - "j = g u c d s u~ c~ d~ s~ b b~"   # five-flavour jet
 
   # Run-card values shared by every process, from the official run cards
   # (references/jetclass/<process>/run_card.dat).

@@ -7,6 +7,11 @@ processes, and name the directory that MadGraph writes the process to.
 MadGraph writes a command longer than 70 characters on several lines. Every
 line of such a command except the last ends in a backslash, and MadGraph joins
 the lines into one command when it reads the card.
+
+A ``define`` command names the members of a multiparticle, and a member may be
+a multiparticle that an earlier command defined.
+:meth:`ProcCard.multiparticles` returns the members that every multiparticle
+has after the last command.
 """
 
 import re
@@ -18,12 +23,16 @@ from omphjc.comparison import Difference
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.processes.input_card import InputCard
 from omphjc.tools.madgraph.cards import proc_card_commands
+from omphjc.tools.madgraph.multiparticles import Multiparticles
 
 # The commands that take a path, as
 # omphjc.tools.madgraph.cards.proc_card_commands writes them.
 _PATH_COMMANDS = ("import model", "output")
 
-# Commands MadGraph writes at the top of every process card before user input.
+# The commands that MadGraph writes at the top of every process card, before
+# those of the user: the Standard Model, and the multiparticles of
+# input/multiparticles_default.txt,
+# https://github.com/mg5amcnlo/mg5amcnlo/blob/v3.8.1/input/multiparticles_default.txt#L16-L21.
 _PREAMBLE_COMMANDS: tuple[str, ...] = (
     "import model sm",
     "define p = g u c d s u~ c~ d~ s~",
@@ -97,26 +106,22 @@ class ProcCard(InputCard):
     def reference(cls, reference_dir: Path) -> "ProcCard | None":
         """Return the commands of the official card that define the process.
 
-        The ``set`` and ``output`` commands are left out, and so are the
-        commands that MadGraph writes at the top of every process card. A
-        card that loads no model after those commands uses the Standard
-        Model, so it gets the command ``import model sm``. Each model has the
-        name the catalogue gives it. The result is ``None`` when
-        `reference_dir` holds no process card.
+        The ``set`` and ``output`` commands are left out, and each model has
+        the name the catalogue gives it. The commands that MadGraph writes at
+        the top of every process card stay, since the definitions after them
+        add to the multiparticles that they define. The result is ``None``
+        when `reference_dir` holds no process card.
         """
         card = super().reference(reference_dir)
         if card is None:
             return None
-        commands = [
-            command
-            for command in card.commands
-            if not command.startswith(("set ", "output"))
-        ]
-        if tuple(commands[: len(_PREAMBLE_COMMANDS)]) == _PREAMBLE_COMMANDS:
-            commands = commands[len(_PREAMBLE_COMMANDS) :]
-        if not commands[0].startswith("import model"):
-            commands.insert(0, "import model sm")
-        return cls(commands=tuple(_canonical_import(command) for command in commands))
+        return cls(
+            commands=tuple(
+                _canonical_import(command)
+                for command in card.commands
+                if not command.startswith(("set ", "output"))
+            )
+        )
 
     def content_record(self) -> list[str]:
         """Return the commands, with every path cut down to its last part.
@@ -134,6 +139,27 @@ class ProcCard(InputCard):
             record.append(line)
         return record
 
+    def multiparticles(self) -> Multiparticles:
+        """Return the multiparticles that the ``define`` commands of the card leave.
+
+        The commands are read in their order, as MadGraph reads them
+        (:meth:`Multiparticles.from_definitions`), so a multiparticle that
+        the card defines twice has the members of its last definition. The
+        other commands of the card are not read: a change that MadGraph makes
+        to a multiparticle when it loads a model depends on the model and on
+        the version of MadGraph.
+
+        Raises
+        ------
+        ValueError
+            If MadGraph refuses a definition whatever the model.
+        """
+        return Multiparticles.from_definitions(
+            command.removeprefix("define")
+            for command in self.commands
+            if self._is_definition(command)
+        )
+
     def differences(self, reference: "ProcCard") -> list[Difference]:
         """Return one difference when the content records are not equal.
 
@@ -144,6 +170,60 @@ class ProcCard(InputCard):
         if record == expected:
             return []
         return [Difference("commands", " | ".join(expected), " | ".join(record))]
+
+    def checked_differences(self, reference: "ProcCard") -> list[Difference]:
+        """Return the differences from `reference` that a check reports.
+
+        The ``define`` commands are compared by the multiparticles they leave
+        (:meth:`multiparticles`), one difference for each multiparticle with
+        other members. A multiparticle counts with the members it has after
+        the last command, wherever its definitions stand among the other
+        commands. The other commands are compared in their order
+        (:meth:`differences`).
+
+        An official card starts with the commands that MadGraph writes at the
+        top of every process card, and this card, which the catalogue states,
+        has none of them. Its definitions are therefore read after those
+        commands. ``define p = p b b~`` then adds to the same ``p`` in both
+        cards, and a multiparticle that neither card defines, such as ``l+``,
+        has the same members in both. The other commands are compared from
+        the first one after them.
+
+        A reference that loads no model after those commands uses the
+        Standard Model, so it gets the command ``import model sm``. A
+        reference without those commands is compared from its first command.
+
+        Raises
+        ------
+        ValueError
+            If a card holds a definition that MadGraph refuses whatever the
+            model.
+        """
+        count = len(_PREAMBLE_COMMANDS)
+        preamble, stated = reference.commands[:count], reference.commands[count:]
+        if preamble != _PREAMBLE_COMMANDS:
+            preamble, stated = (), reference.commands
+        others = ProcCard(commands=stated)._without_definitions().commands
+        if not others or not others[0].startswith("import model"):
+            others = ("import model sm", *others)
+        after_preamble = ProcCard(commands=(*preamble, *self.commands))
+        return [
+            *self._without_definitions().differences(ProcCard(commands=others)),
+            *after_preamble.multiparticles().differences(reference.multiparticles()),
+        ]
+
+    def _without_definitions(self) -> "ProcCard":
+        """Return the card without its ``define`` commands."""
+        return ProcCard(
+            commands=tuple(
+                command for command in self.commands if not self._is_definition(command)
+            )
+        )
+
+    @staticmethod
+    def _is_definition(command: str) -> bool:
+        """Return whether `command` is a ``define`` command."""
+        return command.split(maxsplit=1)[:1] == ["define"]
 
 
 def _canonical_import(line: str) -> str:

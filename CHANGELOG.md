@@ -237,3 +237,8 @@
 - `read_catalogue` refuses a top-level key other than `common` and
   `processes`, and a `matching` that is not a boolean, so a quoted `"no"` no
   longer turns matching on. (#63)
+- The catalogue's `common.definitions` name every flavour of `p` and `j`, so
+  that HToCC keeps its charm-initiated production on MadGraph 3.8.1, and
+  `omphjc check-cards` compares the multiparticles that the `define` commands
+  leave, which `omphjc.tools.madgraph.multiparticles.Multiparticles` reads as
+  MadGraph does. (#86)

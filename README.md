@@ -182,11 +182,16 @@ such as `models/zprime/restrict_m2tev.dat` and use `model: zprime-m2tev`.
 `heft_c_mass_jetclass` because the HToCC charm-mass model exists only inside
 the official gridpack.
 
-MadGraph includes the b quark in its own `p` and `j` only when the model's b
-is massless. Every model in the default catalogue keeps it massive (4.7 GeV),
-so `common.definitions` adds b and b̄ to both, as the official production
-does; without it, ZToQQ would contain no Z → bb̄ decays. An entry can redefine
-either name in its own `definitions`, which are written after the common ones.
+MadGraph adjusts its own `p` and `j` to the quarks that are massless in the
+model: MadGraph 3.1.1, which produced JetClass, did so for the b quark alone,
+and 3.8.1 does so for the charm as well. Every model in the default catalogue
+has a massive b (4.7 GeV), and `heft_c_mass_jetclass` a massive charm.
+`common.definitions` therefore names the members of both: the gluon and the
+five flavours u, d, s, c and b, which is what the official cards'
+`define p = p b b~` gave on 3.1.1. Left to MadGraph 3.8.1, ZToQQ would contain
+no Z → bb̄ decays and HToCC no charm-initiated production. An entry can
+redefine either name in its own `definitions`, which are written after the
+common ones.
 
 ## Processes
 
@@ -199,7 +204,11 @@ omphjc check-cards            # differences from the official cards, if any
 `check-cards` compares, value by value, every process that names
 `reference_cards` with those cards: it reports each physics setting that
 differs from the official cards and each tracked official setting the entry
-leaves out, and it lists the processes without reference cards. The default
+leaves out, and it lists the processes without reference cards. The
+multiparticle definitions are compared by the members each multiparticle ends
+up with, read as MadGraph reads `define`: the official `define p = p b b~`
+adds to the `p` that MadGraph wrote at the top of the same card, so it equals
+a definition that names the same particles in the same order. The default
 catalogue reports no differences.
 
 ### Seeds

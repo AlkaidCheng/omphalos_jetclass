@@ -22,8 +22,8 @@ from omphjc.validation.cards import compare_all, compare_process
 CATALOGUE = """\
 common:
   definitions:
-    - "p = p b b~"
-    - "j = j b b~"
+    - "p = g u c d s u~ c~ d~ s~ b b~"
+    - "j = g u c d s u~ c~ d~ s~ b b~"
   run_card:
     lpp1: 1
     lpp2: 1
@@ -117,8 +117,8 @@ def test_new_process_needs_only_a_catalogue_entry(
     )
     assert spec.uses_madspin and spec.reference_cards is None
     assert proc_card_commands(spec, output_dir=Path("out"))[1:5] == [
-        "define p = p b b~",
-        "define j = j b b~",
+        "define p = g u c d s u~ c~ d~ s~ b b~",
+        "define j = g u c d s u~ c~ d~ s~ b b~",
         "define tops = t t~",
         "generate p p > zp > tops tops @0",
     ]
