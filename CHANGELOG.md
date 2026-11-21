@@ -208,6 +208,8 @@
   `omphjc.jobs.record_file.RecordFile`. (#84)
 - `omphjc.events.EventSource` names an event file and its format for the
   readers and simulators, in place of `EventFile`. (#85)
+- `omphjc.programs.ProgramSession` runs the programs of one run under one
+  log and one time limit. (#87)
 
 ### Fixed
 

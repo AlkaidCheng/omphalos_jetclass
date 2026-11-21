@@ -9,6 +9,7 @@ import pytest
 from omphjc import programs
 from omphjc.programs import (
     ProgramError,
+    ProgramSession,
     ProgramUsage,
     RaisedOpenFileLimit,
     available_cores,
@@ -232,3 +233,63 @@ def _appears_within(path: Path, *, seconds: float) -> bool:
             return False
         time.sleep(0.05)
     return True
+
+
+def test_a_session_runs_programs_only_while_opened(tmp_path: Path) -> None:
+    session = ProgramSession(tmp_path, tmp_path / "run.log")
+    with pytest.raises(RuntimeError, match="only inside an opened session"):
+        session.run(python("pass"), failure_message="python failed")
+    with session.opened():
+        session.run(python("pass"), failure_message="python failed")
+    with pytest.raises(RuntimeError, match="only inside an opened session"):
+        session.run(python("pass"), failure_message="python failed")
+
+
+@pytest.mark.parametrize("timeout", [0, -1.0])
+def test_a_session_refuses_a_time_limit_that_is_not_positive(
+    tmp_path: Path, timeout: float
+) -> None:
+    session = ProgramSession(tmp_path, tmp_path / "run.log")
+    with (
+        pytest.raises(ValueError, match="timeout must be positive"),
+        session.opened(timeout),
+    ):
+        raise AssertionError("the block must not run")
+
+
+def test_the_programs_of_a_session_append_to_one_log_and_add_up_their_usage(
+    tmp_path: Path,
+) -> None:
+    session = ProgramSession(tmp_path, tmp_path / "run.log")
+    with session.opened():
+        first = session.run(python("print('one')"), failure_message="python failed")
+        second = session.run(python("print('two')"), failure_message="python failed")
+    log = session.log_path.read_text().splitlines()
+    assert "one" in log and "two" in log
+    assert session.usage.wall_seconds == pytest.approx(
+        first.wall_seconds + second.wall_seconds
+    )
+
+
+def test_a_failing_program_of_a_session_raises_with_the_failure_message(
+    tmp_path: Path,
+) -> None:
+    session = ProgramSession(tmp_path, tmp_path / "run.log")
+    code = "import sys; print('tool error'); sys.exit(2)"
+    with pytest.raises(ProgramError, match="python failed: "), session.opened():
+        session.run(python(code), failure_message="python failed")
+    error = session.make_error("python wrote nothing")
+    assert str(error).startswith("python wrote nothing\n")
+    assert "tool error" in str(error)
+
+
+def test_the_programs_of_a_session_share_its_time_limit(tmp_path: Path) -> None:
+    session = ProgramSession(tmp_path, tmp_path / "run.log")
+    started = time.monotonic()
+    with (
+        pytest.raises(ProgramError, match="second: .*stopped at the time limit"),
+        session.opened(1.0),
+    ):
+        session.run(python("import time; time.sleep(0.6)"), failure_message="first")
+        session.run(python("import time; time.sleep(60)"), failure_message="second")
+    assert time.monotonic() - started < 30
