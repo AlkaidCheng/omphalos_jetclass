@@ -281,7 +281,7 @@ def shower_events(
 
 
 class ShowerWorkspace(ProgramWorkspace):
-    """The working directory of one process's shower runs, and the steps of a run.
+    """Runs the Pythia 8 parton shower for one process.
 
     :func:`shower_events` drives a workspace from start to finish. A caller
     that needs the steps one at a time constructs a workspace and opens a
@@ -299,16 +299,16 @@ class ShowerWorkspace(ProgramWorkspace):
         Path of Delphes's ``DelphesPythia8``. By default the program is
         looked up on PATH.
     timeout : float or None, optional
-        Seconds the run may take, counted from the creation of the workspace.
-        ``None`` sets no limit.
+        The time limit of the run's programs, in seconds from the start of
+        :meth:`sealed_run`. ``None`` sets no limit.
     log_dir : Path or None, optional
-        See the `log_dir` parameter of
-        :class:`~omphjc.workspace.ProgramWorkspace`.
+        See the `log_dir` parameter of :class:`~omphjc.workspace.Workspace`.
 
     Raises
     ------
     ValueError
-        If `timeout` is not positive or `workdir` is a filesystem root.
+        If `workdir` is not a valid working directory
+        (:class:`~omphjc.workspace.Workspace`).
     FileNotFoundError
         If `delphes_pythia8_path` is not a file, or none is given and PATH has no
         ``DelphesPythia8``.
@@ -316,13 +316,12 @@ class ShowerWorkspace(ProgramWorkspace):
 
     purpose = "pythia-shower"
     card_classes = (PythiaCmnd, ParticlesCard)
-    # Delphes's program that combines Pythia 8 and the detector simulation.
+
     program = "DelphesPythia8"
     description = f"Delphes's {program}"
+
     input_file_name: ClassVar[str] = "events.lhe"
-    """The file of the input events in the directory, uncompressed."""
     output_file_name: ClassVar[str] = "particles.root"
-    """The file of the showered events in the directory."""
 
     def __init__(
         self,
@@ -380,7 +379,7 @@ class ShowerWorkspace(ProgramWorkspace):
         ------
         ProgramError
             If ``DelphesPythia8`` exits with a failing status or is still
-            running at the deadline.
+            running at the time limit.
         """
         self.run(
             [

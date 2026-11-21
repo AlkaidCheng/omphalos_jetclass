@@ -84,7 +84,6 @@ A run touches nothing else in the directory.
 
 import dataclasses
 import shutil
-from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -286,7 +285,7 @@ def generate_events(
 
 
 class MadGraphWorkspace(ProgramWorkspace):
-    """The working directory of one process's runs, and the steps a run takes in it.
+    """Runs the MadGraph event generation for one process.
 
     :func:`generate_events` drives a workspace from start to finish. A caller
     that needs the steps one at a time constructs a workspace and calls the
@@ -309,27 +308,26 @@ class MadGraphWorkspace(ProgramWorkspace):
         Path of MadGraph's ``bin/mg5_aMC``. By default the program is looked
         up on PATH.
     timeout : float or None, optional
-        Seconds the run may take, counted from the creation of the workspace.
-        ``None`` sets no limit.
+        The time limit of the run's programs, in seconds from the start of
+        :meth:`sealed_run`. ``None`` sets no limit.
     log_dir : Path or None, optional
-        See the `log_dir` parameter of
-        :class:`~omphjc.workspace.ProgramWorkspace`.
+        See the `log_dir` parameter of :class:`~omphjc.workspace.Workspace`.
 
     Attributes
     ----------
     spec : ProcessSpec
     workdir : Path
-        The working directory, normalized.
+        The working directory, as an absolute path.
     program_path : Path
         The ``mg5_aMC`` program file the run uses.
-    deadline : float or None
-        ``time.monotonic`` value at which a running script is stopped.
 
     Raises
     ------
     ValueError
-        If `timeout` is not positive, `workdir` is a filesystem root or its
-        path contains whitespace.
+        If `workdir` is not a valid working directory
+        (:class:`~omphjc.workspace.Workspace`), if its path contains
+        whitespace, or if the copy of the model would overlap the catalogue's
+        model folder.
     FileNotFoundError
         If `mg5_path` is not a file, or if `mg5_path` is not given and PATH
         has no ``mg5_aMC``.
@@ -337,15 +335,13 @@ class MadGraphWorkspace(ProgramWorkspace):
 
     purpose = "madgraph-event-generation"
     card_classes = (ProcCard, RunCard, ParamCard, MadSpinCard)
-    # MadGraph's command-line program, bin/mg5_aMC of an installation.
+
     program = "mg5_aMC"
     description = f"MadGraph's bin/{program}"
+
     process_script_name: ClassVar[str] = "process.mg5"
-    """The script that makes the process directory."""
     launch_script_name: ClassVar[str] = "launch.mg5"
-    """The script that launches the run."""
     models_dir_name: ClassVar[str] = "models"
-    """The folder of the model copies in the directory."""
 
     def __init__(
         self,
@@ -364,10 +360,29 @@ class MadGraphWorkspace(ProgramWorkspace):
             raise ValueError(
                 f"MadGraph cannot run in a path with whitespace: {self.workdir}"
             )
+        copy_dir = self.model_copy_dir
+        if spec.model_dir is not None and copy_dir is not None:
+            source_dir, target_dir = spec.model_dir.resolve(), copy_dir.resolve()
+            if target_dir.is_relative_to(source_dir) or source_dir.is_relative_to(
+                target_dir
+            ):
+                raise ValueError(
+                    f"The model copy {copy_dir} would overlap the model folder "
+                    f"{spec.model_dir}"
+                )
+
+    @property
+    def process_dir_name(self) -> str:
+        """The name of the process directory, which is the name of the process."""
+        return self.spec.name
 
     @property
     def process_dir(self) -> Path:
-        return inside(self.workdir, self.spec.name)
+        """The directory that MadGraph writes the process into.
+
+        The ``output`` command of the process script names it.
+        """
+        return inside(self.workdir, self.process_dir_name)
 
     @property
     def model_copy_dir(self) -> Path | None:
@@ -382,7 +397,7 @@ class MadGraphWorkspace(ProgramWorkspace):
     @property
     def artifacts(self) -> list[str]:
         names = [
-            self.spec.name,
+            self.process_dir_name,
             self.process_script_name,
             self.launch_script_name,
             *super().artifacts,
@@ -405,44 +420,17 @@ class MadGraphWorkspace(ProgramWorkspace):
         run = _DECAYED_RUN if self.spec.uses_madspin else _FIRST_RUN
         return self.process_dir / "Events" / run / _EVENT_FILE
 
-    def clear_earlier_run(self, *, unconfirmed: Iterable[str] = ()) -> Path | None:
-        """Clear what an earlier run left in the directory, and nothing else.
-
-        A process directory without MadGraph's process card is not one that a
-        run leaves. It is therefore moved aside, whether or not it was sealed.
-        Everything named in `unconfirmed` is moved aside as well.
-
-        Returns
-        -------
-        Path or None
-            The folder that holds what was moved aside, or ``None`` when
-            nothing was moved aside.
-
-        Raises
-        ------
-        ValueError
-            If the model copy would overlap the catalogue's model folder.
-        """
-        copy_dir = self.model_copy_dir
-        if self.spec.model_dir is not None and copy_dir is not None:
-            source_dir, target_dir = (
-                self.spec.model_dir.resolve(),
-                copy_dir.resolve(),
-            )
-            if target_dir.is_relative_to(source_dir) or source_dir.is_relative_to(
-                target_dir
-            ):
-                raise ValueError(
-                    f"The model copy {copy_dir} would overlap the model folder "
-                    f"{self.spec.model_dir}"
-                )
-        unconfirmed = list(unconfirmed)
-        # MadGraph writes the process card on output. A process directory
-        # without it is not one that a run leaves.
+    @property
+    def unconfirmed_artifacts(self) -> list[str]:
+        """The artifacts that a run moves aside instead of deleting."""
+        # A process directory without the process card is moved aside.
+        # MadGraph writes that card when it creates the directory, so a
+        # directory without it comes from an output command that did not
+        # finish.
         proc_card_path = self.cards_dir / ProcCard.file_name
         if self.process_dir.is_dir() and not proc_card_path.is_file():
-            unconfirmed.append(self.spec.name)
-        return super().clear_earlier_run(unconfirmed=unconfirmed)
+            return [self.process_dir_name]
+        return []
 
     def copy_model(self) -> ProcessSpec:
         """Copy the model into the directory.
@@ -468,7 +456,7 @@ class MadGraphWorkspace(ProgramWorkspace):
         ------
         ProgramError
             If MadGraph exits with a failing status or is still running at the
-            deadline.
+            time limit.
         """
         script_path = self.workdir / name
         script_path.write_text("\n".join(commands) + "\n", encoding="utf-8")

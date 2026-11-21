@@ -212,6 +212,9 @@
   log and one time limit. (#87)
 - The log of every run is `run.log`, in place of `madgraph.log`,
   `shower.log` and `simulate.log`. (#88)
+- `omphjc.workspace.Workspace` is the directory of one run: its `sealed_run`
+  takes the run's purpose and artifacts and starts its time limit, and its
+  programs are `Workspace.programs`. (#89)
 
 ### Fixed
 

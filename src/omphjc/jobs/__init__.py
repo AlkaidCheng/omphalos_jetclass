@@ -36,7 +36,7 @@ How a stage is recorded:
    task's outputs and cards by name, and its metadata. An output is a :class:`~omphjc.data_files.FileRecord`, or an
    :class:`~omphjc.events.formats.EventFileRecord` for an event file. A card
    is a :class:`~omphjc.data_files.FileRecord` that the driver's workspace
-   made (:meth:`omphjc.workspace.Workspace.card_records`).
+   made (:meth:`omphjc.workspace.ProgramWorkspace.card_records`).
 3. :meth:`Job.run_task` records the run as a :class:`TaskRun`, with its
    status, start and finish times, log and usage. It writes the run, the
    parameters and the result to ``task.json`` as a :class:`TaskRecord`, with
