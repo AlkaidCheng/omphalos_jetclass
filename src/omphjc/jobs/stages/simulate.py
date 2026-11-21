@@ -1,29 +1,13 @@
 """The simulation stage: a detector simulation of the showered events."""
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, Protocol
+from typing import Any, Protocol
 
 from omphjc.data_files import Card
 from omphjc.events.formats import EventFormat, EventSource
 from omphjc.jobs.job import Job, task_parameters
-from omphjc.jobs.stage import Stage
-from omphjc.jobs.stages.shower import ShowerStage
 from omphjc.jobs.task import INPUT_FINGERPRINT_PARAMETER, TaskOutcome, TaskRecord
-
-
-@dataclass(frozen=True)
-class SimulateStage(Stage):
-    """The detector simulation of a job, which reads the showered events.
-
-    Its task is named ``simulate`` and works in ``<job>/simulate/``.
-    """
-
-    name: ClassVar[str] = "simulate"
-
-    @property
-    def upstream_stage(self) -> ShowerStage:
-        return ShowerStage()
+from omphjc.stages import SimulateStage
 
 
 class DetectorSimulator(Protocol):

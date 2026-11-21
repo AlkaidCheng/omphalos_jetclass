@@ -21,14 +21,10 @@ from omphjc.events import EventFileRecord, EventFormat, EventSource
 from omphjc.events.delphes_root import DelphesROOTFile
 from omphjc.jobs import (
     AcceptedInput,
-    GenerateStage,
     Job,
     JobIdentity,
     Manifest,
     ReplacedRunError,
-    ShowerStage,
-    SimulateStage,
-    Stage,
     Task,
     TaskOutcome,
     TaskRecord,
@@ -46,6 +42,7 @@ from omphjc.jobs import (
 from omphjc.processes import ProcessSpec, get_process
 from omphjc.programs import ProgramError, available_cores
 from omphjc.runs import EVENTS_OUTPUT, RunResult
+from omphjc.stages import GenerateStage, ShowerStage, SimulateStage, Stage
 from omphjc.stamps import COMPACT_UTC_FORMAT, read_stamp
 from omphjc.tools.delphes.adapter import DelphesSimulator
 from omphjc.tools.delphes.card import DetectorCard, ParticlesCard

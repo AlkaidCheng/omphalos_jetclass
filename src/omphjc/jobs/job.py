@@ -29,7 +29,6 @@ from omphjc.comparison import Difference
 from omphjc.events.formats import EventFileRecord, EventFormat
 from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.manifest import Manifest, TaskSummary
-from omphjc.jobs.stage import Stage
 from omphjc.jobs.task import (
     INPUT_FINGERPRINT_PARAMETER,
     Task,
@@ -39,6 +38,7 @@ from omphjc.jobs.task import (
 )
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.safe_paths import inside, working_directory
+from omphjc.stages import Stage
 from omphjc.stamps import SetAsideFolder, clear_set_aside_folders, set_aside_folders
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
 from omphjc.workspace import LOG_NAME
