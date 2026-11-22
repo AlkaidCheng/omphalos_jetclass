@@ -9,7 +9,7 @@ Each run has a working directory of its own::
       particles_card.tcl   the Delphes card that writes the generator record and simulates nothing
       particles.root       the showered events: the Particle, Event and Weight branches,
                            and EventLHEF and WeightLHEF from the LHE file
-      shower.log           DelphesPythia8's output, Pythia's banner and statistics included
+      run.log              DelphesPythia8's output, Pythia's banner and statistics included
 
 ``DelphesPythia8`` combines Pythia 8 and Delphes in one program
 (``readers/DelphesPythia8.cpp`` in Delphes 3.5.1,
@@ -319,7 +319,6 @@ class ShowerWorkspace(ProgramWorkspace):
     # Delphes's program that combines Pythia 8 and the detector simulation.
     program = "DelphesPythia8"
     description = f"Delphes's {program}"
-    log_name = "shower.log"
     input_file_name: ClassVar[str] = "events.lhe"
     """The file of the input events in the directory, uncompressed."""
     output_file_name: ClassVar[str] = "particles.root"

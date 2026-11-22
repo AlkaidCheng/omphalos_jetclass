@@ -249,7 +249,7 @@ def test_a_failed_run_is_sealed_and_replaced(
         driver.run(workdir=workdir, seed=1, timeout=timeout)
     stamp = read_stamp(workdir)
     assert stamp is not None and stamp.purpose == workspace_type.purpose
-    assert workspace_type.log_name in stamp.artifacts
+    assert workspace.LOG_NAME in stamp.artifacts
     monkeypatch.delenv(driver.fail_variable)
     run = driver.run(workdir=workdir, seed=2, overwrite=True)
     assert run.output_path.is_file()

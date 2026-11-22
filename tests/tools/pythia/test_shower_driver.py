@@ -23,7 +23,7 @@ ARTIFACTS = {
     "pythia.cmnd",
     "particles_card.tcl",
     "particles.root",
-    "shower.log",
+    "run.log",
 }
 
 
@@ -61,7 +61,7 @@ def test_a_shower_runs_in_its_own_working_directory(
     assert run.cards["particles_card"].path.read_text() == particles_card_text()
     assert run.statistics.pythia_version == "8.318"
     assert (run.statistics.events_read, run.statistics.events_accepted) == (3, 3)
-    assert run.log_path == workdir / "shower.log"
+    assert run.log_path == workdir / "run.log"
     assert run.log_path.read_text().count("$ ") == 1
     assert run.set_aside is None
     stamp = read_stamp(workdir)

@@ -141,7 +141,7 @@ def test_a_run_stamps_its_directory_and_seals_its_artifacts(
         "HToWW4Q",
         "process.mg5",
         "launch.mg5",
-        "madgraph.log",
+        "run.log",
         "models/heft",
     }
     assert read_stamp(run.process_dir) is None
@@ -261,7 +261,7 @@ def test_a_directory_no_run_made_is_left_in_place(
 ) -> None:
     (tmp_path / "HToBB").mkdir()
     (tmp_path / "models" / "heft").mkdir(parents=True)
-    (tmp_path / "madgraph.log").write_text("mine\n")
+    (tmp_path / "run.log").write_text("mine\n")
     before = sorted(tmp_path.rglob("*"))
     with pytest.raises(StampError, match="has no omphjc stamp"):
         generate_events(
@@ -321,7 +321,7 @@ def test_a_directory_of_another_process_is_refused(
 
 
 @pytest.mark.parametrize(
-    "replaced", ["HToWW4Q", "models/heft", "process.mg5", "madgraph.log"]
+    "replaced", ["HToWW4Q", "models/heft", "process.mg5", "run.log"]
 )
 def test_an_artifact_replaced_by_yours_is_set_aside(
     specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path, replaced: str
@@ -456,7 +456,7 @@ def test_invalid_requests_fail_before_madgraph_starts(
             timeout=0,
             mg5_path=mg5_path,
         )
-    assert not (tmp_path / "madgraph.log").exists()
+    assert not (tmp_path / "run.log").exists()
 
 
 def test_a_workspace_finds_mg5_on_path_or_takes_the_given_one(
@@ -487,7 +487,7 @@ def test_a_workspace_derives_every_path_a_run_writes(
         "HToWW4Q",
         "process.mg5",
         "launch.mg5",
-        "madgraph.log",
+        "run.log",
         "models/heft",
     ]
     assert workspace.output_path.parent.name == "run_01"

@@ -45,11 +45,6 @@ class DetectorSimulator(Protocol):
         ...
 
     @property
-    def log_name(self) -> str:
-        """The name of the log file the simulator's program writes."""
-        ...
-
-    @property
     def card_classes(self) -> tuple[type[Card], ...]:
         """The class of each card a run of the simulator uses.
 
@@ -163,7 +158,6 @@ def simulate(
         stage,
         parameters,
         body,
-        log_name=simulator.log_name,
         accept_input=accept_input,
         force=force,
     )

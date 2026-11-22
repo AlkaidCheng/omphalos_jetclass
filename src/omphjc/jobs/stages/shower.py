@@ -11,7 +11,7 @@ from omphjc.jobs.stages.generate import GenerateStage
 from omphjc.jobs.task import INPUT_FINGERPRINT_PARAMETER, TaskOutcome, TaskRecord
 from omphjc.processes.catalogue import SettingValue
 from omphjc.runs import EVENTS_OUTPUT, RunResult
-from omphjc.tools.pythia.driver import ShowerWorkspace, shower_events
+from omphjc.tools.pythia.driver import shower_events
 
 
 @dataclass(frozen=True)
@@ -139,7 +139,6 @@ def shower(
         stage,
         parameters,
         body,
-        log_name=ShowerWorkspace.log_name,
         accept_input=accept_input,
         force=force,
     )

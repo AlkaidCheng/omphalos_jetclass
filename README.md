@@ -393,19 +393,19 @@ runs/dev/HToBB/job_1/
 ├── manifest.json          the stages that have a record, with the status of each
 ├── generate/              the MadGraph working directory, MadGraph's own layout inside
 │   ├── task.json          the record: what the stage ran with and what came out
-│   ├── runs/<run_id>/madgraph.log   one directory per run, with that run's log
+│   ├── runs/<run_id>/run.log        one directory per run, with that run's log
 │   ├── cards/             the cards MadGraph ran with, hashed in the record
 │   └── HToBB/Events/run_01/unweighted_events.lhe.gz
 ├── shower/                the DelphesPythia8 working directory
 │   ├── task.json
-│   ├── runs/<run_id>/shower.log     DelphesPythia8's output, Pythia's statistics included
+│   ├── runs/<run_id>/run.log        DelphesPythia8's output, Pythia's statistics included
 │   ├── events.lhe         the generated events, uncompressed for DelphesPythia8
 │   ├── pythia.cmnd        the Pythia settings as run, hashed in the record
 │   ├── particles_card.tcl the card that writes the record and simulates nothing, hashed
 │   └── particles.root     every showered event's generator record (Particle branch)
 └── simulate/              the DelphesROOT working directory
     ├── task.json
-    ├── runs/<run_id>/simulate.log   DelphesROOT's output
+    ├── runs/<run_id>/run.log        DelphesROOT's output
     ├── delphes_card.tcl   the detector card as run, seeded, hashed in the record
     └── delphes.root
 ```

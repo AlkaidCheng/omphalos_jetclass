@@ -37,7 +37,7 @@ A task is the work of one stage in a job. Its record is the file
           "host": "node01",
           "finished": "2026-10-23T01:05:00+00:00",
           "usage": {"wall_seconds": 301.2},
-          "log": "generate/runs/20261023T010000Z-4f9c2a1e/madgraph.log",
+          "log": "generate/runs/20261023T010000Z-4f9c2a1e/run.log",
           "set_aside": null,
           "error": "MadGraph exited with status 1"
         },
@@ -50,7 +50,7 @@ A task is the work of one stage in a job. Its record is the file
           "usage": {
             "wall_seconds": 1203.4, "cpu_seconds": 9012.7, "peak_memory_mib": 812.5
           },
-          "log": "generate/runs/20261023T020000Z-b81d07c3/madgraph.log",
+          "log": "generate/runs/20261023T020000Z-b81d07c3/run.log",
           "set_aside": null,
           "error": null
         }
@@ -125,10 +125,9 @@ Each run has these keys:
     What the run took: its wall time, and the CPU time and peak memory (MiB)
     of the external program's processes where the platform reports them.
 ``log``
-    The file that the run's program writes its log to. It is in the
-    directory of the run (:mod:`omphjc.jobs.job`). The value is ``null`` for
-    a task without a log. The file is missing when the run ended before its
-    program started.
+    The file that the run's programs write their output to, ``run.log`` in
+    the directory of the run (:mod:`omphjc.jobs.job`). The file is missing
+    when no program of the run started.
 ``set_aside``
     The folder into which the run moved what an earlier run left and it
     could not confirm as that run's (:mod:`omphjc.stamps`). The value is

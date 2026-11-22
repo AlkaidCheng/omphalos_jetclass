@@ -7,7 +7,7 @@ Each run has a working directory of its own::
       models/<model>/         copy of the model, when the catalogue includes it
       process.mg5             process script: import model, definitions, generate, output
       launch.mg5              launch script: switches and run-card values
-      madgraph.log            MadGraph's output for both scripts
+      run.log                 MadGraph's output for both scripts
       <process>/              MadGraph's process directory
         Cards/madspin_card.dat                            when MadSpin runs
         Cards/me5_configuration.txt                       core count appended
@@ -340,7 +340,6 @@ class MadGraphWorkspace(ProgramWorkspace):
     # MadGraph's command-line program, bin/mg5_aMC of an installation.
     program = "mg5_aMC"
     description = f"MadGraph's bin/{program}"
-    log_name = "madgraph.log"
     process_script_name: ClassVar[str] = "process.mg5"
     """The script that makes the process directory."""
     launch_script_name: ClassVar[str] = "launch.mg5"
