@@ -4,6 +4,9 @@ A program is started with its input closed, and its output is appended to a
 log file. The program leads a process group of its own. Stopping the program
 at a time limit or on an interrupt therefore also stops every process that it
 started, such as MadGraph's parallel jobs.
+
+:func:`run_program` runs one program. :class:`ProgramSession` runs the
+programs of one run under one log and one time limit, and adds up their usage.
 """
 
 import contextlib
@@ -14,7 +17,8 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -285,3 +289,108 @@ def log_tail(log_path: Path, lines: int = _LOG_TAIL_LINES) -> str:
     """Return the last `lines` lines of `log_path`, headed by its path."""
     text = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
     return f"Last lines of {log_path}:\n" + "\n".join(text[-lines:])
+
+
+class ProgramSession:
+    """The programs of one run, which share a directory, a log and a time limit.
+
+    The programs run only inside an :meth:`opened` block, and the time limit
+    counts from the start of the block. :attr:`usage` adds up what they took.
+
+    Parameters
+    ----------
+    cwd : Path
+        The directory the programs run in.
+    log_path : Path
+        The file the programs append their output to.
+
+    Attributes
+    ----------
+    cwd : Path
+    log_path : Path
+    usage : ProgramUsage
+        Wall time, CPU time and peak memory of the programs so far.
+    """
+
+    def __init__(self, cwd: Path, log_path: Path) -> None:
+        self.cwd = cwd
+        self.log_path = log_path
+        self.usage = ProgramUsage(
+            wall_seconds=0.0, cpu_seconds=0.0, peak_memory_mib=None
+        )
+        self._deadline: float | None = None
+        self._is_open = False
+
+    @contextmanager
+    def opened(self, timeout: float | None = None) -> Iterator[None]:
+        """Let the programs run in the block, within `timeout` seconds of its start.
+
+        Parameters
+        ----------
+        timeout : float or None, optional
+            Seconds the programs of the block may take together. ``None`` sets
+            no limit.
+
+        Raises
+        ------
+        ValueError
+            If `timeout` is not positive.
+        """
+        if timeout is not None and timeout <= 0:
+            raise ValueError(f"timeout must be positive, got {timeout}")
+        self._deadline = None if timeout is None else time.monotonic() + timeout
+        self._is_open = True
+        try:
+            yield
+        finally:
+            self._is_open = False
+
+    def run(
+        self, command: Sequence[str | os.PathLike[str]], *, failure_message: str
+    ) -> ProgramUsage:
+        """Run `command` in :attr:`cwd`, appending its output to the log.
+
+        Parameters
+        ----------
+        command : sequence of str or path-like
+            The program and its arguments.
+        failure_message : str
+            How a failure is described, for example
+            ``"MadGraph failed running launch.mg5"``. The error of the
+            program follows it.
+
+        Returns
+        -------
+        ProgramUsage
+            Wall time, CPU time and peak memory of this program, which are also
+            added to :attr:`usage`.
+
+        Raises
+        ------
+        RuntimeError
+            If the call is not inside :meth:`opened`.
+        ProgramError
+            If the program exits with a failing status or is still running at
+            the time limit.
+        """
+        if not self._is_open:
+            raise RuntimeError(
+                f"A program in {self.cwd} runs only inside an opened session"
+            )
+        timeout = (
+            None
+            if self._deadline is None
+            else max(self._deadline - time.monotonic(), 0.0)
+        )
+        try:
+            usage = run_program(
+                command, cwd=self.cwd, log_path=self.log_path, timeout=timeout
+            )
+        except ProgramError as error:
+            raise ProgramError(f"{failure_message}: {error}") from error
+        self.usage = self.usage.combined_with(usage)
+        return usage
+
+    def make_error(self, message: str) -> ProgramError:
+        """Return an error with `message` and the last lines of the log."""
+        return ProgramError(f"{message}\n{log_tail(self.log_path)}")
