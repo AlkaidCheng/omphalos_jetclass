@@ -6,7 +6,7 @@ Each run has a working directory of its own::
       omphjc-stamp.json   stamp: the process and the sealed artifacts of its run
       delphes_card.tcl    the detector card, with the run's seed appended
       delphes.root        DelphesROOT's output
-      simulate.log        DelphesROOT's output
+      run.log             DelphesROOT's output
 
 ``DelphesROOT`` takes three arguments in this order: the card, the output
 file and the input file (``readers/DelphesROOT.cpp`` in Delphes 3.5.1,
@@ -242,7 +242,6 @@ class SimulationWorkspace(ProgramWorkspace):
     # Delphes ROOT file.
     program = "DelphesROOT"
     description = f"Delphes's {program}"
-    log_name = "simulate.log"
     output_file_name: ClassVar[str] = "delphes.root"
     """The file of the simulated events in the directory."""
 

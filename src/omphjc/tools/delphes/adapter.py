@@ -45,7 +45,6 @@ class DelphesSimulator:
     input_formats: ClassVar[frozenset[EventFormat]] = frozenset(
         {EventFormat.DELPHES_ROOT}
     )
-    log_name: ClassVar[str] = SimulationWorkspace.log_name
     card_classes: ClassVar[tuple[type[Card], ...]] = SimulationWorkspace.card_classes
 
     spec: ProcessSpec

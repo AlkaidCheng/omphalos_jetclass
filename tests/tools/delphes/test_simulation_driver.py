@@ -12,7 +12,7 @@ from omphjc.tools.delphes.driver import (
     simulate_events,
 )
 
-ARTIFACTS = {"delphes_card.tcl", "delphes.root", "simulate.log"}
+ARTIFACTS = {"delphes_card.tcl", "delphes.root", "run.log"}
 
 
 def _write_events_path(path: Path) -> Path:
@@ -37,7 +37,7 @@ def test_a_simulation_runs_in_its_own_working_directory(
     card = run.cards["detector_card"].path.read_text()
     assert card.startswith(reference_card_text())
     assert card.endswith("\nset RandomSeed 7\n")
-    assert run.log_path == workdir / "simulate.log"
+    assert run.log_path == workdir / "run.log"
     log = run.log_path.read_text()
     assert log.count("$ ") == 1 and f"** Reading {events_path}" in log
     assert run.set_aside is None
@@ -64,11 +64,11 @@ def test_a_log_directory_keeps_the_log_out_of_the_runs_artifacts(
             log_dir=log_dir,
             delphes_root_path=delphes_root_path,
         )
-        assert run.log_path == log_dir / "simulate.log"
-    assert not (workdir / "simulate.log").exists()
-    assert all((log_dir / "simulate.log").is_file() for log_dir in log_dirs)
+        assert run.log_path == log_dir / "run.log"
+    assert not (workdir / "run.log").exists()
+    assert all((log_dir / "run.log").is_file() for log_dir in log_dirs)
     stamp = read_stamp(workdir)
-    assert stamp is not None and set(stamp.artifacts) == ARTIFACTS - {"simulate.log"}
+    assert stamp is not None and set(stamp.artifacts) == ARTIFACTS - {"run.log"}
 
 
 def test_another_card_can_be_run_and_no_seed_leaves_it_alone(

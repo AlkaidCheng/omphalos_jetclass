@@ -48,6 +48,9 @@ from omphjc.programs import (
 from omphjc.safe_paths import working_directory
 from omphjc.stamps import clear_artifacts, read_stamp, seal, write_stamp
 
+LOG_NAME = "run.log"
+"""The file name of the log of every run."""
+
 
 @dataclass(frozen=True, kw_only=True)
 class Run:
@@ -297,8 +300,6 @@ class ProgramWorkspace(Workspace):
     """The program's name on PATH."""
     description: ClassVar[str]
     """How the program is called in messages, for example ``"MadGraph's bin/mg5_aMC"``."""
-    log_name: ClassVar[str]
-    """Name of the log file in the directory."""
 
     def __init__(
         self,
@@ -324,7 +325,7 @@ class ProgramWorkspace(Workspace):
     @property
     def log_path(self) -> Path:
         """The program's output for the run."""
-        return (self.workdir if self.log_dir is None else self.log_dir) / self.log_name
+        return (self.workdir if self.log_dir is None else self.log_dir) / LOG_NAME
 
     @property
     def artifacts(self) -> list[str]:
@@ -332,7 +333,7 @@ class ProgramWorkspace(Workspace):
 
         A subclass adds the rest of what its run makes.
         """
-        log_names = [self.log_name] if self.log_dir is None else []
+        log_names = [LOG_NAME] if self.log_dir is None else []
         return [*super().artifacts, *log_names]
 
     def run(

@@ -52,6 +52,7 @@ from omphjc.tools.delphes.card import DetectorCard, ParticlesCard
 from omphjc.tools.madgraph.lhe_file import LHEFile
 from omphjc.tools.madgraph.proc_card import ProcCard
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT, PythiaCmnd
+from omphjc.workspace import LOG_NAME
 
 RUN_ID = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]{8}")
 
@@ -384,7 +385,7 @@ def test_a_stage_runs_once_and_its_result_is_kept(
         outputs={"out": FileRecord(job.root_dir / "x" / "out.txt", 4, None)},
         metadata={"n": 1},
     )
-    assert record.latest_run.log is None
+    assert record.latest_run.log == f"x/runs/{record.latest_run.run_id}/run.log"
     assert job.task_record(STAGE_X) == record
 
     job = Job(specs["HToBB"], tmp_path, 1)
@@ -673,14 +674,12 @@ def test_a_record_names_the_log_of_a_run_from_its_start(
         raise RuntimeError("boom")
 
     with pytest.raises(RuntimeError, match="boom"):
-        job.run_task(STAGE_X, {}, read_record_then_fail, log_name="x.log")
+        job.run_task(STAGE_X, {}, read_record_then_fail)
     record = job.task_record(STAGE_X)
     assert record is not None
     failed_run = record.latest_run
     assert failed_run.status == "failed"
-    assert logs == [failed_run.log] == [f"x/runs/{failed_run.run_id}/x.log"]
-    with pytest.raises(ValueError, match="x.log"):
-        job.run_task(STAGE_X, {}, _fail, log_name="../x.log")
+    assert logs == [failed_run.log] == [f"x/runs/{failed_run.run_id}/run.log"]
 
 
 def test_a_run_whose_directory_cannot_be_made_is_recorded_as_failed(
@@ -1158,10 +1157,7 @@ def test_generate_records_what_madgraph_made(
             n_events=10000,
         )
     }
-    assert (
-        record.latest_run.log
-        == f"generate/runs/{record.latest_run.run_id}/madgraph.log"
-    )
+    assert record.latest_run.log == f"generate/runs/{record.latest_run.run_id}/run.log"
     card = job.root_dir / "generate" / "cards" / "proc_card_mg5.dat"
     assert card.is_file()
     assert record.cards["proc_card"] == ProcCard.record_file(card)
@@ -1212,7 +1208,7 @@ def test_generate_keeps_a_finished_run_unless_forced(
     assert len(again.runs) == 1
     run_ids = sorted([first_run_id, again.latest_run.run_id])
     assert sorted(path.name for path in runs_dir.iterdir()) == run_ids
-    assert (runs_dir / first_run_id / "madgraph.log").is_file()
+    assert (runs_dir / first_run_id / "run.log").is_file()
 
 
 def test_a_failed_madgraph_run_is_recorded_and_retried(
@@ -1239,9 +1235,9 @@ def test_a_failed_madgraph_run_is_recorded_and_retried(
     assert failed_run.run_id != done_run.run_id
     runs_dir = tmp_path / "HToBB" / "job_1" / "generate" / "runs"
     for run in done.runs:
-        assert (runs_dir / run.run_id / "madgraph.log").is_file()
+        assert (runs_dir / run.run_id / "run.log").is_file()
     for run in done.runs:
-        assert run.log == f"generate/runs/{run.run_id}/madgraph.log"
+        assert run.log == f"generate/runs/{run.run_id}/run.log"
 
 
 def test_shower_needs_a_finished_madgraph_stage(
@@ -1295,7 +1291,7 @@ def test_shower_records_what_it_made_and_keeps_it(
             n_events=1,
         )
     }
-    assert record.latest_run.log == f"shower/runs/{record.latest_run.run_id}/shower.log"
+    assert record.latest_run.log == f"shower/runs/{record.latest_run.run_id}/run.log"
     cmnd = (job.root_dir / "shower" / "pythia.cmnd").read_text()
     assert "Random:seed = 10000001" in cmnd and "Main:numberOfEvents = 10000" in cmnd
     card = (job.root_dir / "shower" / "particles_card.tcl").read_text()
@@ -1396,7 +1392,6 @@ class FakeSimulator:
     """A simulator for tests: it writes one small file and no events."""
 
     name: ClassVar[str] = "fake-simulator"
-    log_name: ClassVar[str] = "fake.log"
     card_classes: ClassVar[tuple[type[Card], ...]] = ()
 
     input_formats: frozenset[EventFormat] = frozenset({EventFormat.DELPHES_ROOT})
@@ -1417,7 +1412,7 @@ class FakeSimulator:
         workdir.mkdir(parents=True, exist_ok=True)
         output_path = workdir / "simulated.txt"
         output_path.write_text(f"{source.path.name} {seed}")
-        (log_dir / self.log_name).write_text("simulated")
+        (log_dir / LOG_NAME).write_text("simulated")
         output = FileRecord(output_path, output_path.stat().st_size, None)
         return TaskOutcome(
             RunResult(
@@ -1457,7 +1452,7 @@ def test_simulate_runs_a_simulator_on_the_showered_events(
     simulate_dir = job.task_dir(SimulateStage())
     assert (simulate_dir / "simulated.txt").read_text() == f"events.dat {job.seed}"
     run_id = record.latest_run.run_id
-    assert record.latest_run.log == f"simulate/runs/{run_id}/fake.log"
+    assert record.latest_run.log == f"simulate/runs/{run_id}/run.log"
     assert (job.root_dir / record.latest_run.log).read_text() == "simulated"
     assert simulate(job, FakeSimulator()) == record
 
@@ -1671,10 +1666,7 @@ def test_simulate_records_what_it_made_and_keeps_it(
             n_events=1,
         )
     }
-    assert (
-        record.latest_run.log
-        == f"simulate/runs/{record.latest_run.run_id}/simulate.log"
-    )
+    assert record.latest_run.log == f"simulate/runs/{record.latest_run.run_id}/run.log"
     card = (job.root_dir / "simulate" / "delphes_card.tcl").read_text()
     assert card.endswith("\nset RandomSeed 10000001\n")
     log = (job.root_dir / record.latest_run.log).read_text()

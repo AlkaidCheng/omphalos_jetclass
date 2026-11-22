@@ -167,7 +167,7 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
     assert lines[5] == "  events generated  10000"
     assert lines[6] == "  cross section     1.05282 +- 0.0024 pb"
     assert lines[7].startswith("  event file        generate/HToBB/Events/")
-    assert lines[8] == f"  log               generate/runs/{run_id}/madgraph.log"
+    assert lines[8] == f"  log               generate/runs/{run_id}/run.log"
     assert lines[9] == "  cards             generate/cards/"
     assert lines[10].startswith("  took              ") and "s wall" in lines[10]
     assert "s CPU" in lines[10] and "MiB peak" in lines[10]
@@ -229,7 +229,7 @@ def test_shower_runs_after_generate_and_reports(
     assert lines[4] == "  events read       1"
     assert lines[5] == "  events kept       1"
     assert lines[6] == "  output            shower/particles.root"
-    assert lines[7] == f"  log               shower/runs/{run_id}/shower.log"
+    assert lines[7] == f"  log               shower/runs/{run_id}/run.log"
     assert (
         lines[8] == "  settings          shower/pythia.cmnd, shower/particles_card.tcl"
     )
@@ -299,7 +299,7 @@ def test_simulate_runs_after_shower_and_reports(
     assert lines[4] == "  seed              10000001"
     assert lines[5] == "  events            1"
     assert lines[6] == "  output            simulate/delphes.root"
-    assert lines[7] == f"  log               simulate/runs/{run_id}/simulate.log"
+    assert lines[7] == f"  log               simulate/runs/{run_id}/run.log"
     assert lines[8].startswith("  took              ") and "s wall" in lines[8]
     again = CliRunner().invoke(cli, simulate)
     assert again.exit_code == 0, again.output

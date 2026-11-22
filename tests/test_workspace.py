@@ -10,7 +10,7 @@ from omphjc.comparison import Difference
 from omphjc.data_files import Card, FileRecord
 from omphjc.programs import ProgramError
 from omphjc.stamps import SET_ASIDE_DIR, StampError, read_stamp, write_stamp
-from omphjc.workspace import ProgramWorkspace, Workspace
+from omphjc.workspace import LOG_NAME, ProgramWorkspace, Workspace
 
 PURPOSE = "testing"
 ARTIFACTS = ["first.txt", "second.txt"]
@@ -199,7 +199,6 @@ class ToolWorkspace(ProgramWorkspace):
     purpose = PURPOSE
     program = "fake-tool"
     description = "the fake tool"
-    log_name = "tool.log"
 
     def __init__(
         self,
@@ -231,7 +230,7 @@ def test_a_program_workspace_takes_the_given_program_or_finds_it_on_path(
 ) -> None:
     workspace = ToolWorkspace("HToBB", tmp_path, tool_path=tool_path)
     assert workspace.program_path == tool_path
-    assert workspace.log_path == tmp_path.resolve() / "tool.log"
+    assert workspace.log_path == tmp_path.resolve() / LOG_NAME
     assert workspace.deadline is None
     monkeypatch.setenv("PATH", str(tool_path.parent))
     assert ToolWorkspace("HToBB", tmp_path).program_path == tool_path
@@ -247,11 +246,11 @@ def test_a_log_in_another_directory_is_not_an_artifact(
 ) -> None:
     workdir = tmp_path / "work"
     workspace = ToolWorkspace("HToBB", workdir, tool_path=tool_path)
-    assert workspace.artifacts == ["tool.log"]
+    assert workspace.artifacts == [LOG_NAME]
     log_dir = tmp_path / "logs"
     workspace = ToolWorkspace("HToBB", workdir, tool_path=tool_path, log_dir=log_dir)
     assert workspace.artifacts == []
-    assert workspace.log_path == log_dir / "tool.log"
+    assert workspace.log_path == log_dir / LOG_NAME
 
 
 @pytest.mark.parametrize("timeout", [0, -1.0])
@@ -275,7 +274,7 @@ def test_runs_append_to_one_log_and_their_usage_adds_up(
         first.wall_seconds + second.wall_seconds
     )
     stamp = read_stamp(tmp_path)
-    assert stamp is not None and "tool.log" in stamp.artifacts
+    assert stamp is not None and LOG_NAME in stamp.artifacts
 
 
 def test_a_failing_program_raises_an_error_with_the_failure_message(

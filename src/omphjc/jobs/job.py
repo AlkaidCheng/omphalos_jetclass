@@ -41,6 +41,7 @@ from omphjc.processes.catalogue import ProcessSpec
 from omphjc.safe_paths import inside, working_directory
 from omphjc.stamps import SetAsideFolder, clear_set_aside_folders, set_aside_folders
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
+from omphjc.workspace import LOG_NAME
 
 JOB_DIR_PREFIX = "job_"
 RUNS_DIR = "runs"
@@ -334,7 +335,6 @@ class Job:
         parameters: dict[str, Any],
         body: TaskBody,
         *,
-        log_name: str | None = None,
         accept_input: bool = False,
         force: bool = False,
     ) -> TaskRecord:
@@ -388,9 +388,6 @@ class Job:
         body : TaskBody
             Runs the task; receives whether to replace an earlier run's files
             and the directory of this run.
-        log_name : str or None, optional
-            The name of the file the task's program writes its log to in the
-            directory of the run; ``None`` for a task without a log.
         accept_input : bool, optional
             Keep a done task whose input alone has changed, and record the
             acceptance. It changes nothing for a task that is not done or has
@@ -410,8 +407,8 @@ class Job:
             output of another size than recorded, and `force` is not set; the
             message names each parameter that differs. If the ``job.json`` of
             the directory identifies another job. If the ``task.json`` of a
-            task of the job cannot be read as a record. If `log_name` is not
-            a plain file name. If `accept_input` and `force` are both set.
+            task of the job cannot be read as a record. If `accept_input` and
+            `force` are both set.
         FileNotFoundError
             If the ``job.json`` of the directory was removed while the task
             ran. The task is then not recorded.
@@ -440,8 +437,7 @@ class Job:
         else:
             record = previous_record.rerun()
         run_dir = self.run_dir(stage, record.latest_run.run_id)
-        if log_name is not None:
-            record = record.with_log(self.relative_path(inside(run_dir, log_name)))
+        record = record.with_log(self.relative_path(run_dir / LOG_NAME))
         self._write_record(stage, record)
         try:
             run_dir.mkdir(parents=True)

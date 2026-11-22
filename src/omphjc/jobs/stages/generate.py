@@ -11,7 +11,7 @@ from omphjc.jobs.job import Job
 from omphjc.jobs.stage import Stage
 from omphjc.jobs.task import TaskOutcome, TaskRecord
 from omphjc.runs import EVENTS_OUTPUT, RunResult
-from omphjc.tools.madgraph.driver import MadGraphWorkspace, generate_events
+from omphjc.tools.madgraph.driver import generate_events
 from omphjc.tools.madgraph.lhe_file import LHEFile
 
 
@@ -111,9 +111,7 @@ def generate(
         )
 
     parameters = {"events": n_events, "seed": job.seed}
-    return job.run_task(
-        stage, parameters, body, log_name=MadGraphWorkspace.log_name, force=force
-    )
+    return job.run_task(stage, parameters, body, force=force)
 
 
 def _copy_cards(
