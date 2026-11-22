@@ -34,7 +34,7 @@ class RunResult:
         :data:`EVENTS_OUTPUT`. A run that makes no events has no such output.
     cards : dict[str, FileRecord]
         The record of each card the program of the run read, by the name of
-        the card (:meth:`omphjc.workspace.Workspace.card_records`).
+        the card (:meth:`omphjc.workspace.ProgramWorkspace.card_records`).
     metadata : dict
         What is known about the run and the sample it made, as JSON values.
         The code that ran the tool chooses the keys.

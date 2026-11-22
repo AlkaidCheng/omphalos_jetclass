@@ -487,7 +487,6 @@ def test_a_workspace_derives_every_path_a_run_writes(
         "HToWW4Q",
         "process.mg5",
         "launch.mg5",
-        "run.log",
         "models/heft",
     ]
     assert workspace.output_path.parent.name == "run_01"

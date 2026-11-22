@@ -1,36 +1,13 @@
-"""A directory that a run works in, and how every run clears and seals it.
+"""Working directories for the runs of the tools.
 
-A workspace carries a stamp (:mod:`omphjc.stamps`). The stamp names the
-purpose of the workspace and the process it serves.
-
-When a run ends, it seals its artifacts. Only a hard kill prevents the seal.
-A later run deletes an artifact only when the artifact was sealed and nothing
-in it has changed since. Anything else that a run may have left is moved into
-``omphjc-set-aside/`` with its contents. This happens, for example, when a run
-was killed before it could seal its artifacts. Nothing else in the directory
-is ever touched.
-
-:class:`Workspace` implements these rules and nothing more. A subclass names
-its purpose and what a run makes, and it adds the steps of its run.
-
-:class:`ProgramWorkspace` adds an external program, which a subclass also
-names in class attributes. The class holds:
-
-- the program file;
-- the time that the runs of the program may take;
-- the log that the runs append to;
-- what the runs took.
-
-:class:`omphjc.tools.madgraph.driver.MadGraphWorkspace` is one such subclass.
-
-A run returns a record. The record derives from :class:`Run`, or from
-:class:`ProgramRun` when the run is of an external program. These two classes
-carry the fields that every run shares, and the record of a driver adds its
-own fields.
+- :class:`Workspace` prepares a directory for one run and records what the
+  run made.
+- :class:`ProgramWorkspace` is the base class of a tool's driver, which runs
+  the tool's program in a workspace.
+- :class:`Run` is what a driver returns after a run.
 """
 
 import os
-import time
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -38,13 +15,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from omphjc.data_files import Card, FileRecord
-from omphjc.programs import (
-    ProgramError,
-    ProgramUsage,
-    find_program,
-    log_tail,
-    run_program,
-)
+from omphjc.programs import ProgramError, ProgramSession, ProgramUsage, find_program
 from omphjc.safe_paths import working_directory
 from omphjc.stamps import clear_artifacts, read_stamp, seal, write_stamp
 
@@ -54,24 +25,26 @@ LOG_NAME = "run.log"
 
 @dataclass(frozen=True, kw_only=True)
 class Run:
-    """The output of one run: the file it is for and what it set aside.
+    """What a driver returns after a run.
 
-    The run record of a driver derives from this class and adds its own
-    fields. When the run is of an external program, the record derives from
-    :class:`ProgramRun` instead.
+    Each driver has a subclass of its own with more fields. A driver that
+    runs an external program derives its class from :class:`ProgramRun`.
 
     Parameters
     ----------
     output_path : Path
-        The file the run is for.
+        The main file that the run made, such as its event file.
     set_aside : Path or None
-        Folder in the working directory that holds what an earlier run left
-        and this run could not confirm as its own. This run moved it there
-        instead of deleting it. It is ``None`` when nothing was set aside.
+        The folder that holds the files the run moved out of its way, or
+        ``None`` when it moved none. A run deletes only what an earlier run
+        made and left unchanged. Anything else found where the run writes,
+        such as a file that changed after its run ended or one that a
+        killed run left, is moved into a new folder under
+        ``omphjc-set-aside/`` (:class:`Workspace`).
     cards : Mapping[str, FileRecord]
-        The record of each card of the run, as the run used it, by the name
-        of the card (:meth:`Workspace.card_records`). A card is a file that
-        steers the run's program.
+        The record of each card that the run used, by the name of the card
+        (:meth:`ProgramWorkspace.card_records`). A card is an input file that
+        configures the run's program.
     """
 
     output_path: Path
@@ -81,15 +54,15 @@ class Run:
 
 @dataclass(frozen=True, kw_only=True)
 class ProgramRun(Run):
-    """The output of one run of an external program, with its log and usage.
+    """What a driver returns after a run of an external program.
 
     Parameters
     ----------
     log_path : Path
-        The program's output for the run.
+        The log file of the run's programs.
     usage : ProgramUsage
-        Wall time, CPU time and peak memory of the program's runs in the working
-        directory, combined.
+        The wall time and CPU time that the run's programs took in total, and
+        their peak memory.
     """
 
     log_path: Path
@@ -97,33 +70,53 @@ class ProgramRun(Run):
 
 
 class Workspace:
-    """The directory of one process's runs for one purpose.
+    """A working directory for one run of a tool.
 
-    The directory is stamped, cleared and sealed. A subclass does the
-    following:
+    A run happens inside ``with workspace.sealed_run(...):``. In the block,
+    the programs of the run (:attr:`programs`) run in the directory and write
+    their output to one log file, ``run.log``. A workspace is used for one
+    run, and creating it changes nothing on disk.
 
-    - It names its purpose in the class attribute below.
-    - It lists the classes of the cards of its run in :attr:`card_classes`,
-      when the run uses any.
-    - It adds what a run makes, other than its cards, to :attr:`artifacts`.
-    - It adds the steps of its run, each inside
-      ``with workspace.sealed_run():``.
+    A later run can use the same directory again. When it starts, its
+    workspace clears the paths that the run is about to write:
+
+    - A file or folder that the earlier run made, and that has not changed
+      since, is deleted.
+    - Anything else found at those paths, such as a file that changed
+      after its run ended or one that a killed run left, is moved into a
+      new folder under ``omphjc-set-aside/`` (:attr:`set_aside_dir`). It
+      stays there until someone deletes it.
+    - The rest of the directory is left alone.
+
+    The workspace knows what the earlier run made from the stamp, a small
+    file that it keeps in the directory (:mod:`omphjc.stamps`). The stamp also
+    records what the directory is used for and which process it belongs to.
 
     Parameters
     ----------
-    process_name : str
-        The process whose runs the directory holds. The stamp names it.
     workdir : Path
-        The working directory. :meth:`sealed_run` creates it when it is
-        missing. It must not be a filesystem root.
+        The working directory. :meth:`sealed_run` creates it if it does not
+        exist. It must not be a filesystem root.
+    process_name : str
+        The name of the process that the directory belongs to. It is written
+        in the stamp.
+    log_dir : Path or None, optional
+        An existing directory to keep the log in. By default the log is kept
+        in `workdir`, where a later run replaces it. A log in another
+        directory is left in place.
 
     Attributes
     ----------
-    process_name : str
     workdir : Path
-        The working directory, normalized.
-    details : dict[str, str]
-        Details of the purpose written in the stamp: the process's name.
+        The working directory, as an absolute path.
+    process_name : str
+    programs : ProgramSession
+        Runs the programs of the run in `workdir` and writes their output to
+        :attr:`log_path`.
+    set_aside_dir : Path or None
+        The folder under ``omphjc-set-aside/`` that holds what
+        :meth:`sealed_run` found at the run's paths and did not delete. It
+        is ``None`` before the run, and when nothing was moved.
 
     Raises
     ------
@@ -131,175 +124,169 @@ class Workspace:
         If `workdir` is a filesystem root.
     """
 
-    purpose: ClassVar[str]
-    """What the directory is used for, written in its stamp."""
-    card_classes: ClassVar[tuple[type[Card], ...]] = ()
-    """The class of each card of a run. Each class names its card and its file."""
-
-    def __init__(self, process_name: str, workdir: Path) -> None:
-        self.process_name = process_name
+    def __init__(
+        self,
+        workdir: Path,
+        *,
+        process_name: str,
+        log_dir: Path | None = None,
+    ) -> None:
         self.workdir = working_directory(workdir)
-        self.details = {"process": process_name}
+        self.process_name = process_name
+        self.log_dir = log_dir
+        self.programs = ProgramSession(self.workdir, self.log_path)
+        self.set_aside_dir: Path | None = None
+        self._entered = False
 
     @property
-    def cards_dir(self) -> Path:
-        """The directory where a run keeps its cards: the working directory.
-
-        A subclass whose program keeps them elsewhere replaces this property.
-        """
-        return self.workdir
-
-    @property
-    def artifacts(self) -> list[str]:
-        """What a run makes in the directory, as POSIX paths relative to it.
-
-        The base class lists the file of each card in :attr:`card_classes`,
-        and a subclass adds the rest of what its run makes.
-
-        The cards are listed only when :attr:`cards_dir` is the working
-        directory. Cards that a program keeps elsewhere are inside a
-        directory that the subclass lists, and an artifact inside another
-        would be cleared twice.
-        """
-        if self.cards_dir != self.workdir:
-            return []
-        return [card_class.file_name for card_class in self.card_classes]
-
-    def card_records(self) -> dict[str, FileRecord]:
-        """Return the record of each card of a run that exists, by its name.
-
-        The names and the files are those of :attr:`card_classes`, and each
-        card is recorded by its class (:meth:`Card.record_file`), with the
-        fingerprint of its parsed content. The run record of the driver
-        carries the records (:attr:`Run.cards`).
-        """
-        return {
-            card_class.card_name: card_class.record_file(path)
-            for card_class in self.card_classes
-            if (path := self.cards_dir / card_class.file_name).is_file()
-        }
+    def log_path(self) -> Path:
+        """The path of the log file of the run's programs."""
+        return (self.workdir if self.log_dir is None else self.log_dir) / LOG_NAME
 
     @contextmanager
-    def sealed_run(self) -> Iterator[Path | None]:
-        """Make the directory ready for the run in the block, and seal it after.
+    def sealed_run(
+        self,
+        purpose: str,
+        artifacts: Sequence[str],
+        *,
+        unconfirmed: Iterable[str] = (),
+        timeout: float | None = None,
+    ) -> Iterator[None]:
+        """Prepare the directory for a run and record what the run makes.
 
-        On entry, the method does the following, in this order:
+        Use it as ``with workspace.sealed_run(purpose, artifacts):`` and do
+        the work of the run inside the block. The programs of the run can be
+        started only there.
 
-        - It clears what an earlier run left (:meth:`clear_earlier_run`).
-          This comes first, so that a directory the run must not touch is
-          refused before anything is created.
-        - It creates the directory when the directory is missing.
-        - It stamps the directory when the directory carries no stamp.
+        When the block starts, the method:
 
-        On exit, the method records in the stamp what the run made. It does
-        so whether the block ended normally or with an exception. A later run
-        can then tell whether anyone has changed these artifacts since.
+        1. clears the paths in `artifacts`, and the log if it is kept in the
+           directory, as the class description explains;
+        2. creates the directory if it does not exist;
+        3. writes the stamp if the directory has none.
 
-        Entering the block removes what an earlier run left. Anything that
-        the caller can refuse, such as an occupied output or an invalid
-        request, therefore belongs before the block.
+        When the block ends, even if it raises, the method records in the
+        stamp what the run made. A later run uses this record to tell whether
+        a file has changed.
 
-        Yields
-        ------
-        Path or None
-            The folder that holds what was moved aside, or ``None`` when
-            nothing was moved aside.
-
-        Raises
-        ------
-        StampError
-            For the reasons that :meth:`clear_earlier_run` gives. Nothing is
-            created in that case.
-        """
-        set_aside = self.clear_earlier_run()
-        self.workdir.mkdir(parents=True, exist_ok=True)
-        if read_stamp(self.workdir) is None:
-            write_stamp(self.workdir, self.purpose, self.details)
-        try:
-            yield set_aside
-        finally:
-            seal(self.workdir, self.artifacts)
-
-    def clear_earlier_run(self, *, unconfirmed: Iterable[str] = ()) -> Path | None:
-        """Clear what an earlier run left in the directory, and nothing else.
+        Entering the block deletes files of an earlier run. Check everything
+        that could stop the run, such as an occupied output or an invalid
+        request, before entering it.
 
         Parameters
         ----------
+        purpose : str
+            What the directory is used for. It is written in the stamp.
+        artifacts : sequence of str
+            The files and folders that the run makes in the directory, as
+            POSIX paths relative to it. The log is not listed.
         unconfirmed : iterable of str, optional
-            Artifacts to move aside even when they are sealed and unchanged,
-            because they lack a sign that the run leaves.
-
-        Returns
-        -------
-        Path or None
-            The folder that holds what was moved aside, or ``None`` when
-            nothing was moved aside.
+            The paths in `artifacts` to move aside instead of deleting, even
+            when they have not changed. List a path here when nothing in it
+            shows that an earlier run finished making it.
+        timeout : float or None, optional
+            The time limit of the run's programs, in seconds from the start
+            of the block. ``None`` sets no limit.
 
         Raises
         ------
+        ValueError
+            If `timeout` is not positive, or a path in `artifacts` contains a
+            name that is not plain
+            (:func:`~omphjc.safe_paths.require_plain_name`).
+        RuntimeError
+            If the workspace was already used for a run.
         StampError
-            If the directory is in one of these states:
+            If the directory cannot be used for this run, in one of these
+            cases:
 
-            - it is stamped for another purpose or other details;
-            - it holds artifacts of a run but carries no stamp;
-            - it holds something other than a stamp where the stamp belongs.
+            - its stamp names another purpose or another process;
+            - it holds one of `artifacts` but has no stamp;
+            - something other than a stamp is in the stamp's place.
 
             Nothing is changed in that case.
+        OSError
+            If the directory cannot be created or written to, for example
+            for lack of permission.
         """
-        return clear_artifacts(
-            self.workdir,
-            self.artifacts,
-            self.purpose,
-            details=self.details,
-            unconfirmed=unconfirmed,
-        )
+        if self._entered:
+            raise RuntimeError(
+                f"The workspace of {self.workdir} holds one run and was entered before"
+            )
+        with self.programs.opened(timeout):
+            self._entered = True
+            artifacts = [
+                *artifacts,
+                *([LOG_NAME] if self.log_dir is None else []),
+            ]
+            details = {"process": self.process_name}
+            self.set_aside_dir = clear_artifacts(
+                self.workdir,
+                artifacts,
+                purpose,
+                details=details,
+                unconfirmed=unconfirmed,
+            )
+            self.workdir.mkdir(parents=True, exist_ok=True)
+            if read_stamp(self.workdir) is None:
+                write_stamp(self.workdir, purpose, details)
+            try:
+                yield
+            finally:
+                seal(self.workdir, artifacts)
 
 
-class ProgramWorkspace(Workspace):
-    """The directory of one process's runs of one external program.
+class ProgramWorkspace:
+    """Base class for running one tool's program in a :class:`Workspace`.
 
-    A subclass names its program in the class attributes below, in the way it
-    names its purpose for :class:`Workspace`. It also adds what its run makes
-    to :attr:`artifacts`.
+    A subclass describes its tool in the class attributes below and lists
+    the files that its run makes in :attr:`artifacts`. Each step of a run is
+    a method of the subclass, to be called inside
+    ``with workspace.sealed_run():``.
 
     Parameters
     ----------
-    process_name, workdir
-        The same as for :class:`Workspace`.
+    process_name : str
+        The name of the process that the directory belongs to. It is written
+        in the stamp.
+    workdir : Path
+        The working directory. :class:`Workspace` states which directories
+        it refuses.
     program_path : Path or None
-        The program file to use instead of the one on PATH.
+        The program file to run. With ``None``, the program is looked up on
+        PATH.
     timeout : float or None
-        Seconds the run may take, counted from the creation of the workspace.
-        ``None`` sets no limit.
+        The time limit of the run's programs, in seconds from the start of
+        :meth:`sealed_run`. ``None`` sets no limit.
     log_dir : Path or None, optional
-        An existing directory for the log. With ``None``, the default, the
-        log is kept in `workdir` and is one of the artifacts of the run.
-
-        A log in another directory is not an artifact, so a later run in
-        `workdir` leaves it in place.
+        See the `log_dir` parameter of :class:`Workspace`.
 
     Attributes
     ----------
     program_path : Path
-        The program file the run uses.
-    deadline : float or None
-        ``time.monotonic`` value at which a running program is stopped.
-    usage : ProgramUsage
-        What the program's runs in this directory took so far, combined.
+        The program file that the run uses.
+    timeout : float or None
 
     Raises
     ------
     ValueError
-        If `timeout` is not positive or `workdir` is a filesystem root.
+        If `workdir` is not a valid working directory (:class:`Workspace`).
     FileNotFoundError
-        If `program_path` is not a file, or none is given and PATH has no
-        `program`.
+        If `program_path` is not a file, or it is ``None`` and the program is
+        not on PATH.
     """
+
+    purpose: ClassVar[str]
+    """What the directory is used for. It is written in the stamp."""
 
     program: ClassVar[str]
     """The program's name on PATH."""
+
     description: ClassVar[str]
-    """How the program is called in messages, for example ``"MadGraph's bin/mg5_aMC"``."""
+    """The name of the program in messages, such as ``"MadGraph's bin/mg5_aMC"``."""
+
+    card_classes: ClassVar[tuple[type[Card], ...]] = ()
+    """The classes of the tool's cards. Each one names its card and its file."""
 
     def __init__(
         self,
@@ -310,74 +297,108 @@ class ProgramWorkspace(Workspace):
         timeout: float | None,
         log_dir: Path | None = None,
     ) -> None:
-        if timeout is not None and timeout <= 0:
-            raise ValueError(f"timeout must be positive, got {timeout}")
-        super().__init__(process_name, workdir)
-        self.log_dir = log_dir
+        self._workspace = Workspace(workdir, process_name=process_name, log_dir=log_dir)
         self.program_path = find_program(
             self.program, program_path, description=self.description
         )
-        self.deadline = None if timeout is None else time.monotonic() + timeout
-        self.usage = ProgramUsage(
-            wall_seconds=0.0, cpu_seconds=0.0, peak_memory_mib=None
-        )
+        self.timeout = timeout
+
+    @property
+    def workdir(self) -> Path:
+        """The working directory, as an absolute path."""
+        return self._workspace.workdir
+
+    @property
+    def process_name(self) -> str:
+        """The name of the process that the directory belongs to."""
+        return self._workspace.process_name
 
     @property
     def log_path(self) -> Path:
-        """The program's output for the run."""
-        return (self.workdir if self.log_dir is None else self.log_dir) / LOG_NAME
+        """The path of the log file of the run's programs."""
+        return self._workspace.log_path
+
+    @property
+    def usage(self) -> ProgramUsage:
+        """Wall time, CPU time and peak memory of the run's programs so far."""
+        return self._workspace.programs.usage
+
+    @property
+    def cards_dir(self) -> Path:
+        """The directory that holds the cards of a run.
+
+        It is the working directory. A subclass overrides the property when
+        its program keeps the cards in another folder.
+        """
+        return self.workdir
 
     @property
     def artifacts(self) -> list[str]:
-        """The cards and, when it is in the directory, the log.
+        """The files and folders that a run makes in the directory, without the log.
 
-        A subclass adds the rest of what its run makes.
+        Each one is a POSIX path relative to the working directory. The base
+        class lists the card files when the cards are kept in the working
+        directory. A subclass adds everything else that its run makes, and the
+        folder of its cards when it keeps them in another one.
         """
-        log_names = [LOG_NAME] if self.log_dir is None else []
-        return [*super().artifacts, *log_names]
+        if self.cards_dir != self.workdir:
+            return []
+        return [card_class.file_name for card_class in self.card_classes]
+
+    @property
+    def unconfirmed_artifacts(self) -> list[str]:
+        """The artifacts that a run moves aside instead of deleting.
+
+        A run moves them aside even when they have not changed since an
+        earlier run. The base class lists none. A subclass lists an artifact
+        here when nothing in it shows that an earlier run finished making it.
+        """
+        return []
+
+    def card_records(self) -> dict[str, FileRecord]:
+        """Return the record of each card in :attr:`cards_dir`, by the name of the card.
+
+        A record holds the fingerprint of the card's content as the program
+        reads it (:meth:`Card.record_file`). A card whose file does not exist
+        is left out.
+        """
+        return {
+            card_class.card_name: card_class.record_file(path)
+            for card_class in self.card_classes
+            if (path := self.cards_dir / card_class.file_name).is_file()
+        }
+
+    @contextmanager
+    def sealed_run(self) -> Iterator[Path | None]:
+        """Prepare the directory for a run and record what the run makes.
+
+        Use it as a ``with`` block and call the steps of the run inside it
+        (:meth:`Workspace.sealed_run`).
+
+        Yields
+        ------
+        Path or None
+            The folder that holds what was moved out of the run's way
+            (:attr:`Workspace.set_aside_dir`), or ``None`` when nothing was
+            moved.
+        """
+        with self._workspace.sealed_run(
+            self.purpose,
+            self.artifacts,
+            unconfirmed=self.unconfirmed_artifacts,
+            timeout=self.timeout,
+        ):
+            yield self._workspace.set_aside_dir
 
     def run(
         self, command: Sequence[str | os.PathLike[str]], *, failure_message: str
     ) -> ProgramUsage:
-        """Run `command` in the directory, appending its output to the log.
+        """Run `command` in the directory and add its output to the log.
 
-        Parameters
-        ----------
-        command : sequence of str or path-like
-            The program and its arguments.
-        failure_message : str
-            How a failure is described, for example
-            ``"MadGraph failed running launch.mg5"``. The error of the
-            program follows it.
-
-        Returns
-        -------
-        ProgramUsage
-            What this run took. It is also added to `usage`.
-
-        Raises
-        ------
-        ProgramError
-            If the program exits with a failing status or is still active at
-            the deadline.
+        See :meth:`omphjc.programs.ProgramSession.run`.
         """
-        timeout = (
-            None
-            if self.deadline is None
-            else max(self.deadline - time.monotonic(), 0.0)
-        )
-        try:
-            usage = run_program(
-                command,
-                cwd=self.workdir,
-                log_path=self.log_path,
-                timeout=timeout,
-            )
-        except ProgramError as error:
-            raise ProgramError(f"{failure_message}: {error}") from error
-        self.usage = self.usage.combined_with(usage)
-        return usage
+        return self._workspace.programs.run(command, failure_message=failure_message)
 
     def make_error(self, message: str) -> ProgramError:
         """Return an error with `message` and the last lines of the log."""
-        return ProgramError(f"{message}\n{log_tail(self.log_path)}")
+        return self._workspace.programs.make_error(message)

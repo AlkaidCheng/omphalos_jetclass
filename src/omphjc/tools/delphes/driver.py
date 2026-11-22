@@ -203,7 +203,7 @@ def simulate_events(
 
 
 class SimulationWorkspace(ProgramWorkspace):
-    """The working directory of one process's ``DelphesROOT`` runs, and the steps of a run.
+    """Runs the Delphes detector simulation for one process.
 
     :func:`simulate_events` drives a workspace from start to finish. A caller
     that needs the steps one at a time constructs a workspace and opens a
@@ -221,16 +221,16 @@ class SimulationWorkspace(ProgramWorkspace):
         Path of Delphes's ``DelphesROOT``. By default the program is looked
         up on PATH.
     timeout : float or None, optional
-        Seconds the run may take, counted from the creation of the workspace.
-        ``None`` sets no limit.
+        The time limit of the run's programs, in seconds from the start of
+        :meth:`sealed_run`. ``None`` sets no limit.
     log_dir : Path or None, optional
-        See the `log_dir` parameter of
-        :class:`~omphjc.workspace.ProgramWorkspace`.
+        See the `log_dir` parameter of :class:`~omphjc.workspace.Workspace`.
 
     Raises
     ------
     ValueError
-        If `timeout` is not positive or `workdir` is a filesystem root.
+        If `workdir` is not a valid working directory
+        (:class:`~omphjc.workspace.Workspace`).
     FileNotFoundError
         If `delphes_root_path` is not a file, or none is given and PATH has no
         ``DelphesROOT``.
@@ -238,12 +238,11 @@ class SimulationWorkspace(ProgramWorkspace):
 
     purpose = "delphes-simulation"
     card_classes = (DetectorCard,)
-    # Delphes's program that runs a card on the generator record of a
-    # Delphes ROOT file.
+
     program = "DelphesROOT"
     description = f"Delphes's {program}"
+
     output_file_name: ClassVar[str] = "delphes.root"
-    """The file of the simulated events in the directory."""
 
     def __init__(
         self,
@@ -287,7 +286,7 @@ class SimulationWorkspace(ProgramWorkspace):
         ------
         ProgramError
             If ``DelphesROOT`` exits with a failing status or is still running
-            at the deadline.
+            at the time limit.
         """
         self.run(
             [
