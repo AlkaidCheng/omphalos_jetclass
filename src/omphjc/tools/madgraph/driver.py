@@ -157,7 +157,7 @@ def generate_events(
     n_cores: int | None = None,
     timeout: float | None = None,
     overwrite: bool = False,
-    log_dir: Path | None = None,
+    log_path: Path | None = None,
     mg5_path: Path | None = None,
 ) -> MadGraphRun:
     """Generate parton-level events for `spec` with MadGraph.
@@ -198,10 +198,10 @@ def generate_events(
         since. Otherwise it is moved aside (see `MadGraphRun.set_aside`); this
         happens, for example, when the earlier run was killed before it could
         seal the directory.
-    log_dir : Path or None, optional
-        An existing directory to write the log in. By default the log is
-        written in `workdir`, and a later run replaces it. A log written in
-        another directory is not replaced.
+    log_path : Path or None, optional
+        The file to write the log to, in a directory that exists. A later
+        run leaves it in place. By default the log is ``run.log`` in
+        `workdir`, and a later run replaces it.
     mg5_path : Path or None, optional
         Path of MadGraph's ``bin/mg5_aMC``. By default the program is looked
         up on PATH.
@@ -248,7 +248,7 @@ def generate_events(
         workdir,
         mg5_path=mg5_path,
         timeout=timeout,
-        log_dir=log_dir,
+        log_path=log_path,
     )
     if not overwrite:
         require_unoccupied(workspace.process_dir, what="Process directory")
@@ -310,8 +310,8 @@ class MadGraphWorkspace(ProgramWorkspace):
     timeout : float or None, optional
         The time limit of the run's programs, in seconds from the start of
         :meth:`sealed_run`. ``None`` sets no limit.
-    log_dir : Path or None, optional
-        See the `log_dir` parameter of :class:`~omphjc.workspace.Workspace`.
+    log_path : Path or None, optional
+        See the `log_path` parameter of :class:`~omphjc.workspace.Workspace`.
 
     Attributes
     ----------
@@ -350,10 +350,14 @@ class MadGraphWorkspace(ProgramWorkspace):
         *,
         mg5_path: Path | None = None,
         timeout: float | None = None,
-        log_dir: Path | None = None,
+        log_path: Path | None = None,
     ) -> None:
         super().__init__(
-            spec.name, workdir, program_path=mg5_path, timeout=timeout, log_dir=log_dir
+            spec.name,
+            workdir,
+            program_path=mg5_path,
+            timeout=timeout,
+            log_path=log_path,
         )
         self.spec = spec
         if any(character.isspace() for character in str(self.workdir)):

@@ -20,7 +20,7 @@ from omphjc.safe_paths import working_directory
 from omphjc.stamps import clear_artifacts, read_stamp, seal, write_stamp
 
 LOG_NAME = "run.log"
-"""The file name of the log of every run."""
+"""The file name of the log of a run that is given no other place for it."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -74,8 +74,8 @@ class Workspace:
 
     A run happens inside ``with workspace.sealed_run(...):``. In the block,
     the programs of the run (:attr:`programs`) run in the directory and write
-    their output to one log file, ``run.log``. A workspace is used for one
-    run, and creating it changes nothing on disk.
+    their output to one log file. A workspace is used for one run, and
+    creating it changes nothing on disk.
 
     A later run can use the same directory again. When it starts, its
     workspace clears the paths that the run is about to write:
@@ -100,19 +100,22 @@ class Workspace:
     process_name : str
         The name of the process that the directory belongs to. It is written
         in the stamp.
-    log_dir : Path or None, optional
-        An existing directory to keep the log in. By default the log is kept
-        in `workdir`, where a later run replaces it. A log in another
-        directory is left in place.
+    log_path : Path or None, optional
+        The file that the programs of the run write their output to. Its
+        directory must exist, and a later run leaves the file in place. By
+        default the log is ``run.log`` in `workdir`, where a later run
+        replaces it.
 
     Attributes
     ----------
     workdir : Path
         The working directory, as an absolute path.
     process_name : str
+    log_path : Path
+        The log file of the run's programs.
     programs : ProgramSession
         Runs the programs of the run in `workdir` and writes their output to
-        :attr:`log_path`.
+        `log_path`.
     set_aside_dir : Path or None
         The folder under ``omphjc-set-aside/`` that holds what
         :meth:`sealed_run` found at the run's paths and did not delete. It
@@ -129,19 +132,15 @@ class Workspace:
         workdir: Path,
         *,
         process_name: str,
-        log_dir: Path | None = None,
+        log_path: Path | None = None,
     ) -> None:
         self.workdir = working_directory(workdir)
         self.process_name = process_name
-        self.log_dir = log_dir
+        self.log_path = self.workdir / LOG_NAME if log_path is None else log_path
         self.programs = ProgramSession(self.workdir, self.log_path)
         self.set_aside_dir: Path | None = None
+        self._log_is_artifact = log_path is None
         self._entered = False
-
-    @property
-    def log_path(self) -> Path:
-        """The path of the log file of the run's programs."""
-        return (self.workdir if self.log_dir is None else self.log_dir) / LOG_NAME
 
     @contextmanager
     def sealed_run(
@@ -217,7 +216,7 @@ class Workspace:
             self._entered = True
             artifacts = [
                 *artifacts,
-                *([LOG_NAME] if self.log_dir is None else []),
+                *([LOG_NAME] if self._log_is_artifact else []),
             ]
             details = {"process": self.process_name}
             self.set_aside_dir = clear_artifacts(
@@ -258,8 +257,8 @@ class ProgramWorkspace:
     timeout : float or None
         The time limit of the run's programs, in seconds from the start of
         :meth:`sealed_run`. ``None`` sets no limit.
-    log_dir : Path or None, optional
-        See the `log_dir` parameter of :class:`Workspace`.
+    log_path : Path or None, optional
+        See the `log_path` parameter of :class:`Workspace`.
 
     Attributes
     ----------
@@ -295,9 +294,11 @@ class ProgramWorkspace:
         *,
         program_path: Path | None,
         timeout: float | None,
-        log_dir: Path | None = None,
+        log_path: Path | None = None,
     ) -> None:
-        self._workspace = Workspace(workdir, process_name=process_name, log_dir=log_dir)
+        self._workspace = Workspace(
+            workdir, process_name=process_name, log_path=log_path
+        )
         self.program_path = find_program(
             self.program, program_path, description=self.description
         )

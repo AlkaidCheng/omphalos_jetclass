@@ -71,7 +71,7 @@ def generate(
     stage = GenerateStage()
     task_dir = job.task_dir(stage)
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         run = generate_events(
             job.spec,
             workdir=task_dir,
@@ -80,7 +80,7 @@ def generate(
             n_cores=n_cores,
             timeout=timeout,
             overwrite=overwrite,
-            log_dir=run_dir,
+            log_path=log_path,
             mg5_path=mg5_path,
         )
         return TaskOutcome(

@@ -76,7 +76,7 @@ def shower(
     task_dir = job.task_dir(stage)
     pythia_overrides = dict(overrides or {})
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         # This module loads the array libraries, so it is imported here and
         # not when a command starts.
         from omphjc.events.delphes_root import DelphesROOTFile
@@ -90,7 +90,7 @@ def shower(
             overrides=pythia_overrides,
             timeout=timeout,
             overwrite=overwrite,
-            log_dir=run_dir,
+            log_path=log_path,
             delphes_pythia8_path=delphes_pythia8_path,
         )
         statistics = run.statistics

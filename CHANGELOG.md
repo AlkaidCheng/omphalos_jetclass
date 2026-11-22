@@ -217,6 +217,9 @@
   programs are `Workspace.programs`. (#89)
 - `Stage` and the class of each stage are in `omphjc.stages`, in place of
   `omphjc.jobs`. (#90)
+- The log of each run of a stage is `logs/<run_id>.log` in the stage's
+  directory, in place of `runs/<run_id>/run.log`, and a run in `task.json`
+  has no `log`. (#91)
 
 ### Fixed
 

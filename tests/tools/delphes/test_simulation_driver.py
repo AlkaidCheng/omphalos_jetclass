@@ -47,26 +47,27 @@ def test_a_simulation_runs_in_its_own_working_directory(
     assert set(stamp.artifacts) == ARTIFACTS
 
 
-def test_a_log_directory_keeps_the_log_out_of_the_runs_artifacts(
+def test_a_log_given_a_place_stays_out_of_the_runs_artifacts(
     specs: Mapping[str, ProcessSpec], delphes_root_path: Path, tmp_path: Path
 ) -> None:
     events_path = _write_events_path(tmp_path / "particles.root")
     workdir = tmp_path / "simulate"
-    log_dirs = [tmp_path / "runs" / "first", tmp_path / "runs" / "second"]
-    for log_dir, overwrite in zip(log_dirs, (False, True), strict=True):
-        log_dir.mkdir(parents=True)
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    log_paths = [logs_dir / "first.log", logs_dir / "second.log"]
+    for log_path, overwrite in zip(log_paths, (False, True), strict=True):
         run = simulate_events(
             specs["HToBB"],
             events_path=events_path,
             workdir=workdir,
             seed=7,
             overwrite=overwrite,
-            log_dir=log_dir,
+            log_path=log_path,
             delphes_root_path=delphes_root_path,
         )
-        assert run.log_path == log_dir / "run.log"
+        assert run.log_path == log_path
     assert not (workdir / "run.log").exists()
-    assert all((log_dir / "run.log").is_file() for log_dir in log_dirs)
+    assert all(log_path.is_file() for log_path in log_paths)
     stamp = read_stamp(workdir)
     assert stamp is not None and set(stamp.artifacts) == ARTIFACTS - {"run.log"}
 

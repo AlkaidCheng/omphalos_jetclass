@@ -51,7 +51,7 @@ class DetectorSimulator(Protocol):
         workdir: Path,
         seed: int,
         overwrite: bool,
-        log_dir: Path,
+        log_path: Path,
     ) -> TaskOutcome:
         """Simulate the detector on the events in `source`.
 
@@ -65,8 +65,8 @@ class DetectorSimulator(Protocol):
             The seed of the job.
         overwrite : bool
             Whether to replace what an earlier run left in `workdir`.
-        log_dir : Path
-            The directory of the run, where the program writes its log.
+        log_path : Path
+            The file that the program writes its log to.
 
         Returns
         -------
@@ -129,13 +129,13 @@ def simulate(
         tool_name=simulator.name,
     )
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         return simulator.simulate(
             EventSource(events.path, events.format),
             workdir=workdir,
             seed=job.seed,
             overwrite=overwrite,
-            log_dir=run_dir,
+            log_path=log_path,
         )
 
     return job.run_task(

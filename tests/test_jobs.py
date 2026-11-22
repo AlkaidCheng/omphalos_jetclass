@@ -39,6 +39,7 @@ from omphjc.jobs import (
     simulate,
     task_parameters,
 )
+from omphjc.jobs.job import TaskBody
 from omphjc.processes import ProcessSpec, get_process
 from omphjc.programs import ProgramError, available_cores
 from omphjc.runs import EVENTS_OUTPUT, RunResult
@@ -49,7 +50,6 @@ from omphjc.tools.delphes.card import DetectorCard, ParticlesCard
 from omphjc.tools.madgraph.lhe_file import LHEFile
 from omphjc.tools.madgraph.proc_card import ProcCard
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT, PythiaCmnd
-from omphjc.workspace import LOG_NAME
 
 RUN_ID = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]{8}")
 
@@ -172,7 +172,6 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
             "host": "h",
             "finished": "u",
             "usage": {},
-            "log": None,
             "set_aside": None,
             "error": None,
         }
@@ -348,7 +347,7 @@ def test_a_changed_or_deleted_card_leaves_the_task_done(
     job = Job(specs["HToBB"], tmp_path, 1)
     card_path = job.task_dir(STAGE_X) / "card.dat"
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         outcome = _make_output(job)
         card_path.write_text("as run")
         cards = {"card": FileRecord(card_path, len("as run"), None)}
@@ -368,7 +367,7 @@ def test_a_stage_runs_once_and_its_result_is_kept(
 ) -> None:
     calls: list[bool] = []
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         calls.append(overwrite)
         return _make_output(job)
 
@@ -382,11 +381,12 @@ def test_a_stage_runs_once_and_its_result_is_kept(
         outputs={"out": FileRecord(job.root_dir / "x" / "out.txt", 4, None)},
         metadata={"n": 1},
     )
-    assert record.latest_run.log == f"x/runs/{record.latest_run.run_id}/run.log"
     assert job.task_record(STAGE_X) == record
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.task(STAGE_X) == Task("x", TaskStatus.DONE, record=record)
+    assert job.task(STAGE_X) == Task(
+        "x", job.task_dir(STAGE_X), TaskStatus.DONE, record=record
+    )
     assert job.run_task(STAGE_X, {"events": 10}, body) == record
     assert calls == [False]
 
@@ -396,7 +396,7 @@ def test_other_parameters_need_force_and_force_replaces(
 ) -> None:
     calls: list[bool] = []
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         calls.append(overwrite)
         return _make_output(job)
 
@@ -442,7 +442,7 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
 ) -> None:
     calls: list[bool] = []
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         calls.append(overwrite)
         outcome = _make_output(job)
         return replace(
@@ -450,13 +450,17 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
         )
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.task(STAGE_X) == Task("x", TaskStatus.NOT_DONE)
+    assert job.task(STAGE_X) == Task("x", job.task_dir(STAGE_X), TaskStatus.NOT_DONE)
     record = job.run_task(STAGE_X, {}, body)
     output_path = job.root_dir / "x" / "out.txt"
     output_path.unlink()
     job = Job(specs["HToBB"], tmp_path, 1)
     assert job.task(STAGE_X) == Task(
-        "x", TaskStatus.MISSING_OUTPUT, f"{output_path} is missing", record
+        "x",
+        job.task_dir(STAGE_X),
+        TaskStatus.MISSING_OUTPUT,
+        f"{output_path} is missing",
+        record,
     )
     rerun = job.run_task(STAGE_X, {}, body)
     assert calls == [False, True]
@@ -466,7 +470,9 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
     running = TaskRecord({}, (_run("running"),))
     running.write(job.task_record_path(STAGE_X), root_dir=job.root_dir)
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert job.task(STAGE_X) == Task("x", TaskStatus.NOT_DONE, record=running)
+    assert job.task(STAGE_X) == Task(
+        "x", job.task_dir(STAGE_X), TaskStatus.NOT_DONE, record=running
+    )
     after_kill = job.run_task(STAGE_X, {}, body)
     assert [run.status for run in after_kill.runs] == [
         "interrupted",
@@ -483,7 +489,7 @@ def test_require_done_returns_the_record_or_says_which_stage_to_run(
     not_done = "The x stage of .* has not run to completion; run omphjc x first"
     with pytest.raises(ValueError, match=not_done):
         job.require_done(STAGE_X)
-    record = job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+    record = job.run_task(STAGE_X, {}, lambda overwrite, log_path: _make_output(job))
     assert job.require_done(STAGE_X) == record
     (job.root_dir / "x" / "out.txt").unlink()
     with pytest.raises(ValueError, match=not_done):
@@ -495,7 +501,7 @@ def test_a_stage_whose_output_has_another_size_is_refused_unless_forced(
 ) -> None:
     calls: list[bool] = []
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         calls.append(overwrite)
         return _make_output(job)
 
@@ -505,7 +511,9 @@ def test_a_stage_whose_output_has_another_size_is_refused_unless_forced(
     output_path.write_text("made and changed")
     job = Job(specs["HToBB"], tmp_path, 1)
     detail = f"{output_path} holds 16 bytes, not the 4 the x stage recorded"
-    assert job.task(STAGE_X) == Task("x", TaskStatus.CHANGED, detail, record)
+    assert job.task(STAGE_X) == Task(
+        "x", job.task_dir(STAGE_X), TaskStatus.CHANGED, detail, record
+    )
     refused = re.escape(f"{detail}; run omphjc x with --force to regenerate the file")
     with pytest.raises(ValueError, match=refused):
         job.require_done(STAGE_X)
@@ -524,7 +532,7 @@ def test_an_output_of_another_size_is_reported_before_a_missing_one(
     first_path = job.task_dir(STAGE_X) / "first.txt"
     second_path = job.task_dir(STAGE_X) / "second.txt"
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         job.task_dir(STAGE_X).mkdir(parents=True, exist_ok=True)
         outputs = {}
         for name, path in (("first", first_path), ("second", second_path)):
@@ -537,6 +545,7 @@ def test_an_output_of_another_size_is_reported_before_a_missing_one(
     second_path.write_text("made and changed")
     assert job.task(STAGE_X) == Task(
         "x",
+        job.task_dir(STAGE_X),
         TaskStatus.CHANGED,
         f"{second_path} holds 16 bytes, not the 4 the x stage recorded",
         record,
@@ -551,7 +560,7 @@ def test_require_events_returns_the_events_a_done_stage_made(
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(ValueError, match="has not run to completion"):
         job.require_events(STAGE_X)
-    job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+    job.run_task(STAGE_X, {}, lambda overwrite, log_path: _make_output(job))
     with pytest.raises(ValueError, match="The x stage of .* made no event file"):
         job.require_events(STAGE_X)
 
@@ -565,7 +574,7 @@ def test_require_events_returns_the_events_a_done_stage_made(
     job.run_task(
         STAGE_X,
         {},
-        lambda overwrite, run_dir: TaskOutcome(
+        lambda overwrite, log_path: TaskOutcome(
             RunResult(outputs={EVENTS_OUTPUT: events})
         ),
         force=True,
@@ -576,7 +585,7 @@ def test_require_events_returns_the_events_a_done_stage_made(
 def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
-    def failing(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def failing(overwrite: bool, log_path: Path) -> TaskOutcome:
         raise RuntimeError("boom")
 
     job = Job(specs["HToBB"], tmp_path, 1)
@@ -592,7 +601,7 @@ def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
 
     calls: list[bool] = []
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         calls.append(overwrite)
         return _make_output(job)
 
@@ -609,7 +618,7 @@ def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
     assert len(other.runs) == 1
 
 
-def _fail(overwrite: bool, run_dir: Path) -> TaskOutcome:
+def _fail(overwrite: bool, log_path: Path) -> TaskOutcome:
     raise RuntimeError("boom")
 
 
@@ -619,7 +628,7 @@ def test_each_run_has_an_id_that_begins_with_its_start_time(
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(RuntimeError, match="boom"):
         job.run_task(STAGE_X, {}, _fail)
-    record = job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+    record = job.run_task(STAGE_X, {}, lambda overwrite, log_path: _make_output(job))
     first, second = record.runs
     assert first.run_id != second.run_id
     for run in record.runs:
@@ -633,72 +642,128 @@ def test_a_run_records_the_host_it_ran_on(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    record = job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+    record = job.run_task(STAGE_X, {}, lambda overwrite, log_path: _make_output(job))
     assert record.latest_run.host == socket.gethostname()
 
 
-def test_a_run_directory_stays_when_the_task_runs_again(
-    specs: Mapping[str, ProcessSpec], tmp_path: Path
-) -> None:
-    def write_log_then_stop(overwrite: bool, run_dir: Path) -> TaskOutcome:
-        (run_dir / "x.log").write_text("first run")
-        raise TerminationError("terminated by signal 15")
+def _write_log_then_stop(overwrite: bool, log_path: Path) -> TaskOutcome:
+    log_path.write_text("stopped")
+    raise TerminationError("terminated by signal 15")
 
-    job = Job(specs["HToBB"], tmp_path, 1)
-    with pytest.raises(TerminationError):
-        job.run_task(STAGE_X, {}, write_log_then_stop)
-    run_dirs: list[Path] = []
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
-        run_dirs.append(run_dir)
+def _write_log(job: Job) -> TaskBody:
+    """Return a body that writes its log and makes the output of `job`."""
+
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
+        log_path.write_text("finished")
         return _make_output(job)
 
-    first, second = job.run_task(STAGE_X, {}, body).runs
-    assert run_dirs == [job.run_dir(STAGE_X, second.run_id)]
-    assert (job.run_dir(STAGE_X, first.run_id) / "x.log").read_text() == "first run"
+    return body
 
 
-def test_a_record_names_the_log_of_a_run_from_its_start(
+def test_each_run_of_a_task_has_a_log_named_by_its_run_id(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    logs: list[str | None] = []
-
-    def read_record_then_fail(overwrite: bool, run_dir: Path) -> TaskOutcome:
-        record = job.task_record(STAGE_X)
-        assert record is not None
-        logs.append(record.latest_run.log)
-        raise RuntimeError("boom")
-
-    with pytest.raises(RuntimeError, match="boom"):
-        job.run_task(STAGE_X, {}, read_record_then_fail)
-    record = job.task_record(STAGE_X)
-    assert record is not None
-    failed_run = record.latest_run
-    assert failed_run.status == "failed"
-    assert logs == [failed_run.log] == [f"x/runs/{failed_run.run_id}/run.log"]
+    with pytest.raises(TerminationError):
+        job.run_task(STAGE_X, {}, _write_log_then_stop)
+    first, second = job.run_task(STAGE_X, {}, _write_log(job)).runs
+    logs_dir = job.task_dir(STAGE_X) / "logs"
+    assert job.task(STAGE_X).log_path(first.run_id) == logs_dir / f"{first.run_id}.log"
+    assert job.task(STAGE_X).log_path(first.run_id).read_text() == "stopped"
+    assert job.task(STAGE_X).log_path(second.run_id).read_text() == "finished"
+    assert {path.name for path in logs_dir.iterdir()} == {
+        f"{first.run_id}.log",
+        f"{second.run_id}.log",
+    }
+    assert job.task(STAGE_X).latest_log == logs_dir / f"{second.run_id}.log"
 
 
-def test_a_run_whose_directory_cannot_be_made_is_recorded_as_failed(
+def test_a_task_is_loaded_from_its_record_file(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    record = job.run_task(STAGE_X, {}, _write_log(job))
+    task = Task.read(job.task_record_path(STAGE_X))
+    assert task == job.task(STAGE_X)
+    assert (task.name, task.directory) == ("x", job.task_dir(STAGE_X))
+    assert (task.status, task.record) == (TaskStatus.DONE, record)
+    assert task.latest_log.read_text() == "finished"
+    with pytest.raises(FileNotFoundError):
+        Task.read(job.task_dir(STAGE_Y) / "task.json")
+
+
+def test_a_task_without_a_record_has_no_latest_log(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    task = Job(specs["HToBB"], tmp_path, 1).task(STAGE_X)
+    assert task.record is None
+    with pytest.raises(ValueError, match="has no run"):
+        _ = task.latest_log
+
+
+@pytest.mark.parametrize(("parameters", "force"), [({"events": 20}, False), ({}, True)])
+def test_a_new_record_removes_the_logs_of_the_runs_it_drops(
+    specs: Mapping[str, ProcessSpec],
+    tmp_path: Path,
+    parameters: dict[str, Any],
+    force: bool,
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    with pytest.raises(TerminationError):
+        job.run_task(STAGE_X, {}, _write_log_then_stop)
+    logs_dir = job.task_dir(STAGE_X) / "logs"
+    (logs_dir / "notes.txt").write_text("mine")
+    record = job.run_task(STAGE_X, parameters, _write_log(job), force=force)
+    assert len(record.runs) == 1
+    assert sorted(path.name for path in logs_dir.iterdir()) == [
+        f"{record.latest_run.run_id}.log",
+        "notes.txt",
+    ]
+
+
+def test_a_dropped_run_whose_id_is_not_a_plain_name_is_refused(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    outside_path = tmp_path / "outside.log"
+    outside_path.write_text("not a log of the task")
+    record = TaskRecord(
+        {},
+        (
+            TaskRun(
+                run_id="../../../../outside", status="failed", started="t", host="h"
+            ),
+        ),
+    )
+    job.task_dir(STAGE_X).mkdir(parents=True)
+    record.write(job.task_record_path(STAGE_X), root_dir=job.root_dir)
+    with pytest.raises(ValueError, match="Path component"):
+        job.run_task(STAGE_X, {"events": 20}, _write_log(job))
+    assert outside_path.read_text() == "not a log of the task"
+    assert job.task_record(STAGE_X) == record
+
+
+def test_a_run_whose_log_directory_cannot_be_made_is_recorded_as_failed(
     specs: Mapping[str, ProcessSpec],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     make_directory = Path.mkdir
 
-    def refuse_run_directories(path: Path, *args: Any, **kwargs: Any) -> None:
-        if path.parent.name == "runs":
-            raise PermissionError("no run directory")
+    def refuse_log_directories(path: Path, *args: Any, **kwargs: Any) -> None:
+        if path.name == "logs":
+            raise PermissionError("no log directory")
         make_directory(path, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "mkdir", refuse_run_directories)
+    monkeypatch.setattr(Path, "mkdir", refuse_log_directories)
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(PermissionError):
-        job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+        job.run_task(STAGE_X, {}, lambda overwrite, log_path: _make_output(job))
     record = job.task_record(STAGE_X)
     assert record is not None
     assert record.latest_run.status == "failed"
-    assert record.latest_run.error == "no run directory"
+    assert record.latest_run.error == "no log directory"
 
 
 @pytest.mark.parametrize(
@@ -715,7 +780,7 @@ def test_a_run_that_a_signal_ended_is_recorded_as_interrupted(
     error: BaseException,
     recorded_error: str,
 ) -> None:
-    def stop(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def stop(overwrite: bool, log_path: Path) -> TaskOutcome:
         raise error
 
     job = Job(specs["HToBB"], tmp_path, 1)
@@ -727,14 +792,14 @@ def test_a_run_that_a_signal_ended_is_recorded_as_interrupted(
     assert interrupted_run.status == "interrupted"
     assert interrupted_run.error == recorded_error
     assert interrupted_run.finished is not None
-    rerun = job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+    rerun = job.run_task(STAGE_X, {}, lambda overwrite, log_path: _make_output(job))
     assert [run.status for run in rerun.runs] == ["interrupted", "done"]
 
 
 def test_a_failure_without_a_message_is_recorded_by_its_type(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
-    def fail_without_message(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def fail_without_message(overwrite: bool, log_path: Path) -> TaskOutcome:
         raise AssertionError
 
     job = Job(specs["HToBB"], tmp_path, 1)
@@ -754,8 +819,8 @@ def test_a_run_replaced_by_a_newer_run_leaves_that_runs_record(
     replaced_run_ids: list[str] = []
     newer_records: list[TaskRecord] = []
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
-        replaced_run_ids.append(run_dir.name)
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
+        replaced_run_ids.append(log_path.stem)
         newer_record = TaskRecord.running({"events": 20})
         newer_record.write(job.task_record_path(STAGE_X), root_dir=job.root_dir)
         newer_records.append(newer_record)
@@ -782,7 +847,7 @@ def test_a_run_whose_record_was_deleted_records_its_end(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
 
-    def delete_record_then_finish(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def delete_record_then_finish(overwrite: bool, log_path: Path) -> TaskOutcome:
         job.task_record_path(STAGE_X).unlink()
         return _make_output(job)
 
@@ -797,7 +862,7 @@ CHANGED_INPUT_PARAMETERS = {"events": 10, "input_fingerprint": "v1:changed"}
 
 def _body(job: Job) -> Callable[[bool, Path], TaskOutcome]:
     """Return a body that makes the output of task ``x`` of `job`."""
-    return lambda overwrite, run_dir: _make_output(job)
+    return lambda overwrite, log_path: _make_output(job)
 
 
 def test_an_accepted_input_keeps_a_done_task_without_a_run(
@@ -920,10 +985,10 @@ def test_two_jobs_opened_on_one_directory_keep_the_records_of_both_tasks(
     first = Job(specs["HToBB"], tmp_path, 1)
     second = Job(specs["HToBB"], tmp_path, 1)
     x_record = first.run_task(
-        STAGE_X, {}, lambda overwrite, run_dir: _make_output(first)
+        STAGE_X, {}, lambda overwrite, log_path: _make_output(first)
     )
     y_record = second.run_task(
-        STAGE_Y, {}, lambda overwrite, run_dir: TaskOutcome(RunResult())
+        STAGE_Y, {}, lambda overwrite, log_path: TaskOutcome(RunResult())
     )
     job = Job(specs["HToBB"], tmp_path, 1)
     assert job.task_names() == ["x", "y"]
@@ -935,11 +1000,11 @@ def test_two_jobs_opened_on_one_directory_keep_the_records_of_both_tasks(
 def test_the_manifest_lists_every_task_and_is_written_again_when_deleted(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
-    def failing(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def failing(overwrite: bool, log_path: Path) -> TaskOutcome:
         raise RuntimeError("boom")
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    x_record = job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+    x_record = job.run_task(STAGE_X, {}, lambda overwrite, log_path: _make_output(job))
     with pytest.raises(RuntimeError, match="boom"):
         job.run_task(STAGE_Y, {}, failing)
     y_record = job.task_record(STAGE_Y)
@@ -959,12 +1024,12 @@ def test_the_manifest_lists_every_task_and_is_written_again_when_deleted(
 
     job.manifest_path.unlink()
     assert (
-        job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+        job.run_task(STAGE_X, {}, lambda overwrite, log_path: _make_output(job))
         == x_record
     )
     assert not job.manifest_path.exists()
     z_record = job.run_task(
-        STAGE_Z, {}, lambda overwrite, run_dir: TaskOutcome(RunResult())
+        STAGE_Z, {}, lambda overwrite, log_path: TaskOutcome(RunResult())
     )
     entry = TaskSummary(
         "done", z_record.latest_run.run_id, 1, job.task_record_path(STAGE_Z)
@@ -978,7 +1043,7 @@ def test_a_task_is_found_by_the_record_in_its_own_directory(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+    job.run_task(STAGE_X, {}, lambda overwrite, log_path: _make_output(job))
     record_path = job.task_record_path(STAGE_X)
     deeper_dir = job.task_dir(STAGE_X) / "deeper"
     deeper_dir.mkdir()
@@ -993,7 +1058,7 @@ def test_a_task_record_that_cannot_be_read_stops_every_task_of_the_job(
 ) -> None:
     calls: list[bool] = []
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         calls.append(overwrite)
         return _make_output(job)
 
@@ -1016,7 +1081,7 @@ def test_the_first_task_writes_the_identity_of_the_job(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+    job.run_task(STAGE_X, {}, lambda overwrite, log_path: _make_output(job))
     assert json.loads(job.identity_path.read_text()) == {
         "schema": 1,
         "process": "HToBB",
@@ -1036,7 +1101,9 @@ def test_a_later_task_keeps_the_identity_file(
     )
     created.create(job.identity_path)
     later = Job(specs["HToBB"], tmp_path, 1)
-    record = later.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(later))
+    record = later.run_task(
+        STAGE_X, {}, lambda overwrite, log_path: _make_output(later)
+    )
     assert record.is_done
     assert JobIdentity.read(job.identity_path).omphjc_version == "0.0.1"
 
@@ -1046,7 +1113,7 @@ def test_a_directory_of_another_job_is_refused(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     shifted = Job(replace(specs["HToBB"], seed_offset=20_000_000), tmp_path, 1)
-    job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+    job.run_task(STAGE_X, {}, lambda overwrite, log_path: _make_output(job))
     refusal = (
         "The current configuration is inconsistent with that of the existing"
         " job in .*job_1 \\(job.json\\):"
@@ -1087,7 +1154,7 @@ def test_a_job_directory_removed_during_a_task_is_not_recreated(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
 
-    def remove_then_finish(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def remove_then_finish(overwrite: bool, log_path: Path) -> TaskOutcome:
         shutil.rmtree(job.root_dir)
         return _make_output(job)
 
@@ -1098,7 +1165,7 @@ def test_a_job_directory_removed_during_a_task_is_not_recreated(
     assert not job.identity_path.exists()
     assert not job.manifest_path.exists()
 
-    def remove_then_fail(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def remove_then_fail(overwrite: bool, log_path: Path) -> TaskOutcome:
         shutil.rmtree(job.root_dir)
         raise RuntimeError("the program stopped")
 
@@ -1121,7 +1188,7 @@ def test_an_identity_file_that_cannot_be_read_is_refused(
         Job(specs["HToBB"], tmp_path, 1)
     job.identity_path.write_text("not json")
     with pytest.raises(ValueError, match="job.json is not valid JSON"):
-        job.run_task(STAGE_X, {}, lambda overwrite, run_dir: _make_output(job))
+        job.run_task(STAGE_X, {}, lambda overwrite, log_path: _make_output(job))
 
 
 def test_generate_records_what_madgraph_made(
@@ -1154,7 +1221,7 @@ def test_generate_records_what_madgraph_made(
             n_events=10000,
         )
     }
-    assert record.latest_run.log == f"generate/runs/{record.latest_run.run_id}/run.log"
+    assert job.task(GenerateStage()).log_path(record.latest_run.run_id).is_file()
     card = job.root_dir / "generate" / "cards" / "proc_card_mg5.dat"
     assert card.is_file()
     assert record.cards["proc_card"] == ProcCard.record_file(card)
@@ -1184,14 +1251,14 @@ def test_generate_keeps_a_finished_run_unless_forced(
     specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     first = generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
-    runs_dir = tmp_path / "HToBB" / "job_1" / "generate" / "runs"
-    first_run_id = first.latest_run.run_id
-    assert [path.name for path in runs_dir.iterdir()] == [first_run_id]
+    logs_dir = tmp_path / "HToBB" / "job_1" / "generate" / "logs"
+    first_log = f"{first.latest_run.run_id}.log"
+    assert [path.name for path in logs_dir.iterdir()] == [first_log]
     assert (
         generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
         == first
     )
-    assert [path.name for path in runs_dir.iterdir()] == [first_run_id]
+    assert [path.name for path in logs_dir.iterdir()] == [first_log]
     with pytest.raises(ValueError, match="events: expected 10, got 20"):
         generate(Job(specs["HToBB"], tmp_path, 1), n_events=20, mg5_path=mg5_path)
     shifted = replace(specs["HToBB"], seed_offset=20_000_000)
@@ -1203,9 +1270,9 @@ def test_generate_keeps_a_finished_run_unless_forced(
     assert again.is_done
     assert again.parameters == {"events": 20, "seed": 10000001}
     assert len(again.runs) == 1
-    run_ids = sorted([first_run_id, again.latest_run.run_id])
-    assert sorted(path.name for path in runs_dir.iterdir()) == run_ids
-    assert (runs_dir / first_run_id / "run.log").is_file()
+    assert [path.name for path in logs_dir.iterdir()] == [
+        f"{again.latest_run.run_id}.log"
+    ]
 
 
 def test_a_failed_madgraph_run_is_recorded_and_retried(
@@ -1230,11 +1297,9 @@ def test_a_failed_madgraph_run_is_recorded_and_retried(
     assert done.is_done
     failed_run, done_run = done.runs
     assert failed_run.run_id != done_run.run_id
-    runs_dir = tmp_path / "HToBB" / "job_1" / "generate" / "runs"
+    logs_dir = tmp_path / "HToBB" / "job_1" / "generate" / "logs"
     for run in done.runs:
-        assert (runs_dir / run.run_id / "run.log").is_file()
-    for run in done.runs:
-        assert run.log == f"generate/runs/{run.run_id}/run.log"
+        assert (logs_dir / f"{run.run_id}.log").is_file()
 
 
 def test_shower_needs_a_finished_madgraph_stage(
@@ -1288,7 +1353,7 @@ def test_shower_records_what_it_made_and_keeps_it(
             n_events=1,
         )
     }
-    assert record.latest_run.log == f"shower/runs/{record.latest_run.run_id}/run.log"
+    assert job.task(ShowerStage()).log_path(record.latest_run.run_id).is_file()
     cmnd = (job.root_dir / "shower" / "pythia.cmnd").read_text()
     assert "Random:seed = 10000001" in cmnd and "Main:numberOfEvents = 10000" in cmnd
     card = (job.root_dir / "shower" / "particles_card.tcl").read_text()
@@ -1347,7 +1412,7 @@ def test_a_stage_records_the_folder_its_run_set_aside(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         aside = job.task_dir(STAGE_X) / "omphjc-set-aside" / "20260101T000000Z-abc"
         aside.mkdir(parents=True)
         return replace(_make_output(job), set_aside_dir=aside)
@@ -1404,12 +1469,12 @@ class FakeSimulator:
         workdir: Path,
         seed: int,
         overwrite: bool,
-        log_dir: Path,
+        log_path: Path,
     ) -> TaskOutcome:
         workdir.mkdir(parents=True, exist_ok=True)
         output_path = workdir / "simulated.txt"
         output_path.write_text(f"{source.path.name} {seed}")
-        (log_dir / LOG_NAME).write_text("simulated")
+        log_path.write_text("simulated")
         output = FileRecord(output_path, output_path.stat().st_size, None)
         return TaskOutcome(
             RunResult(
@@ -1423,7 +1488,7 @@ def _record_showered_events(job: Job, event_format: EventFormat) -> EventFileRec
     """Record a done shower task of `job` whose events have `event_format`."""
     events_path = job.task_dir(ShowerStage()) / "events.dat"
 
-    def body(overwrite: bool, run_dir: Path) -> TaskOutcome:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         events_path.parent.mkdir(parents=True, exist_ok=True)
         events_path.write_text("events")
         events = EventFileRecord(events_path, 6, "fake-v1:abc", event_format, 1)
@@ -1448,9 +1513,8 @@ def test_simulate_runs_a_simulator_on_the_showered_events(
     assert record.metadata == {"input_format": "delphes-root"}
     simulate_dir = job.task_dir(SimulateStage())
     assert (simulate_dir / "simulated.txt").read_text() == f"events.dat {job.seed}"
-    run_id = record.latest_run.run_id
-    assert record.latest_run.log == f"simulate/runs/{run_id}/run.log"
-    assert (job.root_dir / record.latest_run.log).read_text() == "simulated"
+    log_path = job.task(SimulateStage()).log_path(record.latest_run.run_id)
+    assert log_path.read_text() == "simulated"
     assert simulate(job, FakeSimulator()) == record
 
 
@@ -1663,10 +1727,9 @@ def test_simulate_records_what_it_made_and_keeps_it(
             n_events=1,
         )
     }
-    assert record.latest_run.log == f"simulate/runs/{record.latest_run.run_id}/run.log"
     card = (job.root_dir / "simulate" / "delphes_card.tcl").read_text()
     assert card.endswith("\nset RandomSeed 10000001\n")
-    log = (job.root_dir / record.latest_run.log).read_text()
+    log = job.task(SimulateStage()).log_path(record.latest_run.run_id).read_text()
     assert f"** Reading {job.root_dir / 'shower' / 'particles.root'}" in log
 
     reopened_job = Job(specs["HToBB"], tmp_path, 1)

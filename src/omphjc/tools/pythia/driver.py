@@ -159,7 +159,7 @@ def shower_events(
     overrides: Mapping[str, SettingValue] | None = None,
     timeout: float | None = None,
     overwrite: bool = False,
-    log_dir: Path | None = None,
+    log_path: Path | None = None,
     delphes_pythia8_path: Path | None = None,
 ) -> ShowerRun:
     """Shower the events in `lhe_path` with Pythia 8 through ``DelphesPythia8``.
@@ -196,10 +196,10 @@ def shower_events(
         The output is replaced only after every other check has passed. It is
         deleted when the earlier run sealed it and nothing in it has changed
         since. Otherwise it is moved aside (see `ShowerRun.set_aside`).
-    log_dir : Path or None, optional
-        An existing directory to write the log in. By default the log is
-        written in `workdir`, and a later run replaces it. A log written in
-        another directory is not replaced.
+    log_path : Path or None, optional
+        The file to write the log to, in a directory that exists. A later
+        run leaves it in place. By default the log is ``run.log`` in
+        `workdir`, and a later run replaces it.
     delphes_pythia8_path : Path or None, optional
         Path of Delphes's ``DelphesPythia8``. By default the program is
         looked up on PATH.
@@ -239,7 +239,7 @@ def shower_events(
         workdir,
         delphes_pythia8_path=delphes_pythia8_path,
         timeout=timeout,
-        log_dir=log_dir,
+        log_path=log_path,
     )
     if not overwrite:
         require_unoccupied(workspace.output_path, what="Output file")
@@ -301,8 +301,8 @@ class ShowerWorkspace(ProgramWorkspace):
     timeout : float or None, optional
         The time limit of the run's programs, in seconds from the start of
         :meth:`sealed_run`. ``None`` sets no limit.
-    log_dir : Path or None, optional
-        See the `log_dir` parameter of :class:`~omphjc.workspace.Workspace`.
+    log_path : Path or None, optional
+        See the `log_path` parameter of :class:`~omphjc.workspace.Workspace`.
 
     Raises
     ------
@@ -330,14 +330,14 @@ class ShowerWorkspace(ProgramWorkspace):
         *,
         delphes_pythia8_path: Path | None = None,
         timeout: float | None = None,
-        log_dir: Path | None = None,
+        log_path: Path | None = None,
     ) -> None:
         super().__init__(
             spec.name,
             workdir,
             program_path=delphes_pythia8_path,
             timeout=timeout,
-            log_dir=log_dir,
+            log_path=log_path,
         )
 
     @property
