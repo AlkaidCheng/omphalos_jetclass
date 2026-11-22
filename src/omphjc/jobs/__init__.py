@@ -1,8 +1,10 @@
 """Jobs: one process and one job number, run in a directory of their own.
 
 A job directory, ``<outdir>/<process>/job_<n>/``, holds ``job.json``,
-``manifest.json`` and one directory per task. A task is the work of one stage
-in the job, and its directory holds its record, ``task.json``.
+``manifest.json`` and one directory per task. A task is one piece of the work
+of a stage in the job, done with one tool. Its directory is named after its
+identity, such as ``shower-pythia``, and holds its record, ``task.json``. A
+stage can have several tasks.
 
 The job number fixes the seed of every program in the job.
 ``docs/reproducibility.md`` lists what else the events of a repeated job
@@ -15,14 +17,13 @@ The modules, by what they hold::
     task.py         Task and TaskStatus, a task as found on disk; TaskRecord, the
                     content of task.json, with a TaskRun for each run, and
                     TaskOutcome, what a stage function returns
-    identity.py     JobIdentity, the content of job.json
+    identity.py     JobIdentity, the content of job.json, and TaskIdentity, the
+                    stage, the tool and the tag of a task
     manifest.py     Manifest, the content of manifest.json, which lists a
                     TaskSummary of each task's record
     job_file.py     JobFile, the base class of the job's JSON files
-    stages/         one function per stage: generate, shower, simulate
-
-The class of each stage, which names its task and the stage whose events it
-reads, is in :mod:`omphjc.stages`.
+    stages/         one function per stage: generate, shower, simulate; each
+                    names the identity of its task
 
 How a stage is recorded:
 
@@ -38,12 +39,13 @@ How a stage is recorded:
    is a :class:`~omphjc.data_files.FileRecord` that the driver's workspace
    made (:meth:`omphjc.workspace.ProgramWorkspace.card_records`).
 3. :meth:`Job.run_task` records the run as a :class:`TaskRun`, with its
-   status, start and finish times, log and usage. It writes the run, the
-   parameters and the result to ``task.json`` as a :class:`TaskRecord`, with
+   status, start and finish times and usage. It writes the identity of the
+   task, the run, the parameters and the result to ``task.json`` as a
+   :class:`TaskRecord`, with
    every path relative to the job directory.
 """
 
-from omphjc.jobs.identity import JobIdentity
+from omphjc.jobs.identity import JobIdentity, TaskIdentity
 from omphjc.jobs.job import (
     Job,
     ReplacedRunError,
@@ -54,10 +56,13 @@ from omphjc.jobs.job import (
 )
 from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.stages import (
+    GENERATE_TASK,
+    SHOWER_TASK,
     DetectorSimulator,
     generate,
     shower,
     simulate,
+    simulate_task,
 )
 from omphjc.jobs.task import (
     DONE,
@@ -77,8 +82,10 @@ __all__ = [
     "DONE",
     "FAILED",
     "INPUT_FINGERPRINT_PARAMETER",
+    "GENERATE_TASK",
     "INTERRUPTED",
     "RUNNING",
+    "SHOWER_TASK",
     "TaskRun",
     "AcceptedInput",
     "DetectorSimulator",
@@ -86,6 +93,7 @@ __all__ = [
     "JobIdentity",
     "Manifest",
     "Task",
+    "TaskIdentity",
     "TaskOutcome",
     "TaskRecord",
     "TaskStatus",
@@ -97,5 +105,6 @@ __all__ = [
     "job_seed",
     "shower",
     "simulate",
+    "simulate_task",
     "task_parameters",
 ]

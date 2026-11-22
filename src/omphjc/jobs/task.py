@@ -5,11 +5,12 @@ A task is the work of one stage in a job. Its record is the file
 
     {
       "schema": 1,
+      "identity": {"stage": "generate", "tool": "madgraph", "tag": null},
       "parameters": {"events": 1000, "seed": 10000001},
       "result": {
         "outputs": {
           "events": {
-            "path": "generate/HToBB/Events/run_01/unweighted_events.lhe.gz",
+            "path": "generate-madgraph/HToBB/Events/run_01/unweighted_events.lhe.gz",
             "n_bytes": 12345678,
             "fingerprint": "lhe-v1:<sha256>",
             "format": "lhe",
@@ -18,7 +19,7 @@ A task is the work of one stage in a job. Its record is the file
         },
         "cards": {
           "run_card": {
-            "path": "generate/cards/run_card.dat",
+            "path": "generate-madgraph/cards/run_card.dat",
             "n_bytes": 18446,
             "fingerprint": "run_card-v1:<sha256>"
           }
@@ -61,6 +62,10 @@ keys are:
 
 ``schema``
     The layout version of the file (:mod:`omphjc.jobs.job_file`).
+``identity``
+    The stage, the tool and the tag of the task
+    (:class:`~omphjc.jobs.identity.TaskIdentity`). The directory of the task
+    is named after them.
 ``parameters``
     What the task was asked for, including the seed when its stage uses one.
     A later run compares its own parameters with these to decide whether the
@@ -170,6 +175,7 @@ from typing import Any, ClassVar
 
 from omphjc.data_files import FileRecord
 from omphjc.events.formats import EventFileRecord
+from omphjc.jobs.identity import TaskIdentity
 from omphjc.jobs.job_file import JobFile
 from omphjc.runs import RunResult
 from omphjc.safe_paths import inside, remove_inside
@@ -278,6 +284,7 @@ class TaskRecord(JobFile):
 
     file_name: ClassVar[str] = "task.json"
 
+    identity: TaskIdentity
     parameters: dict[str, Any]
     runs: tuple[TaskRun, ...]
     result: RunResult | None = None
@@ -358,9 +365,11 @@ class TaskRecord(JobFile):
         return self._done_result().metadata
 
     def as_record(self) -> dict[str, Any]:
-        """Return the parameters, the result, the runs and the accepted input by name."""
+        """Return the identity, the parameters, the result, the runs and the accepted
+        input by name."""
         accepted_input = self.accepted_input
         return {
+            "identity": asdict(self.identity),
             "parameters": self.parameters,
             "result": None if self.result is None else asdict(self.result),
             "runs": [asdict(run) for run in self.runs],
@@ -379,10 +388,12 @@ class TaskRecord(JobFile):
         if "runs" not in record:
             raise ValueError("the record has no runs")
         fields = dict(record)
+        identity = TaskIdentity(**fields.pop("identity"))
         runs = tuple(TaskRun(**run) for run in fields.pop("runs"))
         result = fields.pop("result")
         accepted_input = fields.pop("accepted_input")
         return cls(
+            identity=identity,
             **fields,
             runs=runs,
             result=None if result is None else RunResult.from_record(result, root_dir),
@@ -392,9 +403,30 @@ class TaskRecord(JobFile):
         )
 
     @classmethod
-    def running(cls, parameters: dict[str, Any]) -> "TaskRecord":
-        """Return the record of a new task whose first run starts now."""
-        return cls(parameters, (TaskRun.started_now(),))
+    def read(cls, path: Path, *, root_dir: Path | None = None) -> "TaskRecord":
+        """Return the record in the file `path`, the ``task.json`` of a task.
+
+        Raises
+        ------
+        ValueError
+            As :meth:`omphjc.jobs.job_file.JobFile.read` refuses a file. If
+            the directory of `path` is not named after the task that the
+            record identifies.
+        """
+        record = super().read(path, root_dir=root_dir)
+        if record.identity.name != path.parent.name:
+            raise ValueError(
+                f"{path} is the record of the task {record.identity.name}, "
+                f"but its directory is named {path.parent.name}"
+            )
+        return record
+
+    @classmethod
+    def running(
+        cls, identity: TaskIdentity, parameters: dict[str, Any]
+    ) -> "TaskRecord":
+        """Return the record of the new task `identity`, whose first run starts now."""
+        return cls(identity, parameters, (TaskRun.started_now(),))
 
     def rerun(self) -> "TaskRecord":
         """Return the record with a further run that starts now.
@@ -498,12 +530,13 @@ class Task:
     """A task of a job, as found on disk.
 
     :meth:`read` loads a task from its record file and judges its status.
-    :meth:`omphjc.jobs.Job.task` gives the task of a stage that way.
+    :meth:`omphjc.jobs.Job.task` gives the task with an identity, and
+    :meth:`omphjc.jobs.Job.tasks` every task of a job.
 
     Parameters
     ----------
-    name : str
-        The name of the task.
+    identity : TaskIdentity
+        The stage, the tool and the tag of the task.
     directory : Path
         The directory of the task, which holds its record and its logs.
     status : TaskStatus
@@ -516,7 +549,7 @@ class Task:
         The record of the task, ``None`` when the task has no record.
     """
 
-    name: str
+    identity: TaskIdentity
     directory: Path
     status: TaskStatus
     detail: str = ""
@@ -526,10 +559,10 @@ class Task:
     def read(cls, record_path: Path) -> "Task":
         """Return the task whose record is the file `record_path`.
 
-        Everything about the task follows from where its record is. The
-        directory of the task is the one that holds the record, the name of
-        the task is the name of that directory, and the job directory is the
-        one above it.
+        Everything about the task follows from its record and where it is.
+        The identity of the task is the one in the record. The directory of
+        the task is the one that holds the record, and the job directory is
+        the one above it.
 
         The status of the task is judged from the record and the output
         files:
@@ -544,13 +577,15 @@ class Task:
         FileNotFoundError
             If `record_path` does not exist.
         ValueError
-            If the file cannot be read as a record.
+            If the file cannot be read as a record, or its directory is not
+            named after the task that the record identifies
+            (:meth:`TaskRecord.read`).
         """
         directory = record_path.parent
-        name = directory.name
         record = TaskRecord.read(record_path, root_dir=directory.parent)
+        identity = record.identity
         if not record.is_done:
-            return cls(name, directory, TaskStatus.NOT_DONE, record=record)
+            return cls(identity, directory, TaskStatus.NOT_DONE, record=record)
         status, detail = TaskStatus.DONE, ""
         for output in record.outputs.values():
             try:
@@ -562,10 +597,15 @@ class Task:
                 status = TaskStatus.CHANGED
                 detail = (
                     f"{output.path} holds {n_bytes} bytes, not the "
-                    f"{output.n_bytes} the {name} stage recorded"
+                    f"{output.n_bytes} the {identity.name} task recorded"
                 )
                 break
-        return cls(name, directory, status, detail, record)
+        return cls(identity, directory, status, detail, record)
+
+    @property
+    def name(self) -> str:
+        """The name of the task in its job (:attr:`TaskIdentity.name`)."""
+        return self.identity.name
 
     def log_path(self, run_id: str) -> Path:
         """Return the log of run `run_id`, ``logs/<run_id>.log`` in the directory.

@@ -10,11 +10,11 @@ name of the task::
       "seed": 10000001,
       "omphjc_version": "0.1.0",
       "tasks": {
-        "generate": {
+        "generate-madgraph": {
           "status": "done",
           "latest_run_id": "20261023T020000Z-b81d07c3",
           "n_runs": 2,
-          "record_path": "generate/task.json"
+          "record_path": "generate-madgraph/task.json"
         }
       }
     }

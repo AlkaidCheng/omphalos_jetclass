@@ -220,6 +220,12 @@
 - The log of each run of a stage is `logs/<run_id>.log` in the stage's
   directory, in place of `runs/<run_id>/run.log`, and a run in `task.json`
   has no `log`. (#91)
+- A task has an identity, `omphjc.jobs.TaskIdentity` (its stage, its tool and
+  a tag), which `task.json` records and by which `Job` addresses it, in
+  place of its stage. (#92)
+- The directory of a task is named after its identity: `generate-madgraph`,
+  `shower-pythia` and `simulate-delphes`, in place of `generate`, `shower`
+  and `simulate`. (#92)
 
 ### Fixed
 

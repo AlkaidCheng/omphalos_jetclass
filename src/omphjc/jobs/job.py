@@ -5,7 +5,8 @@
     <outdir>/<process>/job_<n>/
       job.json           the process, the job number and the seed (omphjc.jobs.identity)
       manifest.json      an index of the tasks and their records (omphjc.jobs.manifest)
-      <stage>/           one directory per task, named and laid out by its stage
+      <stage>-<tool>/    one directory per task, named after its identity
+                         (omphjc.jobs.identity)
         task.json        what the task ran with and what came out (omphjc.jobs.task)
         logs/<run_id>.log   the log of each run of the task
 
@@ -27,7 +28,7 @@ from typing import Any, Protocol
 
 from omphjc.comparison import Difference
 from omphjc.events.formats import EventFileRecord, EventFormat
-from omphjc.jobs.identity import JobIdentity
+from omphjc.jobs.identity import JobIdentity, TaskIdentity
 from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.task import (
     INPUT_FINGERPRINT_PARAMETER,
@@ -39,7 +40,6 @@ from omphjc.jobs.task import (
 )
 from omphjc.processes.catalogue import ProcessSpec
 from omphjc.safe_paths import inside, working_directory
-from omphjc.stages import Stage
 from omphjc.stamps import SetAsideFolder, clear_set_aside_folders, set_aside_folders
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
 
@@ -142,10 +142,10 @@ class Job:
     spec : ProcessSpec
     job_id : int
     root_dir : Path
-        The job directory, ``<outdir>/<process>/job_<n>``. The first stage
+        The job directory, ``<outdir>/<process>/job_<n>``. The first task
         that runs creates it.
     seed : int
-        The seed of every program the job runs. A stage that uses it records
+        The seed of every program the job runs. A task that uses it records
         it among its parameters.
     identity : JobIdentity
         The process, the job number and the seed. The first task that runs
@@ -178,46 +178,59 @@ class Job:
     def manifest_path(self) -> Path:
         return self.root_dir / Manifest.file_name
 
-    def task_dir(self, stage: Stage) -> Path:
-        """Return the directory of the task of `stage`, ``<root>/<task name>``."""
-        return inside(self.root_dir, stage.task_name)
+    def task_dir(self, identity: TaskIdentity) -> Path:
+        """Return the directory of the task `identity`, ``<root>/<task name>``."""
+        return inside(self.root_dir, identity.name)
 
     def relative_path(self, path: Path) -> str:
         """Return `path` as a POSIX path relative to the job directory."""
         return path.relative_to(self.root_dir).as_posix()
 
-    def task_record_path(self, stage: Stage) -> Path:
-        """Return the file of the record of the task of `stage`.
+    def task_record_path(self, identity: TaskIdentity) -> Path:
+        """Return the file of the record of the task `identity`.
 
         It is ``<root>/<task name>/task.json``.
         """
-        return self.task_dir(stage) / TaskRecord.file_name
+        return self.task_dir(identity) / TaskRecord.file_name
 
-    def task_record(self, stage: Stage) -> TaskRecord | None:
-        """Return the record of the task of `stage`, or ``None`` when it has none.
+    def task_record(self, identity: TaskIdentity) -> TaskRecord | None:
+        """Return the record of the task `identity`, or ``None`` when it has none.
 
         Raises
         ------
         ValueError
-            If the ``task.json`` of the task cannot be read as a record.
+            As :meth:`task` refuses a record.
         """
-        try:
-            return TaskRecord.read(self.task_record_path(stage), root_dir=self.root_dir)
-        except FileNotFoundError:
-            return None
+        return self.task(identity).record
 
-    def task_names(self) -> list[str]:
-        """Return the names of the tasks that have a record, in alphabetical order.
+    def tasks(self, stage: str | None = None) -> list[Task]:
+        """Return the tasks that have a record, in the order of their names.
 
         A task has a record when its directory holds a ``task.json``. Only the
-        directories directly inside the job directory are looked at.
+        directories directly inside the job directory are looked at. Each
+        task is loaded from its record file (:meth:`Task.read`).
+
+        Parameters
+        ----------
+        stage : str or None, optional
+            The name of a stage. When it is given, only the tasks of that
+            stage are returned. A stage can have none, one or several.
+
+        Raises
+        ------
+        ValueError
+            If a ``task.json`` cannot be read as a record, or its directory
+            is not named after the task it identifies.
         """
-        return list(self._task_record_paths())
+        tasks = [
+            Task.read(record_path) for record_path in self._task_record_paths().values()
+        ]
+        return [task for task in tasks if stage is None or task.identity.stage == stage]
 
     def _task_record_paths(self) -> dict[str, Path]:
         """Return the path of the record of each task that has one, by the task's name.
 
-        The tasks are those of :meth:`task_names`, in the same order.
+        The tasks are in the alphabetical order of their names.
         """
         record_paths = sorted(self.root_dir.glob(f"*/{TaskRecord.file_name}"))
         return {record_path.parent.name: record_path for record_path in record_paths}
@@ -228,8 +241,8 @@ class Job:
             record_path.parent for record_path in self._task_record_paths().values()
         ]
 
-    def task(self, stage: Stage) -> Task:
-        """Return the task of `stage` as it is on disk.
+    def task(self, identity: TaskIdentity) -> Task:
+        """Return the task `identity` as it is on disk.
 
         A task that has a record is loaded from its record file
         (:meth:`Task.read`), which judges its status. A task without a record
@@ -238,16 +251,23 @@ class Job:
         Raises
         ------
         ValueError
-            If the ``task.json`` of the task cannot be read as a record.
+            If the ``task.json`` of the task cannot be read as a record, is
+            not in the directory of its task, or is the record of a task with
+            another identity.
         """
-        record_path = self.task_record_path(stage)
+        record_path = self.task_record_path(identity)
         try:
-            return Task.read(record_path)
+            task = Task.read(record_path)
         except FileNotFoundError:
-            return Task(stage.task_name, record_path.parent, TaskStatus.NOT_DONE)
+            return Task(identity, record_path.parent, TaskStatus.NOT_DONE)
+        if task.identity != identity:
+            raise ValueError(
+                f"{record_path} is the record of {task.identity}, not of {identity}"
+            )
+        return task
 
-    def require_done(self, stage: Stage) -> TaskRecord:
-        """Return the record of the task of `stage`.
+    def require_done(self, identity: TaskIdentity) -> TaskRecord:
+        """Return the record of the task `identity`.
 
         The task must be done with its outputs intact.
 
@@ -260,30 +280,30 @@ class Job:
             If an output has another size than recorded. The message names
             the file, both sizes and ``--force``.
         """
-        task = self.task(stage)
+        task = self.task(identity)
         if task.status is TaskStatus.CHANGED:
             raise ValueError(
-                f"{task.detail}; run {stage.command} with --force to regenerate "
+                f"{task.detail}; run {identity.command} with --force to regenerate "
                 "the file"
             )
         if task.record is None or task.status is not TaskStatus.DONE:
             raise ValueError(
-                f"The {stage.task_name} stage of {self.root_dir} has not run to completion; "
-                f"run {stage.command} first"
+                f"The {identity.name} task of {self.root_dir} has not run to "
+                f"completion; run {identity.command} first"
             )
         return task.record
 
     def require_events(
-        self, stage: Stage, *, for_tool: EventReadingTool | None = None
+        self, identity: TaskIdentity, *, for_tool: EventReadingTool | None = None
     ) -> EventFileRecord:
-        """Return the events that the task of `stage` made.
+        """Return the events that the task `identity` made.
 
         The task must be done with its outputs intact.
 
         Parameters
         ----------
-        stage : Stage
-            The stage whose task made the events.
+        identity : TaskIdentity
+            The task that made the events.
         for_tool : EventReadingTool or None, optional
             The tool that will read the events. When it is given, the event
             file must have a format the tool reads.
@@ -294,10 +314,10 @@ class Job:
             For the reasons that :meth:`require_done` gives. If the task made
             no event file. If `for_tool` cannot read the format of the file.
         """
-        events = self.require_done(stage).events
+        events = self.require_done(identity).events
         if events is None:
             raise ValueError(
-                f"The {stage.task_name} stage of {self.root_dir} made no event file"
+                f"The {identity.name} task of {self.root_dir} made no event file"
             )
         if for_tool is not None and events.format not in for_tool.input_formats:
             readable_formats = sorted(
@@ -305,21 +325,21 @@ class Job:
             )
             raise ValueError(
                 f"{for_tool.name} reads {', '.join(readable_formats)} files, but "
-                f"the {stage.task_name} stage of {self.root_dir} made a "
+                f"the {identity.name} task of {self.root_dir} made a "
                 f"{events.format.value} file"
             )
         return events
 
     def run_task(
         self,
-        stage: Stage,
+        identity: TaskIdentity,
         parameters: dict[str, Any],
         body: TaskBody,
         *,
         accept_input: bool = False,
         force: bool = False,
     ) -> TaskRecord:
-        """Run the task of `stage` through `body` unless its result can be kept.
+        """Run the task `identity` through `body` unless its result can be kept.
 
         The run is recorded in the record of the task.
 
@@ -362,9 +382,9 @@ class Job:
 
         Parameters
         ----------
-        stage : Stage
-            The stage whose task runs. The directory of the task is
-            ``<root>/<task name>``.
+        identity : TaskIdentity
+            The task to run. Its directory is ``<root>/<task name>``, and a
+            new record holds the identity.
         parameters : dict
             What the task is asked for, as JSON values.
         body : TaskBody
@@ -405,12 +425,10 @@ class Job:
         """
         if accept_input and force:
             raise ValueError("accept_input and force cannot both be set")
-        task = self.task(stage)
+        task = self.task(identity)
         previous_record = task.record
         if not force:
-            kept_record = self._kept_record(
-                stage, task, parameters, accept_input=accept_input
-            )
+            kept_record = self._kept_record(task, parameters, accept_input=accept_input)
             if kept_record is not None:
                 return kept_record
         overwrite = force or previous_record is not None
@@ -418,7 +436,7 @@ class Job:
         self._record_identity()
         dropped_runs: tuple[TaskRun, ...] = ()
         if previous_record is None or force or previous_record.parameters != parameters:
-            record = TaskRecord.running(parameters)
+            record = TaskRecord.running(identity, parameters)
             if previous_record is not None:
                 dropped_runs = previous_record.runs
         else:
@@ -427,7 +445,7 @@ class Job:
         # Named before the record is replaced, so that a run ID that is not a
         # plain name is refused while the earlier record is still in place.
         dropped_logs = [task.log_path(run.run_id) for run in dropped_runs]
-        self._write_record(stage, record)
+        self._write_record(record)
         try:
             task.remove_logs(dropped_logs)
             log_path.parent.mkdir(exist_ok=True)
@@ -435,27 +453,24 @@ class Job:
         except BaseException as error:
             message = str(error) or type(error).__name__
             if isinstance(error, _INTERRUPTIONS):
-                self._write_run_end(stage, record.interrupted(error=message))
+                self._write_run_end(record.interrupted(error=message))
             else:
-                self._write_run_end(stage, record.failed(error=message))
+                self._write_run_end(record.failed(error=message))
             raise
         record = record.done(
             outcome, wall_seconds=time.monotonic() - clock, root_dir=self.root_dir
         )
-        self._write_run_end(stage, record)
+        self._write_run_end(record)
         return record
 
     def _kept_record(
         self,
-        stage: Stage,
         task: Task,
         parameters: dict[str, Any],
         *,
         accept_input: bool,
     ) -> TaskRecord | None:
         """Return the record of `task` when its result is kept for `parameters`.
-
-        `task` is the task of `stage` as found on disk.
 
         Return ``None`` when the task has to run. That is the case for a
         task without a record, for a task that is not done, and for a task
@@ -473,21 +488,21 @@ class Job:
             if record.is_accepted_for(parameters):
                 return record
             if accept_input:
-                return self._accept_input(stage, record, parameters)
-        self._check_parameters(stage, record.parameters, parameters)
+                return self._accept_input(record, parameters)
+        self._check_parameters(record, parameters)
         if task.status is TaskStatus.DONE:
             return record
         if task.status is TaskStatus.CHANGED:
             raise ValueError(
-                f"{task.detail}; run {stage.command} with --force to "
+                f"{task.detail}; run {task.identity.command} with --force to "
                 "regenerate the file"
             )
         return None
 
     def _accept_input(
-        self, stage: Stage, record: TaskRecord, parameters: dict[str, Any]
+        self, record: TaskRecord, parameters: dict[str, Any]
     ) -> TaskRecord:
-        """Keep the done task of `stage` for the input in `parameters`; record that.
+        """Keep the done task of `record` for the input in `parameters`; record that.
 
         `record` is returned as it is when `parameters` are those of the
         task. Otherwise they may differ in the input fingerprint alone, and
@@ -506,9 +521,9 @@ class Job:
         acceptable_parameters = dict(record.parameters)
         if key in parameters:
             acceptable_parameters[key] = parameters[key]
-        self._check_parameters(stage, acceptable_parameters, parameters)
+        self._check_parameters(record, parameters, recorded=acceptable_parameters)
         record = record.with_accepted_input(parameters[key])
-        self._write_record(stage, record)
+        self._write_record(record)
         return record
 
     def set_aside_folders(self) -> list[SetAsideFolder]:
@@ -516,7 +531,7 @@ class Job:
 
         A run does not delete an artifact that it cannot confirm as an
         earlier run's own. It moves the artifact into
-        ``<stage>/omphjc-set-aside/`` (:mod:`omphjc.stamps`). This happens,
+        ``<task>/omphjc-set-aside/`` (:mod:`omphjc.stamps`). This happens,
         for example, when the earlier run was killed before it sealed its
         artifacts.
 
@@ -568,28 +583,38 @@ class Job:
             )
 
     def _check_parameters(
-        self, stage: Stage, recorded: dict[str, Any], parameters: dict[str, Any]
+        self,
+        record: TaskRecord,
+        parameters: dict[str, Any],
+        *,
+        recorded: dict[str, Any] | None = None,
     ) -> None:
-        """Refuse `parameters` when the task of `stage` ran with other ones.
+        """Refuse `parameters` when the task of `record` ran with other ones.
 
         The message names each parameter that differs. A nested parameter
         is named by the dotted path of its keys. The value the task ran with
         is shown as the expected one.
+
+        `recorded` are the parameters to compare with, when they are not
+        those of `record`.
         """
+        if recorded is None:
+            recorded = record.parameters
         if parameters == recorded:
             return
+        identity = record.identity
         differences = Difference.between_nested_mappings(parameters, recorded)
-        record_path = self.relative_path(self.task_record_path(stage))
+        record_path = self.relative_path(self.task_record_path(identity))
         raise ValueError(
             "The current parameters are inconsistent with those of the existing "
-            f"{stage.task_name} task in {self.root_dir} ({record_path}):"
+            f"{identity.name} task in {self.root_dir} ({record_path}):"
             + "".join(f"\n  {difference}" for difference in differences)
             + "\nRerun with the parameters the task ran with, or run "
-            f"{stage.command} with --force to replace its result."
+            f"{identity.command} with --force to replace its result."
         )
 
-    def _write_run_end(self, stage: Stage, record: TaskRecord) -> None:
-        """Write `record`, which says how its latest run ended, for `stage`.
+    def _write_run_end(self, record: TaskRecord) -> None:
+        """Write `record`, which says how the latest run of its task ended.
 
         Raises
         ------
@@ -598,17 +623,18 @@ class Job:
             That record is left unchanged.
         """
         run = record.latest_run
-        recorded = self.task_record(stage)
+        recorded = self.task_record(record.identity)
         if recorded is not None and recorded.latest_run.run_id != run.run_id:
             raise ReplacedRunError(
-                f"Run {run.run_id!r} of the {stage.task_name} task in {self.root_dir} is not "
+                f"Run {run.run_id!r} of the {record.identity.name} task in "
+                f"{self.root_dir} is not "
                 f"recorded as {run.status}: run {recorded.latest_run.run_id!r} of "
                 "the task started before it ended"
             )
-        self._write_record(stage, record)
+        self._write_record(record)
 
-    def _write_record(self, stage: Stage, record: TaskRecord) -> None:
-        """Write `record` as the record of the task of `stage`, then the manifest.
+    def _write_record(self, record: TaskRecord) -> None:
+        """Write `record` as the record of the task it identifies, then the manifest.
 
         The job directory must still hold its ``job.json``. The manifest
         lists every task that has a record, so the record of every task is
@@ -616,10 +642,11 @@ class Job:
         """
         if not self.identity_path.exists():
             raise FileNotFoundError(
-                f"{self.identity_path} was removed while the {stage.task_name} task ran; "
+                f"{self.identity_path} was removed while the "
+                f"{record.identity.name} task ran; "
                 "the outcome of the task is not recorded"
             )
-        record_path = self.task_record_path(stage)
+        record_path = self.task_record_path(record.identity)
         record_path.parent.mkdir(exist_ok=True)
         record.write(record_path, root_dir=self.root_dir)
         self._write_manifest()

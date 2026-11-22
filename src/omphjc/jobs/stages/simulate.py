@@ -5,7 +5,9 @@ from typing import Any, Protocol
 
 from omphjc.data_files import Card
 from omphjc.events.formats import EventFormat, EventSource
+from omphjc.jobs.identity import TaskIdentity
 from omphjc.jobs.job import Job, task_parameters
+from omphjc.jobs.stages.shower import SHOWER_TASK
 from omphjc.jobs.task import INPUT_FINGERPRINT_PARAMETER, TaskOutcome, TaskRecord
 from omphjc.stages import SimulateStage
 
@@ -78,6 +80,11 @@ class DetectorSimulator(Protocol):
         ...
 
 
+def simulate_task(simulator: DetectorSimulator) -> TaskIdentity:
+    """Return the identity of the task that simulates the detector with `simulator`."""
+    return TaskIdentity(SimulateStage.name, simulator.name)
+
+
 def simulate(
     job: Job,
     simulator: DetectorSimulator,
@@ -87,8 +94,9 @@ def simulate(
 ) -> TaskRecord:
     """Simulate the detector on the showered events of `job` with `simulator`.
 
-    The stage reads the event file the shower stage made. `simulator` works
-    in the job's ``simulate/`` directory with the job's seed.
+    The task (:func:`simulate_task`) reads the event file that the shower task
+    made. `simulator` works in the directory of the task, such as
+    ``simulate-delphes/``, with the job's seed.
 
     The parameters of the task are the fingerprint of the event file it
     reads and the parameters of `simulator`. A shower that is repeated with
@@ -120,9 +128,9 @@ def simulate(
         parameters of `simulator` use a key of the stage. If `accept_input`
         and `force` are both set.
     """
-    stage = SimulateStage()
-    events = job.require_events(stage.upstream_stage, for_tool=simulator)
-    workdir = job.task_dir(stage)
+    identity = simulate_task(simulator)
+    events = job.require_events(SHOWER_TASK, for_tool=simulator)
+    workdir = job.task_dir(identity)
     parameters = task_parameters(
         {INPUT_FINGERPRINT_PARAMETER: events.fingerprint},
         simulator.parameters(seed=job.seed),
@@ -139,7 +147,7 @@ def simulate(
         )
 
     return job.run_task(
-        stage,
+        identity,
         parameters,
         body,
         accept_input=accept_input,

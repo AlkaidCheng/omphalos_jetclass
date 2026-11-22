@@ -122,7 +122,7 @@ def check_cards(specs: Catalogue) -> None:
     "--set-aside",
     "set_aside",
     is_flag=True,
-    help="Delete what earlier runs set aside in <stage>/omphjc-set-aside/.",
+    help="Delete what earlier runs set aside in <task>/omphjc-set-aside/.",
 )
 @click.option(
     "--dry-run", is_flag=True, help="List what would be deleted; delete nothing."

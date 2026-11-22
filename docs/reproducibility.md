@@ -31,8 +31,9 @@ Python generator. The TTBar and TTBarLep cards keep MadSpin's commented-out
 `# set seed 1`; removing the `#` changes nothing.
 
 MadGraph resets `iseed` to 0 in `Cards/run_card.dat` before it runs, so the
-copy the job keeps, `generate/cards/run_card.dat`, shows `iseed = 0`. The seed
-the run used is the `seed` parameter in `generate/task.json` and the `iseed`
+copy the job keeps, `generate-madgraph/cards/run_card.dat`, shows `iseed = 0`.
+The seed the run used is the `seed` parameter in `generate-madgraph/task.json`
+and the `iseed`
 of the run card in the event file's banner.
 
 ### The core count
@@ -40,7 +41,8 @@ of the run card in the event file's banner.
 MadSpin decays the events in one separately seeded shard per core, so a process
 with MadSpin (TTBar and TTBarLep in the default catalogue) gives the same events
 only on the same number of cores. A rerun with another `--cores` keeps a
-finished stage, and `generate/task.json` records the count MadGraph ran on as
+finished stage, and `generate-madgraph/task.json` records the count MadGraph ran
+on as
 `n_cores`. Without `--cores`, MadGraph runs on every CPU the job may use,
 which a batch system sets per allocation, so give `--cores` explicitly for a
 process with MadSpin. For a process without MadSpin the core count does not
@@ -62,7 +64,7 @@ channel directories (an upper bound on the count MadGraph checks) and compare
 the count with the hard limit of the machine that will run the production:
 
 ```
-awk '$2 > 0' runs/dev/HToBB/job_1/generate/HToBB/SubProcesses/P*/symfact.dat | wc -l
+awk '$2 > 0' runs/dev/HToBB/job_1/generate-madgraph/HToBB/SubProcesses/P*/symfact.dat | wc -l
 ulimit -Hn
 ```
 
