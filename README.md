@@ -391,19 +391,19 @@ omphjc clean HToBB --job-id 1 --outdir runs/dev --set-aside  # drop what reruns 
 runs/dev/HToBB/job_1/
 ├── job.json               the process, the job number and the seed
 ├── manifest.json          the stages that have a record, with the status of each
-├── generate/              the MadGraph working directory, MadGraph's own layout inside
+├── generate-madgraph/     the MadGraph working directory, MadGraph's own layout inside
 │   ├── task.json          the record: what the stage ran with and what came out
 │   ├── logs/<run_id>.log  one log per run of the stage: MadGraph's output
 │   ├── cards/             the cards MadGraph ran with, hashed in the record
 │   └── HToBB/Events/run_01/unweighted_events.lhe.gz
-├── shower/                the DelphesPythia8 working directory
+├── shower-pythia/         the DelphesPythia8 working directory
 │   ├── task.json
 │   ├── logs/<run_id>.log  DelphesPythia8's output, Pythia's statistics included
 │   ├── events.lhe         the generated events, uncompressed for DelphesPythia8
 │   ├── pythia.cmnd        the Pythia settings as run, hashed in the record
 │   ├── particles_card.tcl the card that writes the record and simulates nothing, hashed
 │   └── particles.root     every showered event's generator record (Particle branch)
-└── simulate/              the DelphesROOT working directory
+└── simulate-delphes/      the DelphesROOT working directory
     ├── task.json
     ├── logs/<run_id>.log  DelphesROOT's output
     ├── delphes_card.tcl   the detector card as run, seeded, hashed in the record
@@ -416,7 +416,9 @@ same events; [What a rerun reproduces](docs/reproducibility.md) lists what else
 they depend on, such as the core count for a process with MadSpin. The first
 stage that runs writes the process, the job number and the seed to `job.json`,
 and no stage runs in a directory whose `job.json` gives another process, job
-number or seed. Each stage keeps a record, `task.json`, in its directory: the
+number or seed. The directory of a stage is named after the stage and its
+tool, such as `shower-pythia`. Each stage keeps a record, `task.json`, in its
+directory: the stage and the tool, the
 parameters it was asked for, its result, and one entry per run of the stage
 with the run's ID, its status, its start and end times, the host it ran on,
 and what it took: the wall time of the run and the CPU time and peak
@@ -481,7 +483,8 @@ failed. When a stage is started again while an earlier run of it is still
 going, the earlier run reports that it was replaced and leaves the record of
 the newer run in place. A rerun deletes only what it can recognise as the
 earlier run's: anything else in the earlier run's place, as after a hard kill
-or a change made to the files since, is moved into `<stage>/omphjc-set-aside/`
+or a change made to the files since, is moved into `omphjc-set-aside/` in the
+stage's directory
 instead and stays there. A file a system tool writes into one of the run's
 folders counts as a change too, such as the `.DS_Store` that the macOS Finder
 writes into a folder it opens. On Windows a rerun cannot see changes, so it

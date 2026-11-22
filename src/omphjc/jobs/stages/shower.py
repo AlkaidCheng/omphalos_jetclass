@@ -3,12 +3,17 @@
 from collections.abc import Mapping
 from pathlib import Path
 
+from omphjc.jobs.identity import TaskIdentity
 from omphjc.jobs.job import Job
+from omphjc.jobs.stages.generate import GENERATE_TASK
 from omphjc.jobs.task import INPUT_FINGERPRINT_PARAMETER, TaskOutcome, TaskRecord
 from omphjc.processes.catalogue import SettingValue
 from omphjc.runs import EVENTS_OUTPUT, RunResult
 from omphjc.stages import ShowerStage
 from omphjc.tools.pythia.driver import shower_events
+
+SHOWER_TASK = TaskIdentity(ShowerStage.name, "pythia")
+"""The task that showers the generated events of a job with Pythia 8."""
 
 
 def shower(
@@ -22,9 +27,10 @@ def shower(
 ) -> TaskRecord:
     """Shower the generated events of `job` with Pythia 8.
 
-    The stage runs :func:`omphjc.tools.pythia.driver.shower_events` in the job's
-    ``shower/`` directory. It reads the event file the generate stage made, and
-    uses the job's seed and the event count that stage recorded.
+    The task (:data:`SHOWER_TASK`) runs
+    :func:`omphjc.tools.pythia.driver.shower_events` in the job's
+    ``shower-pythia/`` directory. It reads the event file that the generation
+    task made, and uses the job's seed and the event count that task recorded.
 
     Its parameters are the event count, the seed, the Pythia overrides and the
     fingerprint of the event file it reads. A sample that is generated again
@@ -71,9 +77,8 @@ def shower(
         If the generate stage of `job` has not run to completion, or
         `accept_input` and `force` are both set.
     """
-    stage = ShowerStage()
-    events = job.require_events(stage.upstream_stage)
-    task_dir = job.task_dir(stage)
+    events = job.require_events(GENERATE_TASK)
+    task_dir = job.task_dir(SHOWER_TASK)
     pythia_overrides = dict(overrides or {})
 
     def body(overwrite: bool, log_path: Path) -> TaskOutcome:
@@ -119,7 +124,7 @@ def shower(
         INPUT_FINGERPRINT_PARAMETER: events.fingerprint,
     }
     return job.run_task(
-        stage,
+        SHOWER_TASK,
         parameters,
         body,
         accept_input=accept_input,

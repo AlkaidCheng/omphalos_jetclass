@@ -24,9 +24,12 @@ from omphjc.cli.options import (
     parse_assignment,
 )
 from omphjc.jobs import (
+    GENERATE_TASK,
     INPUT_FINGERPRINT_PARAMETER,
+    SHOWER_TASK,
     Job,
     ReplacedRunError,
+    TaskIdentity,
     TaskRecord,
     TerminationError,
     exception_on_termination,
@@ -36,7 +39,6 @@ from omphjc.jobs import (
 )
 from omphjc.processes import ProcessSpec
 from omphjc.programs import ProgramError
-from omphjc.stages import GenerateStage, ShowerStage, SimulateStage, Stage
 from omphjc.stamps import StampError
 
 # The errors of a stage command that are reported as a message, not a traceback.
@@ -103,7 +105,6 @@ def generate_job(
         spec,
         job_id,
         outdir,
-        stage=GenerateStage(),
         run=run,
         title="MadGraph generation",
         lines=_generation_lines,
@@ -111,9 +112,9 @@ def generate_job(
 
 
 def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
-    """Yield what the generate stage of `job` ran with and what it made."""
+    """Yield what the generation task of `job` ran with and what it made."""
     metadata = record.metadata
-    events = job.require_events(GenerateStage())
+    events = job.require_events(record.identity)
     yield f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
     yield format_row("events requested", record.parameters["events"])
     yield format_row("events generated", events.n_events)
@@ -123,10 +124,10 @@ def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     )
     yield format_row("cross section", cross_section)
     yield format_row("event file", job.relative_path(events.path))
-    log_path = job.task(GenerateStage()).latest_log
+    log_path = job.task(record.identity).latest_log
     yield format_row("log", job.relative_path(log_path))
     yield format_row(
-        "cards", f"{job.relative_path(job.task_dir(GenerateStage()))}/cards/"
+        "cards", f"{job.relative_path(job.task_dir(record.identity))}/cards/"
     )
 
 
@@ -178,24 +179,24 @@ def shower_job(
         spec,
         job_id,
         outdir,
-        stage=ShowerStage(),
         run=run,
+        supplier=GENERATE_TASK,
         title="Pythia shower",
         lines=_shower_lines,
     )
 
 
 def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
-    """Yield what the shower stage of `job` ran with and what it made."""
+    """Yield what the shower task of `job` ran with and what it made."""
     metadata = record.metadata
-    events = job.require_events(ShowerStage())
+    events = job.require_events(record.identity)
     yield f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
     yield format_row("events read", metadata["events_read"])
     yield format_row("events kept", events.n_events)
     if "matching_efficiency" in metadata:
         yield format_row("kept by matching", f"{metadata['matching_efficiency']:.1%}")
     yield format_row("output", job.relative_path(events.path))
-    log_path = job.task(ShowerStage()).latest_log
+    log_path = job.task(record.identity).latest_log
     yield format_row("log", job.relative_path(log_path))
     yield format_row("settings", _format_card_paths(job, record))
 
@@ -256,21 +257,21 @@ def simulate_job(
         spec,
         job_id,
         outdir,
-        stage=SimulateStage(),
         run=run,
+        supplier=SHOWER_TASK,
         title="Delphes simulation",
         lines=_simulation_lines,
     )
 
 
 def _simulation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
-    """Yield what the simulation stage of `job` ran with and what it made."""
-    events = job.require_events(SimulateStage())
+    """Yield what the simulation task of `job` ran with and what it made."""
+    events = job.require_events(record.identity)
     yield format_row("card", _format_card_paths(job, record))
     yield format_row("seed", record.parameters["seed"])
     yield format_row("events", events.n_events)
     yield format_row("output", job.relative_path(events.path))
-    log_path = job.task(SimulateStage()).latest_log
+    log_path = job.task(record.identity).latest_log
     yield format_row("log", job.relative_path(log_path))
 
 
@@ -287,21 +288,21 @@ def _run_stage_command(
     job_id: int,
     outdir: Path,
     *,
-    stage: Stage,
     run: Callable[[Job], TaskRecord],
     title: str,
     lines: Callable[[Job, TaskRecord], Iterable[str]],
+    supplier: TaskIdentity | None = None,
 ) -> None:
-    """Run `stage` of one job of `spec` through `run` and print its report.
+    """Run a task of one job of `spec` through `run` and print its report.
 
     The report holds, in order:
 
     - the job and its directory;
-    - `title`, which names the stage, and whether the result was kept;
+    - `title`, which names the task, and whether the result was kept;
     - the ID of the task's latest run;
     - the rows that `lines` gives;
-    - an ``input`` row, when the stage was kept for other events than those
-      it read;
+    - an ``input`` row, when the task was kept for other events of
+      `supplier` than those it read;
     - the number of runs and the status of each, when the task has more than
       one run;
     - what the latest run took.
@@ -310,11 +311,12 @@ def _run_stage_command(
     """
     try:
         job = Job(spec, outdir, job_id)
-        previous_record = job.task_record(stage)
+        previous_records = {task.name: task.record for task in job.tasks()}
         with exception_on_termination():
             record = run(job)
     except _STAGE_ERRORS as error:
         raise click.ClickException(str(error)) from error
+    previous_record = previous_records.get(record.identity.name)
     kept = previous_record is not None and record.runs == previous_record.runs
     outcome = "done, kept from an earlier run" if kept else "done"
     click.echo(format_job_line(job.spec.name, job.job_id, job.root_dir))
@@ -322,8 +324,8 @@ def _run_stage_command(
     click.echo(format_row("run ID", record.latest_run.run_id))
     for line in lines(job, record):
         click.echo(line)
-    if stage.upstream_stage is not None:
-        _report_accepted_input(job, record, stage.upstream_stage)
+    if supplier is not None:
+        _report_accepted_input(job, record, supplier)
     if len(record.runs) > 1:
         statuses = ", ".join(run.status for run in record.runs)
         click.echo(format_row("runs", f"{len(record.runs)} ({statuses})"))
@@ -331,17 +333,19 @@ def _run_stage_command(
     _report_set_aside(job)
 
 
-def _report_accepted_input(job: Job, record: TaskRecord, upstream_stage: Stage) -> None:
+def _report_accepted_input(
+    job: Job, record: TaskRecord, supplier: TaskIdentity
+) -> None:
     """Print the ``input`` row of a task that was kept for another input.
 
     The row is printed when the record holds an accepted input and the events
-    of `upstream_stage` are not the ones the task read.
+    of `supplier` are not the ones the task read.
     """
     accepted_input = record.accepted_input
     input_fingerprint = record.parameters[INPUT_FINGERPRINT_PARAMETER]
     if accepted_input is None:
         return
-    if job.require_events(upstream_stage).fingerprint == input_fingerprint:
+    if job.require_events(supplier).fingerprint == input_fingerprint:
         return
     acceptance = (
         f"accepted (ran on {format_fingerprint(input_fingerprint)}, "

@@ -1,7 +1,8 @@
-"""The identity of a job, ``job.json``: its process, job number and seed.
+"""The identity of a job and the identity of a task.
 
-The first task that runs in a job directory writes the file, and no later
-task changes it::
+**A job** is identified by its process, its job number and its seed
+(:class:`JobIdentity`), which are kept in ``job.json``. The first task that
+runs in a job directory writes the file, and no later task changes it::
 
     {
       "schema": 1,
@@ -13,6 +14,11 @@ task changes it::
 
 ``omphjc_version`` is the version of omphjc that wrote the file.
 :mod:`omphjc.jobs.job_file` describes ``schema``.
+
+**A task** is identified in its job by its stage, its tool and its tag
+(:class:`TaskIdentity`). A stage can have several tasks, which differ in
+the tool or in the tag. The record of a task holds its identity
+(:mod:`omphjc.jobs.task`), and the directory of the task is named after it.
 """
 
 from dataclasses import asdict, dataclass, field, fields
@@ -22,6 +28,7 @@ from typing import Any, ClassVar
 from omphjc import __version__
 from omphjc.comparison import Difference
 from omphjc.jobs.job_file import JobFile
+from omphjc.safe_paths import require_plain_name
 
 
 @dataclass(frozen=True)
@@ -71,3 +78,51 @@ class JobIdentity(JobFile):
             {name: getattr(self, name) for name in names},
             {name: getattr(reference, name) for name in names},
         )
+
+
+@dataclass(frozen=True)
+class TaskIdentity:
+    """The stage, the tool and the tag of one task of a job.
+
+    Parameters
+    ----------
+    stage : str
+        The name of the task's stage, such as ``"shower"``.
+    tool : str
+        The name of the tool that the task is named after, such as
+        ``"pythia"``.
+    tag : str or None, optional
+        A label that tells the task apart from another task of the same
+        stage and tool. Most tasks have none.
+
+    Raises
+    ------
+    ValueError
+        If the stage, the tool or the tag is not a plain name
+        (:func:`omphjc.safe_paths.require_plain_name`).
+    """
+
+    stage: str
+    tool: str
+    tag: str | None = None
+
+    def __post_init__(self) -> None:
+        require_plain_name(self.stage, what="Stage name")
+        require_plain_name(self.tool, what="Tool name")
+        if self.tag is not None:
+            require_plain_name(self.tag, what="Tag")
+
+    @property
+    def name(self) -> str:
+        """The name of the task in its job, such as ``"shower-pythia"``.
+
+        It is the stage and the tool, followed by the tag when the task has
+        one. The directory of the task has this name.
+        """
+        parts = [self.stage, self.tool, *([] if self.tag is None else [self.tag])]
+        return "-".join(parts)
+
+    @property
+    def command(self) -> str:
+        """The command that runs the task, as a message names it."""
+        return f"omphjc {self.stage}"

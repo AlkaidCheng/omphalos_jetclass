@@ -166,13 +166,16 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
     assert lines[4] == "  events requested  10"
     assert lines[5] == "  events generated  10000"
     assert lines[6] == "  cross section     1.05282 +- 0.0024 pb"
-    assert lines[7].startswith("  event file        generate/HToBB/Events/")
-    assert lines[8] == f"  log               generate/logs/{run_id}.log"
-    assert lines[9] == "  cards             generate/cards/"
+    assert lines[7].startswith("  event file        generate-madgraph/HToBB/Events/")
+    assert lines[8] == f"  log               generate-madgraph/logs/{run_id}.log"
+    assert lines[9] == "  cards             generate-madgraph/cards/"
     assert lines[10].startswith("  took              ") and "s wall" in lines[10]
     assert "s CPU" in lines[10] and "MiB peak" in lines[10]
     job_dir = tmp_path / "HToBB" / "job_1"
-    record_paths = [job_dir / "generate" / "task.json", job_dir / "manifest.json"]
+    record_paths = [
+        job_dir / "generate-madgraph" / "task.json",
+        job_dir / "manifest.json",
+    ]
     written = [path.read_text() for path in record_paths]
     again = CliRunner().invoke(
         cli, [*arguments, "--events", "10", "--mg5", str(mg5_path)]
@@ -228,10 +231,11 @@ def test_shower_runs_after_generate_and_reports(
     assert lines[3] == "  Pythia 8.318, seed 10000001"
     assert lines[4] == "  events read       1"
     assert lines[5] == "  events kept       1"
-    assert lines[6] == "  output            shower/particles.root"
-    assert lines[7] == f"  log               shower/logs/{run_id}.log"
+    assert lines[6] == "  output            shower-pythia/particles.root"
+    assert lines[7] == f"  log               shower-pythia/logs/{run_id}.log"
     assert (
-        lines[8] == "  settings          shower/pythia.cmnd, shower/particles_card.tcl"
+        lines[8]
+        == "  settings          shower-pythia/pythia.cmnd, shower-pythia/particles_card.tcl"
     )
     assert lines[9].startswith("  took              ") and "s wall" in lines[9]
     again = CliRunner().invoke(cli, shower)
@@ -259,11 +263,11 @@ def test_clean_deletes_what_earlier_runs_set_aside(
     listed = CliRunner().invoke(cli, ["clean", *job, "--set-aside", "--dry-run"])
     assert listed.exit_code == 0, listed.output
     assert "set aside: would delete 1 folder, " in listed.output
-    assert "generate/omphjc-set-aside/" in listed.output
+    assert "generate-madgraph/omphjc-set-aside/" in listed.output
     cleaned = CliRunner().invoke(cli, ["clean", *job, "--set-aside"])
     assert cleaned.exit_code == 0, cleaned.output
     assert "set aside: deleted 1 folder, " in cleaned.output
-    set_aside = tmp_path / "HToBB" / "job_1" / "generate" / "omphjc-set-aside"
+    set_aside = tmp_path / "HToBB" / "job_1" / "generate-madgraph" / "omphjc-set-aside"
     assert not set_aside.exists()
     again = CliRunner().invoke(cli, ["clean", *job, "--set-aside"])
     assert again.exit_code == 0 and again.output.endswith("set aside: nothing\n")
@@ -295,11 +299,11 @@ def test_simulate_runs_after_shower_and_reports(
     assert lines[0].startswith("HToBB job 1: ")
     assert lines[1] == "Delphes simulation: done"
     run_id = _run_id(lines[2])
-    assert lines[3] == "  card              simulate/delphes_card.tcl"
+    assert lines[3] == "  card              simulate-delphes/delphes_card.tcl"
     assert lines[4] == "  seed              10000001"
     assert lines[5] == "  events            1"
-    assert lines[6] == "  output            simulate/delphes.root"
-    assert lines[7] == f"  log               simulate/logs/{run_id}.log"
+    assert lines[6] == "  output            simulate-delphes/delphes.root"
+    assert lines[7] == f"  log               simulate-delphes/logs/{run_id}.log"
     assert lines[8].startswith("  took              ") and "s wall" in lines[8]
     again = CliRunner().invoke(cli, simulate)
     assert again.exit_code == 0, again.output
