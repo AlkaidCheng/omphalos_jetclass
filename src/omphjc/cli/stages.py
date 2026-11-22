@@ -25,12 +25,8 @@ from omphjc.cli.options import (
 )
 from omphjc.jobs import (
     INPUT_FINGERPRINT_PARAMETER,
-    GenerateStage,
     Job,
     ReplacedRunError,
-    ShowerStage,
-    SimulateStage,
-    Stage,
     TaskRecord,
     TerminationError,
     exception_on_termination,
@@ -40,6 +36,7 @@ from omphjc.jobs import (
 )
 from omphjc.processes import ProcessSpec
 from omphjc.programs import ProgramError
+from omphjc.stages import GenerateStage, ShowerStage, SimulateStage, Stage
 from omphjc.stamps import StampError
 
 # The errors of a stage command that are reported as a message, not a traceback.

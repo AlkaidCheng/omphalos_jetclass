@@ -19,10 +19,10 @@ The modules, by what they hold::
     manifest.py     Manifest, the content of manifest.json, which lists a
                     TaskSummary of each task's record
     job_file.py     JobFile, the base class of the job's JSON files
-    stage.py        Stage, the base class of each stage's class: the name of
-                    its task and the stage whose events it reads
-    stages/         one function and one Stage class per stage: generate,
-                    shower, simulate
+    stages/         one function per stage: generate, shower, simulate
+
+The class of each stage, which names its task and the stage whose events it
+reads, is in :mod:`omphjc.stages`.
 
 How a stage is recorded:
 
@@ -53,12 +53,8 @@ from omphjc.jobs.job import (
     task_parameters,
 )
 from omphjc.jobs.manifest import Manifest, TaskSummary
-from omphjc.jobs.stage import Stage
 from omphjc.jobs.stages import (
     DetectorSimulator,
-    GenerateStage,
-    ShowerStage,
-    SimulateStage,
     generate,
     shower,
     simulate,
@@ -86,13 +82,9 @@ __all__ = [
     "TaskRun",
     "AcceptedInput",
     "DetectorSimulator",
-    "GenerateStage",
     "Job",
     "JobIdentity",
     "Manifest",
-    "ShowerStage",
-    "SimulateStage",
-    "Stage",
     "Task",
     "TaskOutcome",
     "TaskRecord",

@@ -2,28 +2,16 @@
 
 import shutil
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
-from typing import ClassVar
 
 from omphjc.data_files import FileRecord
 from omphjc.jobs.job import Job
-from omphjc.jobs.stage import Stage
 from omphjc.jobs.task import TaskOutcome, TaskRecord
 from omphjc.runs import EVENTS_OUTPUT, RunResult
+from omphjc.stages import GenerateStage
 from omphjc.tools.madgraph.driver import generate_events
 from omphjc.tools.madgraph.lhe_file import LHEFile
-
-
-@dataclass(frozen=True)
-class GenerateStage(Stage):
-    """The generation of parton-level events, the first stage of a job.
-
-    Its task is named ``generate`` and works in ``<job>/generate/``.
-    """
-
-    name: ClassVar[str] = "generate"
-
 
 _CARDS_DIR = "cards"
 

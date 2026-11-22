@@ -1,31 +1,14 @@
 """The shower stage: Pythia 8 on the generated events, through ``DelphesPythia8``."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
 
 from omphjc.jobs.job import Job
-from omphjc.jobs.stage import Stage
-from omphjc.jobs.stages.generate import GenerateStage
 from omphjc.jobs.task import INPUT_FINGERPRINT_PARAMETER, TaskOutcome, TaskRecord
 from omphjc.processes.catalogue import SettingValue
 from omphjc.runs import EVENTS_OUTPUT, RunResult
+from omphjc.stages import ShowerStage
 from omphjc.tools.pythia.driver import shower_events
-
-
-@dataclass(frozen=True)
-class ShowerStage(Stage):
-    """The parton shower of a job, which reads the generated events.
-
-    Its task is named ``shower`` and works in ``<job>/shower/``.
-    """
-
-    name: ClassVar[str] = "shower"
-
-    @property
-    def upstream_stage(self) -> GenerateStage:
-        return GenerateStage()
 
 
 def shower(

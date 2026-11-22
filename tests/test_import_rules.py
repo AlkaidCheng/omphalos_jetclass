@@ -38,6 +38,9 @@ SHARED_MODULES = (
 # catalogue, tool, stage or command.
 RUN_CONTRACT_MODULES = ("omphjc.runs",)
 
+# The layers that know a stage: the stage classes and the jobs that run them.
+STAGE_LAYERS = ("omphjc.stages", "omphjc.jobs")
+
 # The modules omphjc.events may import besides its own: the event-file
 # contracts know no tool, stage or command.
 EVENTS_IMPORTS = (
@@ -161,7 +164,7 @@ def test_shared_modules_and_the_catalogue_import_no_tool_stage_or_command() -> N
         for target in IMPORTS[name]
         if any(
             _within(target, layer)
-            for layer in ("omphjc.tools", "omphjc.jobs", "omphjc.cli")
+            for layer in ("omphjc.tools", *STAGE_LAYERS, "omphjc.cli")
         )
     }
     assert reaches == set()
@@ -177,7 +180,7 @@ def test_the_run_contract_modules_import_no_catalogue_tool_stage_or_command() ->
             for layer in (
                 "omphjc.processes",
                 "omphjc.tools",
-                "omphjc.jobs",
+                *STAGE_LAYERS,
                 "omphjc.cli",
             )
         )
@@ -204,6 +207,10 @@ def test_the_event_files_import_only_their_own_and_four_shared_modules() -> None
         if not _within(target, "omphjc.events") and target not in EVENTS_IMPORTS
     }
     assert reaches == set()
+
+
+def test_the_stage_classes_import_nothing_of_omphjc() -> None:
+    assert IMPORTS["omphjc.stages"] == set()
 
 
 def test_the_jobs_layer_imports_no_command() -> None:
@@ -234,7 +241,7 @@ def test_the_validation_imports_no_stage_and_no_command() -> None:
         for name, targets in IMPORTS.items()
         if _within(name, "omphjc.validation")
         for target in targets
-        if _within(target, "omphjc.jobs") or _within(target, "omphjc.cli")
+        if any(_within(target, layer) for layer in (*STAGE_LAYERS, "omphjc.cli"))
     }
     assert reaches == set()
 
