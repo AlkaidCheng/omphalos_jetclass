@@ -37,7 +37,6 @@ A task is the work of one stage in a job. Its record is the file
           "host": "node01",
           "finished": "2026-10-23T01:05:00+00:00",
           "usage": {"wall_seconds": 301.2},
-          "log": "generate/runs/20261023T010000Z-4f9c2a1e/run.log",
           "set_aside": null,
           "error": "MadGraph exited with status 1"
         },
@@ -50,7 +49,6 @@ A task is the work of one stage in a job. Its record is the file
           "usage": {
             "wall_seconds": 1203.4, "cpu_seconds": 9012.7, "peak_memory_mib": 812.5
           },
-          "log": "generate/runs/20261023T020000Z-b81d07c3/run.log",
           "set_aside": null,
           "error": null
         }
@@ -99,7 +97,11 @@ stage chooses its keys.
 **The runs.** Repeating a task with the same parameters adds a run to the
 record. This happens after a failure, an interruption or the loss of an
 output. A run with other parameters, or under ``force``, starts a new record
-with one run.
+with one run, and the logs of the earlier runs are removed.
+
+The programs of a run write their output to a log of its own,
+``logs/<run_id>.log`` in the directory of the task (:meth:`Task.log_path`).
+The file is missing when no program of the run started.
 
 The record does not store why a task was repeated. The status of the
 previous run says it: that run failed, was interrupted, or was ``"done"`` and
@@ -124,10 +126,6 @@ Each run has these keys:
 ``usage``
     What the run took: its wall time, and the CPU time and peak memory (MiB)
     of the external program's processes where the platform reports them.
-``log``
-    The file that the run's programs write their output to, ``run.log`` in
-    the directory of the run (:mod:`omphjc.jobs.job`). The file is missing
-    when no program of the run started.
 ``set_aside``
     The folder into which the run moved what an earlier run left and it
     could not confirm as that run's (:mod:`omphjc.stamps`). The value is
@@ -147,7 +145,6 @@ record:
 
 - :meth:`TaskRecord.running` starts the record of a task.
 - :meth:`TaskRecord.rerun` adds a run to it.
-- :meth:`TaskRecord.with_log` names the log of that run.
 - :meth:`TaskRecord.with_accepted_input` records an acceptance.
 - :meth:`TaskRecord.failed`, :meth:`TaskRecord.interrupted` and
   :meth:`TaskRecord.done` record how the latest run ended. ``done`` also
@@ -164,7 +161,7 @@ files into account. A task whose latest run is done has
 
 import secrets
 import socket
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
@@ -175,6 +172,7 @@ from omphjc.data_files import FileRecord
 from omphjc.events.formats import EventFileRecord
 from omphjc.jobs.job_file import JobFile
 from omphjc.runs import RunResult
+from omphjc.safe_paths import inside, remove_inside
 from omphjc.stamps import COMPACT_UTC_FORMAT
 
 # How a run ended, or that it is still running.
@@ -230,7 +228,6 @@ class TaskRun:
     host: str
     finished: str | None = None
     usage: dict[str, float] = field(default_factory=dict)
-    log: str | None = None
     set_aside: str | None = None
     error: str | None = None
 
@@ -412,13 +409,6 @@ class TaskRecord(JobFile):
         runs = (*previous_runs, TaskRun.started_now())
         return replace(self, runs=runs, result=None, accepted_input=None)
 
-    def with_log(self, log: str) -> "TaskRecord":
-        """Return the record with `log` as the log of its latest run.
-
-        `log` is the path of the file, relative to the job directory.
-        """
-        return replace(self, runs=self._runs_with_latest(log=log))
-
     def with_accepted_input(self, fingerprint: str) -> "TaskRecord":
         """Return the record with `fingerprint` as its accepted input, dated now."""
         accepted_input = AcceptedInput(fingerprint, accepted_at=timestamp())
@@ -485,6 +475,10 @@ class TaskRecord(JobFile):
         return self.result
 
 
+LOGS_DIR = "logs"
+"""The directory, in a task's directory, that holds the log of each run."""
+
+
 class TaskStatus(Enum):
     """The state of a task, judged from its record and its output files."""
 
@@ -501,12 +495,17 @@ class TaskStatus(Enum):
 
 @dataclass(frozen=True)
 class Task:
-    """A task of a job, as found on disk when :meth:`omphjc.jobs.Job.task` looked.
+    """A task of a job, as found on disk.
+
+    :meth:`read` loads a task from its record file and judges its status.
+    :meth:`omphjc.jobs.Job.task` gives the task of a stage that way.
 
     Parameters
     ----------
     name : str
-        The name of the task, which is also the name of its directory.
+        The name of the task.
+    directory : Path
+        The directory of the task, which holds its record and its logs.
     status : TaskStatus
         How the task stands, by its record and its output files.
     detail : str
@@ -518,9 +517,89 @@ class Task:
     """
 
     name: str
+    directory: Path
     status: TaskStatus
     detail: str = ""
     record: TaskRecord | None = None
+
+    @classmethod
+    def read(cls, record_path: Path) -> "Task":
+        """Return the task whose record is the file `record_path`.
+
+        Everything about the task follows from where its record is. The
+        directory of the task is the one that holds the record, the name of
+        the task is the name of that directory, and the job directory is the
+        one above it.
+
+        The status of the task is judged from the record and the output
+        files:
+
+        - A task whose record does not say done is not done.
+        - For a task recorded as done, the size of each output is compared
+          with the size in the record. When one output has another size and
+          another output is missing, the task is reported as changed.
+
+        Raises
+        ------
+        FileNotFoundError
+            If `record_path` does not exist.
+        ValueError
+            If the file cannot be read as a record.
+        """
+        directory = record_path.parent
+        name = directory.name
+        record = TaskRecord.read(record_path, root_dir=directory.parent)
+        if not record.is_done:
+            return cls(name, directory, TaskStatus.NOT_DONE, record=record)
+        status, detail = TaskStatus.DONE, ""
+        for output in record.outputs.values():
+            try:
+                n_bytes = output.path.stat().st_size
+            except FileNotFoundError:
+                status, detail = TaskStatus.MISSING_OUTPUT, f"{output.path} is missing"
+                continue
+            if n_bytes != output.n_bytes:
+                status = TaskStatus.CHANGED
+                detail = (
+                    f"{output.path} holds {n_bytes} bytes, not the "
+                    f"{output.n_bytes} the {name} stage recorded"
+                )
+                break
+        return cls(name, directory, status, detail, record)
+
+    def log_path(self, run_id: str) -> Path:
+        """Return the log of run `run_id`, ``logs/<run_id>.log`` in the directory.
+
+        The file exists once a program of the run has written to it.
+
+        Raises
+        ------
+        ValueError
+            If `run_id` is not a plain name.
+        """
+        return inside(self.directory, LOGS_DIR, f"{run_id}.log")
+
+    @property
+    def latest_log(self) -> Path:
+        """The log of the latest run of the task.
+
+        Raises
+        ------
+        ValueError
+            If the task has no record, and so no run.
+        """
+        if self.record is None:
+            raise ValueError(f"The {self.name} task in {self.directory} has no run")
+        return self.log_path(self.record.latest_run.run_id)
+
+    def remove_logs(self, log_paths: Iterable[Path]) -> None:
+        """Remove the logs `log_paths` of the task.
+
+        Only regular files are removed, and nothing else in the directory of
+        the logs is touched.
+        """
+        logs = [path for path in log_paths if path.is_file() and not path.is_symlink()]
+        remove_inside(self.directory / LOGS_DIR, logs)
 
 
 def timestamp() -> str:

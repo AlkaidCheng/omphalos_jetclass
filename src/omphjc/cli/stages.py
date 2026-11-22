@@ -123,7 +123,8 @@ def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     )
     yield format_row("cross section", cross_section)
     yield format_row("event file", job.relative_path(events.path))
-    yield format_row("log", record.latest_run.log)
+    log_path = job.task(GenerateStage()).latest_log
+    yield format_row("log", job.relative_path(log_path))
     yield format_row(
         "cards", f"{job.relative_path(job.task_dir(GenerateStage()))}/cards/"
     )
@@ -194,7 +195,8 @@ def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     if "matching_efficiency" in metadata:
         yield format_row("kept by matching", f"{metadata['matching_efficiency']:.1%}")
     yield format_row("output", job.relative_path(events.path))
-    yield format_row("log", record.latest_run.log)
+    log_path = job.task(ShowerStage()).latest_log
+    yield format_row("log", job.relative_path(log_path))
     yield format_row("settings", _format_card_paths(job, record))
 
 
@@ -268,7 +270,8 @@ def _simulation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     yield format_row("seed", record.parameters["seed"])
     yield format_row("events", events.n_events)
     yield format_row("output", job.relative_path(events.path))
-    yield format_row("log", record.latest_run.log)
+    log_path = job.task(SimulateStage()).latest_log
+    yield format_row("log", job.relative_path(log_path))
 
 
 def _format_card_paths(job: Job, record: TaskRecord) -> str:

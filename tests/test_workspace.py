@@ -182,13 +182,13 @@ def test_the_log_in_the_directory_is_an_artifact(
     assert stamp is not None and LOG_NAME in stamp.artifacts
 
 
-def test_a_log_in_another_directory_is_not_an_artifact(
+def test_a_log_given_a_place_is_not_an_artifact(
     tool_path: Path, tmp_path: Path
 ) -> None:
-    workdir, log_dir = tmp_path / "work", tmp_path / "logs"
-    log_dir.mkdir()
-    workspace = Workspace(workdir, process_name="HToBB", log_dir=log_dir)
-    assert workspace.log_path == log_dir / LOG_NAME
+    workdir, log_path = tmp_path / "work", tmp_path / "logs" / "first.log"
+    log_path.parent.mkdir()
+    workspace = Workspace(workdir, process_name="HToBB", log_path=log_path)
+    assert workspace.log_path == log_path
     with workspace.sealed_run(PURPOSE, ARTIFACTS):
         workspace.programs.run([tool_path], failure_message="tool failed")
     assert workspace.log_path.is_file()

@@ -99,7 +99,7 @@ def simulate_events(
     detector_card_path: Path | None = None,
     timeout: float | None = None,
     overwrite: bool = False,
-    log_dir: Path | None = None,
+    log_path: Path | None = None,
     delphes_root_path: Path | None = None,
 ) -> SimulationRun:
     """Simulate the detector on the events in `events_path` with ``DelphesROOT``.
@@ -133,10 +133,10 @@ def simulate_events(
         The output is replaced only after every other check has passed. It is
         deleted when the earlier run sealed it and nothing in it has changed
         since. Otherwise it is moved aside (see `SimulationRun.set_aside`).
-    log_dir : Path or None, optional
-        An existing directory to write the log in. By default the log is
-        written in `workdir`, and a later run replaces it. A log written in
-        another directory is not replaced.
+    log_path : Path or None, optional
+        The file to write the log to, in a directory that exists. A later
+        run leaves it in place. By default the log is ``run.log`` in
+        `workdir`, and a later run replaces it.
     delphes_root_path : Path or None, optional
         Path of Delphes's ``DelphesROOT``. By default the program is looked
         up on PATH.
@@ -175,7 +175,7 @@ def simulate_events(
         workdir,
         delphes_root_path=delphes_root_path,
         timeout=timeout,
-        log_dir=log_dir,
+        log_path=log_path,
     )
     if not overwrite:
         require_unoccupied(workspace.output_path, what="Output file")
@@ -223,8 +223,8 @@ class SimulationWorkspace(ProgramWorkspace):
     timeout : float or None, optional
         The time limit of the run's programs, in seconds from the start of
         :meth:`sealed_run`. ``None`` sets no limit.
-    log_dir : Path or None, optional
-        See the `log_dir` parameter of :class:`~omphjc.workspace.Workspace`.
+    log_path : Path or None, optional
+        See the `log_path` parameter of :class:`~omphjc.workspace.Workspace`.
 
     Raises
     ------
@@ -251,14 +251,14 @@ class SimulationWorkspace(ProgramWorkspace):
         *,
         delphes_root_path: Path | None = None,
         timeout: float | None = None,
-        log_dir: Path | None = None,
+        log_path: Path | None = None,
     ) -> None:
         super().__init__(
             spec.name,
             workdir,
             program_path=delphes_root_path,
             timeout=timeout,
-            log_dir=log_dir,
+            log_path=log_path,
         )
 
     @property

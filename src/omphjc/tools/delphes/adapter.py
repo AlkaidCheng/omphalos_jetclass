@@ -71,7 +71,7 @@ class DelphesSimulator:
         workdir: Path,
         seed: int,
         overwrite: bool,
-        log_dir: Path,
+        log_path: Path,
     ) -> TaskOutcome:
         """Simulate the detector on the events in `source` with Delphes.
 
@@ -91,7 +91,7 @@ class DelphesSimulator:
             detector_card_path=self.detector_card_path,
             timeout=self.timeout_seconds,
             overwrite=overwrite,
-            log_dir=log_dir,
+            log_path=log_path,
             delphes_root_path=self.delphes_root_path,
         )
         return TaskOutcome(

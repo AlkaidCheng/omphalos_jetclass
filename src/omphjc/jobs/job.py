@@ -7,7 +7,7 @@
       manifest.json      an index of the tasks and their records (omphjc.jobs.manifest)
       <stage>/           one directory per task, named and laid out by its stage
         task.json        what the task ran with and what came out (omphjc.jobs.task)
-        runs/<run_id>/   one directory per run of the task, with that run's log
+        logs/<run_id>.log   the log of each run of the task
 
 The job number fixes the seed of every program in the job
 (:func:`job_seed`). ``docs/reproducibility.md`` lists what else the events of
@@ -34,6 +34,7 @@ from omphjc.jobs.task import (
     Task,
     TaskOutcome,
     TaskRecord,
+    TaskRun,
     TaskStatus,
 )
 from omphjc.processes.catalogue import ProcessSpec
@@ -41,11 +42,8 @@ from omphjc.safe_paths import inside, working_directory
 from omphjc.stages import Stage
 from omphjc.stamps import SetAsideFolder, clear_set_aside_folders, set_aside_folders
 from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT
-from omphjc.workspace import LOG_NAME
 
 JOB_DIR_PREFIX = "job_"
-RUNS_DIR = "runs"
-"""The directory, in a task's directory, that holds one directory per run."""
 
 
 class TerminationError(RuntimeError):
@@ -62,7 +60,7 @@ _INTERRUPTIONS = (TerminationError, KeyboardInterrupt)
 
 TaskBody = Callable[[bool, Path], TaskOutcome]
 """Runs a task; the arguments say whether to replace what an earlier run left,
-and give the directory of this run, where the program writes its log."""
+and give the file that the programs of this run write their log to."""
 
 
 class EventReadingTool(Protocol):
@@ -184,13 +182,6 @@ class Job:
         """Return the directory of the task of `stage`, ``<root>/<task name>``."""
         return inside(self.root_dir, stage.task_name)
 
-    def run_dir(self, stage: Stage, run_id: str) -> Path:
-        """Return the directory of run `run_id` of the task of `stage`.
-
-        It is ``<root>/<task name>/runs/<run_id>``.
-        """
-        return inside(self.task_dir(stage), RUNS_DIR, run_id)
-
     def relative_path(self, path: Path) -> str:
         """Return `path` as a POSIX path relative to the job directory."""
         return path.relative_to(self.root_dir).as_posix()
@@ -238,32 +229,22 @@ class Job:
         ]
 
     def task(self, stage: Stage) -> Task:
-        """Return the task of `stage` with its status.
+        """Return the task of `stage` as it is on disk.
 
-        The status is judged from the record of the task and its output files.
+        A task that has a record is loaded from its record file
+        (:meth:`Task.read`), which judges its status. A task without a record
+        is not done.
 
-        The size of each output of a task recorded as done is compared with
-        the size in the record. When one output has another size and another
-        output is missing, the task is reported as changed.
+        Raises
+        ------
+        ValueError
+            If the ``task.json`` of the task cannot be read as a record.
         """
-        record = self.task_record(stage)
-        if record is None or not record.is_done:
-            return Task(stage.task_name, TaskStatus.NOT_DONE, record=record)
-        status, detail = TaskStatus.DONE, ""
-        for output in record.outputs.values():
-            try:
-                n_bytes = output.path.stat().st_size
-            except FileNotFoundError:
-                status, detail = TaskStatus.MISSING_OUTPUT, f"{output.path} is missing"
-                continue
-            if n_bytes != output.n_bytes:
-                status = TaskStatus.CHANGED
-                detail = (
-                    f"{output.path} holds {n_bytes} bytes, not the "
-                    f"{output.n_bytes} the {stage.task_name} stage recorded"
-                )
-                break
-        return Task(stage.task_name, status, detail, record)
+        record_path = self.task_record_path(stage)
+        try:
+            return Task.read(record_path)
+        except FileNotFoundError:
+            return Task(stage.task_name, record_path.parent, TaskStatus.NOT_DONE)
 
     def require_done(self, stage: Stage) -> TaskRecord:
         """Return the record of the task of `stage`.
@@ -360,18 +341,19 @@ class Job:
         **A task that is not kept.** A task without a record runs. A task
         that failed, was interrupted or lost an output runs again. The new
         run is added to the record when `parameters` are the same. With
-        other parameters, or under `force`, the task starts a new record. In
-        both cases `body` is told to replace what the earlier run left.
+        other parameters, or under `force`, the task starts a new record,
+        and the logs of the runs that the earlier record listed are removed.
+        In both cases `body` is told to replace what the earlier run left.
 
         **What is written.** The first task of a job creates the job
-        directory with its ``job.json``. Each run gets a run ID and a
-        directory, ``<root>/<task name>/runs/<run_id>``, which `body` receives for
-        the program's log.
+        directory with its ``job.json``. Each run gets a run ID, and `body`
+        receives the file for its log, ``<root>/<task name>/logs/<run_id>.log``
+        (:meth:`Task.log_path`).
 
         The record, ``task.json`` in the task's directory, is written before
         `body` is called and again after it returns or raises. A failed or
-        interrupted run therefore records how far it got and where its log
-        is. The manifest is written again after each of these writes.
+        interrupted run therefore records how far it got. The manifest is
+        written again after each of these writes.
 
         A run that ``SIGTERM`` or a keyboard interrupt ended is recorded as
         interrupted, and a run that raised anything else as failed. The end
@@ -387,7 +369,7 @@ class Job:
             What the task is asked for, as JSON values.
         body : TaskBody
             Runs the task; receives whether to replace an earlier run's files
-            and the directory of this run.
+            and the file to write the log of this run to.
         accept_input : bool, optional
             Keep a done task whose input alone has changed, and record the
             acceptance. It changes nothing for a task that is not done or has
@@ -408,7 +390,9 @@ class Job:
             message names each parameter that differs. If the ``job.json`` of
             the directory identifies another job. If the ``task.json`` of a
             task of the job cannot be read as a record. If `accept_input` and
-            `force` are both set.
+            `force` are both set. If the record that a new one replaces lists
+            a run whose ID is not a plain name; the record is then left as it
+            was.
         FileNotFoundError
             If the ``job.json`` of the directory was removed while the task
             ran. The task is then not recorded.
@@ -432,16 +416,22 @@ class Job:
         overwrite = force or previous_record is not None
         clock = time.monotonic()
         self._record_identity()
+        dropped_runs: tuple[TaskRun, ...] = ()
         if previous_record is None or force or previous_record.parameters != parameters:
             record = TaskRecord.running(parameters)
+            if previous_record is not None:
+                dropped_runs = previous_record.runs
         else:
             record = previous_record.rerun()
-        run_dir = self.run_dir(stage, record.latest_run.run_id)
-        record = record.with_log(self.relative_path(run_dir / LOG_NAME))
+        log_path = task.log_path(record.latest_run.run_id)
+        # Named before the record is replaced, so that a run ID that is not a
+        # plain name is refused while the earlier record is still in place.
+        dropped_logs = [task.log_path(run.run_id) for run in dropped_runs]
         self._write_record(stage, record)
         try:
-            run_dir.mkdir(parents=True)
-            outcome = body(overwrite, run_dir)
+            task.remove_logs(dropped_logs)
+            log_path.parent.mkdir(exist_ok=True)
+            outcome = body(overwrite, log_path)
         except BaseException as error:
             message = str(error) or type(error).__name__
             if isinstance(error, _INTERRUPTIONS):
