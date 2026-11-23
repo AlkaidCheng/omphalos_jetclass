@@ -134,10 +134,10 @@ Each run has these keys:
     digits. The IDs of a task's runs therefore sort by start time.
 ``status``
     How the run ended: ``"running"``, ``"done"``, ``"failed"`` or
-    ``"interrupted"``. A run is ``"failed"`` when its program or omphjc
-    failed. It is ``"interrupted"`` when a signal ended it, and ``error``
-    then holds the signal. A run that a killed process left ``"running"`` is
-    marked ``"interrupted"`` when the next run starts.
+    ``"interrupted"`` (:class:`RunStatus`). A run is ``"failed"`` when its
+    program or omphjc failed. It is ``"interrupted"`` when a signal ended
+    it, and ``error`` then holds the signal. A run that a killed process left
+    ``"running"`` is marked ``"interrupted"`` when the next run starts.
 ``started``, ``finished``
     The times at which the run started and ended, in UTC. ``finished`` is
     ``null`` for a run whose end was not recorded.
@@ -218,14 +218,6 @@ from omphjc.stamps import COMPACT_UTC_FORMAT
 if TYPE_CHECKING:
     from omphjc.jobs.job import Job
 
-# How a run ended, or that it is still running.
-RUNNING = "running"
-DONE = "done"
-FAILED = "failed"
-INTERRUPTED = "interrupted"
-
-_STATUSES = (RUNNING, DONE, FAILED, INTERRUPTED)
-
 _RUN_ID_RANDOM_BYTES = 4
 """Random bytes in a run ID, written as twice as many hexadecimal digits."""
 
@@ -252,18 +244,28 @@ class TaskOutcome:
     set_aside_dir: Path | None = None
 
 
-@dataclass(frozen=True, kw_only=True)
-class TaskRun:
-    """One run of a task; the module docstring describes the fields.
+class RunStatus(str, Enum):
+    """How a run of a task ended, or that it is still running.
 
-    Raises
-    ------
-    ValueError
-        If `status` is not one the module docstring lists.
+    A status is written to ``task.json`` as its value, such as ``"done"``.
     """
 
+    RUNNING = "running"
+    """The run has started, and its end is not recorded."""
+    DONE = "done"
+    """The run made the files of the task."""
+    FAILED = "failed"
+    """The program of the run, or omphjc, failed."""
+    INTERRUPTED = "interrupted"
+    """A signal ended the run, or a later run found it left running."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class TaskRun:
+    """One run of a task; the module docstring describes the fields."""
+
     run_id: str
-    status: str
+    status: RunStatus
     started: str
     host: str
     finished: str | None = None
@@ -271,9 +273,24 @@ class TaskRun:
     set_aside: str | None = None
     error: str | None = None
 
-    def __post_init__(self) -> None:
-        if self.status not in _STATUSES:
-            raise ValueError(f"unknown run status {self.status!r}")
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "TaskRun":
+        """Return the run that `record` describes, as ``task.json`` holds it.
+
+        Raises
+        ------
+        ValueError
+            If the status of the run is not a value of :class:`RunStatus`.
+        """
+        try:
+            status = RunStatus(record["status"])
+        except ValueError:
+            values = [repr(status.value) for status in RunStatus]
+            expected = f"{', '.join(values[:-1])} or {values[-1]}"
+            raise ValueError(
+                f"the status of a run must be {expected}, got {record['status']!r}"
+            ) from None
+        return cls(**{**record, "status": status})
 
     @classmethod
     def started_now(cls) -> "TaskRun":
@@ -282,7 +299,7 @@ class TaskRun:
         random_digits = secrets.token_hex(_RUN_ID_RANDOM_BYTES)
         return cls(
             run_id=f"{start_time.strftime(COMPACT_UTC_FORMAT)}-{random_digits}",
-            status=RUNNING,
+            status=RunStatus.RUNNING,
             started=start_time.isoformat(timespec="seconds"),
             host=socket.gethostname(),
         )
@@ -394,7 +411,7 @@ class TaskRecord(JobFile):
                 "the record lists no run, and a task record lists at least the run "
                 "that made it"
             )
-        status = self.latest_run.status
+        status = self.latest_run.status.value
         if self.is_done and self.result is None:
             raise ValueError(
                 f"the latest run is {status!r}, so the record should hold the "
@@ -425,7 +442,7 @@ class TaskRecord(JobFile):
     @property
     def is_done(self) -> bool:
         """Whether the latest run of the task is done."""
-        return self.latest_run.status == DONE
+        return self.latest_run.status is RunStatus.DONE
 
     @property
     def input_fingerprints(self) -> dict[str, str]:
@@ -505,7 +522,7 @@ class TaskRecord(JobFile):
         """
         values = dict(record)
         identity = TaskIdentity(**values.pop("identity"))
-        runs = tuple(TaskRun(**run) for run in values.pop("runs", ()))
+        runs = tuple(TaskRun.from_record(run) for run in values.pop("runs", ()))
         result = values.pop("result")
         inputs = {
             input_name: InputRecord.from_record(input_record)
@@ -561,8 +578,8 @@ class TaskRecord(JobFile):
         input holds an acceptance.
         """
         previous_runs = self.runs
-        if self.latest_run.status == RUNNING:
-            previous_runs = self._runs_with_latest(status=INTERRUPTED)
+        if self.latest_run.status is RunStatus.RUNNING:
+            previous_runs = self._runs_with_latest(status=RunStatus.INTERRUPTED)
         runs = (*previous_runs, TaskRun.started_now())
         inputs = {
             input_name: replace(input_record, accepted=None)
@@ -605,13 +622,15 @@ class TaskRecord(JobFile):
 
     def failed(self, *, error: str) -> "TaskRecord":
         """Record that the latest run failed with `error`."""
-        runs = self._runs_with_latest(status=FAILED, finished=timestamp(), error=error)
+        runs = self._runs_with_latest(
+            status=RunStatus.FAILED, finished=timestamp(), error=error
+        )
         return replace(self, runs=runs)
 
     def interrupted(self, *, error: str) -> "TaskRecord":
         """Record that a signal interrupted the latest run; `error` names it."""
         runs = self._runs_with_latest(
-            status=INTERRUPTED, finished=timestamp(), error=error
+            status=RunStatus.INTERRUPTED, finished=timestamp(), error=error
         )
         return replace(self, runs=runs)
 
@@ -625,7 +644,7 @@ class TaskRecord(JobFile):
         """
         set_aside_dir = outcome.set_aside_dir
         runs = self._runs_with_latest(
-            status=DONE,
+            status=RunStatus.DONE,
             finished=timestamp(),
             usage={"wall_seconds": round(wall_seconds, 3), **outcome.usage},
             set_aside=(
@@ -682,7 +701,7 @@ class TaskRecord(JobFile):
         if self.result is None:
             raise ValueError(
                 "The task record has no result: its latest run has status "
-                f"{self.latest_run.status!r}"
+                f"{self.latest_run.status.value!r}"
             )
         return self.result
 
@@ -1567,7 +1586,7 @@ class Task(ABC):
             raise ReplacedRunError(
                 f"Run {run.run_id!r} of the {self.name} task in "
                 f"{self.job.root_dir} is not "
-                f"recorded as {run.status}: run {recorded.latest_run.run_id!r} of "
+                f"recorded as {run.status.value}: run {recorded.latest_run.run_id!r} of "
                 "the task started before it ended"
             )
         self._write_record(record)
