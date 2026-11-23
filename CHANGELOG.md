@@ -256,6 +256,9 @@
   to go on. (#100)
 - The refusal of a done task whose inputs changed names `--accept-input` when
   that option would keep the task's result. (#101)
+- The commands make the task classes and run them, and the stage functions
+  `generate`, `shower` and `simulate` of `omphjc.jobs` and
+  `omphjc.tools.delphes.adapter.DelphesSimulator` are removed. (#102)
 
 ### Fixed
 

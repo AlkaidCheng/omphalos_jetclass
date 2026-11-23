@@ -52,7 +52,6 @@ from omphjc.jobs.identity import JobIdentity, TaskIdentity
 from omphjc.jobs.job import Job, exception_on_termination, job_seed
 from omphjc.jobs.job_file import JobFileError
 from omphjc.jobs.manifest import Manifest, TaskSummary
-from omphjc.jobs.stages import GENERATE_TASK, SHOWER_TASK, generate, shower, simulate
 from omphjc.jobs.task import (
     DONE,
     EVENTS_INPUT,
@@ -79,10 +78,8 @@ __all__ = [
     "DONE",
     "EVENTS_INPUT",
     "FAILED",
-    "GENERATE_TASK",
     "INTERRUPTED",
     "RUNNING",
-    "SHOWER_TASK",
     "TASK_REGISTRY",
     "AcceptedInput",
     "InputRecord",
@@ -104,8 +101,5 @@ __all__ = [
     "TaskSummary",
     "TerminationError",
     "exception_on_termination",
-    "generate",
     "job_seed",
-    "shower",
-    "simulate",
 ]

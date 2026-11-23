@@ -59,17 +59,10 @@ CROSS_TOOL_IMPORTS = {
     ("omphjc.tools.pythia.driver", "omphjc.tools.delphes.card"),
 }
 
-# The tool modules the jobs layer imports: a job's seed is checked against
-# Pythia's limit, and the simulate stage function takes the Delphes adapter.
+# The one tool module the jobs layer imports: a job's seed is checked against
+# Pythia's limit.
 JOBS_TOOL_IMPORTS = {
     ("omphjc.jobs.job", "omphjc.tools.pythia.cmnd"),
-    ("omphjc.jobs.stages.simulate", "omphjc.tools.delphes.adapter"),
-}
-
-# The one module of a tool that imports the jobs layer: its adapter, which
-# returns what the tool made as the outcome of a task.
-ADAPTER_JOBS_IMPORTS = {
-    ("omphjc.tools.delphes.adapter", "omphjc.jobs.task"),
 }
 
 
@@ -128,15 +121,18 @@ def test_tool_packages_import_nothing(package: str) -> None:
     assert IMPORTS[package] == set()
 
 
-def test_a_tool_imports_the_jobs_layer_only_in_its_adapter_and_no_command() -> None:
+def test_a_tool_imports_no_jobs_module_no_task_class_and_no_command() -> None:
     reaches = {
         (name, target)
         for name, targets in IMPORTS.items()
         if _within(name, "omphjc.tools")
         for target in targets
-        if _within(target, "omphjc.jobs") or _within(target, "omphjc.cli")
+        if any(
+            _within(target, layer)
+            for layer in ("omphjc.jobs", "omphjc.tasks", "omphjc.cli")
+        )
     }
-    assert reaches == ADAPTER_JOBS_IMPORTS
+    assert reaches == set()
 
 
 def test_a_tool_imports_another_only_where_accepted() -> None:
@@ -211,13 +207,13 @@ def test_the_stage_classes_import_nothing_of_omphjc() -> None:
     assert IMPORTS["omphjc.stages"] == set()
 
 
-def test_the_jobs_layer_imports_no_command() -> None:
+def test_the_jobs_layer_imports_no_task_class_and_no_command() -> None:
     reaches = {
         (name, target)
         for name, targets in IMPORTS.items()
         if _within(name, "omphjc.jobs")
         for target in targets
-        if _within(target, "omphjc.cli")
+        if _within(target, "omphjc.tasks") or _within(target, "omphjc.cli")
     }
     assert reaches == set()
 
