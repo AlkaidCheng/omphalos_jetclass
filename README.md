@@ -418,8 +418,9 @@ stage that runs writes the process, the job number and the seed to `job.json`,
 and no stage runs in a directory whose `job.json` gives another process, job
 number or seed. The directory of a stage is named after the stage and its
 tool, such as `shower-pythia`. Each stage keeps a record, `task.json`, in its
-directory: the stage and the tool, the
-parameters it was asked for, its result, and one entry per run of the stage
+directory: the stage and the tool, the settings its command was given, such
+as the time limit and the path of the program, the parameters that fix what
+it makes, its result, and one entry per run of the stage
 with the run's ID, its status, its start and end times, the host it ran on,
 and what it took: the wall time of the run and the CPU time and peak
 memory of the program's processes. The run ID is the start time in UTC and

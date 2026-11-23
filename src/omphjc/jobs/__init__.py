@@ -12,38 +12,38 @@ depend on.
 
 The modules, by what they hold::
 
-    job.py          Job: the job directory, its seed, and the rules that decide
-                    whether a task runs again (Job.run_task)
-    task.py         Task, a task of a job; TaskStatus, whether a task is done
-                    and its output files are intact; TaskRecord, the content
-                    of task.json, with a TaskRun for each run; TaskOutcome,
-                    what a stage function returns
+    job.py          Job: the job directory, its seed, its tasks and its manifest,
+                    with the rules that decide whether a task runs again
+                    (Job.run_task)
+    task.py         Task, the base class of a task; TaskRegistry and
+                    TASK_REGISTRY, the registry of the task classes;
+                    TaskRecord, the content of task.json, with a TaskRun for
+                    each run; TaskOutcome, what a run made
     identity.py     JobIdentity, the content of job.json, and TaskIdentity, the
                     stage, the tool and the tag of a task
     manifest.py     Manifest, the content of manifest.json, which lists a
                     TaskSummary of each task's record
     job_file.py     JobFile, the base class of the job's JSON files
-    stages/         one function per stage: generate, shower, simulate; each
-                    names the identity of its task
 
-How a stage is recorded:
+The classes of the tasks are in :mod:`omphjc.tasks`.
 
-1. The stage calls a driver, such as
+How a task is recorded:
+
+1. :meth:`Job.run_task` calls :meth:`Task.execute` of the task's class, which
+   calls a driver, such as
    :func:`omphjc.tools.madgraph.driver.generate_events`. The driver returns a
-   run record with absolute paths. The simulation stage calls its simulator
-   (:class:`DetectorSimulator`), which calls the driver of its tool.
-2. The stage function, or the simulator, builds a :class:`TaskOutcome` from
-   the run record. The outcome holds the result of the run
-   (:class:`omphjc.runs.RunResult`) and its usage. The result holds the
-   task's outputs and cards by name, and its metadata. An output is a :class:`~omphjc.data_files.FileRecord`, or an
+   run record with absolute paths.
+2. :meth:`Task.execute` builds a :class:`TaskOutcome` from the run record.
+   The outcome holds the result of the run (:class:`omphjc.runs.RunResult`)
+   and its usage. The result holds the task's outputs and cards by name, and
+   its metadata. An output is a :class:`~omphjc.data_files.FileRecord`, or an
    :class:`~omphjc.events.formats.EventFileRecord` for an event file. A card
    is a :class:`~omphjc.data_files.FileRecord` that the driver's workspace
    made (:meth:`omphjc.workspace.ProgramWorkspace.card_records`).
-3. :meth:`Job.run_task` records the run as a :class:`TaskRun`, with its
-   status, start and finish times and usage. It writes the identity of the
-   task, the run, the parameters and the result to ``task.json`` as a
-   :class:`TaskRecord`, with
-   every path relative to the job directory.
+3. :meth:`Job.run_task` records the run as a :class:`TaskRun`, with its status,
+   start and finish times and usage. It writes the identity of the task, its
+   settings, the run, the parameters and the result to ``task.json`` as a
+   :class:`TaskRecord`, with every path relative to the job directory.
 """
 
 from omphjc.jobs.identity import JobIdentity, TaskIdentity
@@ -53,59 +53,55 @@ from omphjc.jobs.job import (
     TerminationError,
     exception_on_termination,
     job_seed,
-    task_parameters,
 )
 from omphjc.jobs.manifest import Manifest, TaskSummary
-from omphjc.jobs.stages import (
-    GENERATE_TASK,
-    SHOWER_TASK,
-    DetectorSimulator,
-    generate,
-    shower,
-    simulate,
-    simulate_task,
-)
+from omphjc.jobs.stages import GENERATE_TASK, SHOWER_TASK, generate, shower, simulate
 from omphjc.jobs.task import (
     DONE,
+    EVENTS_INPUT,
     FAILED,
     INPUT_FINGERPRINT_PARAMETER,
     INTERRUPTED,
     RUNNING,
+    TASK_REGISTRY,
     AcceptedInput,
     Task,
+    TaskInput,
     TaskOutcome,
     TaskRecord,
+    TaskRegistry,
     TaskRun,
     TaskStatus,
 )
 
 __all__ = [
     "DONE",
+    "EVENTS_INPUT",
     "FAILED",
-    "INPUT_FINGERPRINT_PARAMETER",
     "GENERATE_TASK",
+    "INPUT_FINGERPRINT_PARAMETER",
     "INTERRUPTED",
     "RUNNING",
     "SHOWER_TASK",
-    "TaskRun",
+    "TASK_REGISTRY",
     "AcceptedInput",
-    "DetectorSimulator",
     "Job",
     "JobIdentity",
     "Manifest",
+    "ReplacedRunError",
     "Task",
     "TaskIdentity",
+    "TaskInput",
     "TaskOutcome",
     "TaskRecord",
+    "TaskRegistry",
+    "TaskRun",
     "TaskStatus",
     "TaskSummary",
-    "ReplacedRunError",
     "TerminationError",
     "exception_on_termination",
     "generate",
     "job_seed",
     "shower",
     "simulate",
-    "simulate_task",
-    "task_parameters",
 ]

@@ -24,12 +24,9 @@ from omphjc.cli.options import (
     parse_assignment,
 )
 from omphjc.jobs import (
-    GENERATE_TASK,
     INPUT_FINGERPRINT_PARAMETER,
-    SHOWER_TASK,
     Job,
     ReplacedRunError,
-    TaskIdentity,
     TaskRecord,
     TerminationError,
     exception_on_termination,
@@ -114,7 +111,8 @@ def generate_job(
 def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the generation task of `job` ran with and what it made."""
     metadata = record.metadata
-    events = job.require_events(record.identity)
+    task = job.task_from_record(record)
+    events = task.events
     yield f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
     yield format_row("events requested", record.parameters["events"])
     yield format_row("events generated", events.n_events)
@@ -124,8 +122,7 @@ def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     )
     yield format_row("cross section", cross_section)
     yield format_row("event file", job.relative_path(events.path))
-    log_path = job.task(record.identity).latest_log
-    yield format_row("log", job.relative_path(log_path))
+    yield format_row("log", job.relative_path(task.latest_log))
     yield format_row(
         "cards", f"{job.relative_path(job.task_dir(record.identity))}/cards/"
     )
@@ -180,7 +177,6 @@ def shower_job(
         job_id,
         outdir,
         run=run,
-        supplier=GENERATE_TASK,
         title="Pythia shower",
         lines=_shower_lines,
     )
@@ -189,15 +185,15 @@ def shower_job(
 def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the shower task of `job` ran with and what it made."""
     metadata = record.metadata
-    events = job.require_events(record.identity)
+    task = job.task_from_record(record)
+    events = task.events
     yield f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
     yield format_row("events read", metadata["events_read"])
     yield format_row("events kept", events.n_events)
     if "matching_efficiency" in metadata:
         yield format_row("kept by matching", f"{metadata['matching_efficiency']:.1%}")
     yield format_row("output", job.relative_path(events.path))
-    log_path = job.task(record.identity).latest_log
-    yield format_row("log", job.relative_path(log_path))
+    yield format_row("log", job.relative_path(task.latest_log))
     yield format_row("settings", _format_card_paths(job, record))
 
 
@@ -258,7 +254,6 @@ def simulate_job(
         job_id,
         outdir,
         run=run,
-        supplier=SHOWER_TASK,
         title="Delphes simulation",
         lines=_simulation_lines,
     )
@@ -266,13 +261,13 @@ def simulate_job(
 
 def _simulation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the simulation task of `job` ran with and what it made."""
-    events = job.require_events(record.identity)
+    task = job.task_from_record(record)
+    events = task.events
     yield format_row("card", _format_card_paths(job, record))
     yield format_row("seed", record.parameters["seed"])
     yield format_row("events", events.n_events)
     yield format_row("output", job.relative_path(events.path))
-    log_path = job.task(record.identity).latest_log
-    yield format_row("log", job.relative_path(log_path))
+    yield format_row("log", job.relative_path(task.latest_log))
 
 
 def _format_card_paths(job: Job, record: TaskRecord) -> str:
@@ -291,7 +286,6 @@ def _run_stage_command(
     run: Callable[[Job], TaskRecord],
     title: str,
     lines: Callable[[Job, TaskRecord], Iterable[str]],
-    supplier: TaskIdentity | None = None,
 ) -> None:
     """Run a task of one job of `spec` through `run` and print its report.
 
@@ -301,8 +295,8 @@ def _run_stage_command(
     - `title`, which names the task, and whether the result was kept;
     - the ID of the task's latest run;
     - the rows that `lines` gives;
-    - an ``input`` row, when the task was kept for other events of
-      `supplier` than those it read;
+    - an ``input`` row, when the task was kept for other events than those
+      it read;
     - the number of runs and the status of each, when the task has more than
       one run;
     - what the latest run took.
@@ -324,8 +318,7 @@ def _run_stage_command(
     click.echo(format_row("run ID", record.latest_run.run_id))
     for line in lines(job, record):
         click.echo(line)
-    if supplier is not None:
-        _report_accepted_input(job, record, supplier)
+    _report_accepted_input(job, record)
     if len(record.runs) > 1:
         statuses = ", ".join(run.status for run in record.runs)
         click.echo(format_row("runs", f"{len(record.runs)} ({statuses})"))
@@ -333,19 +326,21 @@ def _run_stage_command(
     _report_set_aside(job)
 
 
-def _report_accepted_input(
-    job: Job, record: TaskRecord, supplier: TaskIdentity
-) -> None:
+def _report_accepted_input(job: Job, record: TaskRecord) -> None:
     """Print the ``input`` row of a task that was kept for another input.
 
     The row is printed when the record holds an accepted input and the events
-    of `supplier` are not the ones the task read.
+    that the task reads now are not the ones it read when it ran.
     """
     accepted_input = record.accepted_input
-    input_fingerprint = record.parameters[INPUT_FINGERPRINT_PARAMETER]
     if accepted_input is None:
         return
-    if job.require_events(supplier).fingerprint == input_fingerprint:
+    input_fingerprint = record.parameters[INPUT_FINGERPRINT_PARAMETER]
+    task = job.task_from_record(record)
+    current_fingerprints = {
+        events.fingerprint for events in task.input_events().values()
+    }
+    if input_fingerprint in current_fingerprints:
         return
     acceptance = (
         f"accepted (ran on {format_fingerprint(input_fingerprint)}, "

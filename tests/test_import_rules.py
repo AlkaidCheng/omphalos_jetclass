@@ -38,8 +38,9 @@ SHARED_MODULES = (
 # catalogue, tool, stage or command.
 RUN_CONTRACT_MODULES = ("omphjc.runs",)
 
-# The layers that know a stage: the stage classes and the jobs that run them.
-STAGE_LAYERS = ("omphjc.stages", "omphjc.jobs")
+# The layers that know a stage: the stage classes, the jobs with the base class
+# of their tasks, and the task classes.
+STAGE_LAYERS = ("omphjc.stages", "omphjc.jobs", "omphjc.tasks")
 
 # The modules omphjc.events may import besides its own: the event-file
 # contracts know no tool, stage or command.
@@ -58,14 +59,11 @@ CROSS_TOOL_IMPORTS = {
     ("omphjc.tools.pythia.driver", "omphjc.tools.delphes.card"),
 }
 
-# The tool modules the jobs layer imports: the generate and shower stage
-# functions call their tool's driver, the generate stage fingerprints the LHE
-# file it made, and a job's seed is checked against Pythia's limit.
+# The tool modules the jobs layer imports: a job's seed is checked against
+# Pythia's limit, and the simulate stage function takes the Delphes adapter.
 JOBS_TOOL_IMPORTS = {
     ("omphjc.jobs.job", "omphjc.tools.pythia.cmnd"),
-    ("omphjc.jobs.stages.generate", "omphjc.tools.madgraph.driver"),
-    ("omphjc.jobs.stages.generate", "omphjc.tools.madgraph.lhe_file"),
-    ("omphjc.jobs.stages.shower", "omphjc.tools.pythia.driver"),
+    ("omphjc.jobs.stages.simulate", "omphjc.tools.delphes.adapter"),
 }
 
 # The one module of a tool that imports the jobs layer: its adapter, which
@@ -218,6 +216,17 @@ def test_the_jobs_layer_imports_no_command() -> None:
         (name, target)
         for name, targets in IMPORTS.items()
         if _within(name, "omphjc.jobs")
+        for target in targets
+        if _within(target, "omphjc.cli")
+    }
+    assert reaches == set()
+
+
+def test_the_task_classes_import_no_command() -> None:
+    reaches = {
+        (name, target)
+        for name, targets in IMPORTS.items()
+        if _within(name, "omphjc.tasks")
         for target in targets
         if _within(target, "omphjc.cli")
     }
