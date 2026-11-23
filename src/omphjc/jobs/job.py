@@ -99,8 +99,9 @@ class Job:
             working_directory(outdir), spec.name, f"{JOB_DIR_PREFIX}{job_id}"
         )
         self.identity = JobIdentity(process=spec.name, job_id=job_id, seed=self.seed)
+        self._identity_is_validated = False
         if self.identity_path.exists():
-            self._check_identity()
+            self._validate_identity()
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Job):
@@ -252,22 +253,28 @@ class Job:
     def record_identity(self) -> None:
         """Create the job directory with its ``job.json``, or check the one it holds.
 
+        A job reads and compares the file once. A later call does nothing
+        while the file is there, and writes it again when it is gone.
+
         Raises
         ------
         ValueError
             If the ``job.json`` of the directory identifies another job.
         """
+        if self._identity_is_validated and self.identity_path.exists():
+            return
         self.root_dir.mkdir(parents=True, exist_ok=True)
         try:
             self.identity.create(self.identity_path)
         except FileExistsError:
-            self._check_identity()
+            self._validate_identity()
+        self._identity_is_validated = True
 
-    def _check_identity(self) -> None:
+    def _validate_identity(self) -> None:
         """Refuse a job directory whose ``job.json`` identifies another job."""
         recorded = JobIdentity.read(self.identity_path)
-        differences = self.identity.differences(recorded)
-        if differences:
+        if recorded != self.identity:
+            differences = self.identity.differences(recorded)
             raise ValueError(
                 "The current configuration is inconsistent with that of the "
                 f"existing job in {self.root_dir} ({JobIdentity.file_name}):"
@@ -275,6 +282,7 @@ class Job:
                 + "\nRerun with the configuration the job was created with, or "
                 "choose another output directory."
             )
+        self._identity_is_validated = True
 
     def write_manifest(self, written_record: TaskRecord | None = None) -> None:
         """Write the manifest from the record of every task that has one.
