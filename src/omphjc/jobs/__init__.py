@@ -14,9 +14,10 @@ The modules, by what they hold::
 
     job.py          Job: the job directory, its seed, and the rules that decide
                     whether a task runs again (Job.run_task)
-    task.py         Task and TaskStatus, a task as found on disk; TaskRecord, the
-                    content of task.json, with a TaskRun for each run, and
-                    TaskOutcome, what a stage function returns
+    task.py         Task, a task of a job; TaskStatus, whether a task is done
+                    and its output files are intact; TaskRecord, the content
+                    of task.json, with a TaskRun for each run; TaskOutcome,
+                    what a stage function returns
     identity.py     JobIdentity, the content of job.json, and TaskIdentity, the
                     stage, the tool and the tag of a task
     manifest.py     Manifest, the content of manifest.json, which lists a

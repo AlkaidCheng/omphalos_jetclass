@@ -151,6 +151,9 @@ class Job:
         The process, the job number and the seed. The first task that runs
         writes it to ``job.json`` in the job directory.
 
+    Two jobs are equal when they are the same process in the same job
+    directory.
+
     Raises
     ------
     ValueError
@@ -170,6 +173,19 @@ class Job:
         if self.identity_path.exists():
             self._check_identity()
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Job):
+            return NotImplemented
+        return (self.spec, self.root_dir) == (other.spec, other.root_dir)
+
+    def __hash__(self) -> int:
+        return hash(self.root_dir)
+
+    def __repr__(self) -> str:
+        return (
+            f"Job({self.spec.name!r}, {self.job_id}, root_dir={str(self.root_dir)!r})"
+        )
+
     @property
     def identity_path(self) -> Path:
         return self.root_dir / JobIdentity.file_name
@@ -186,29 +202,11 @@ class Job:
         """Return `path` as a POSIX path relative to the job directory."""
         return path.relative_to(self.root_dir).as_posix()
 
-    def task_record_path(self, identity: TaskIdentity) -> Path:
-        """Return the file of the record of the task `identity`.
-
-        It is ``<root>/<task name>/task.json``.
-        """
-        return self.task_dir(identity) / TaskRecord.file_name
-
-    def task_record(self, identity: TaskIdentity) -> TaskRecord | None:
-        """Return the record of the task `identity`, or ``None`` when it has none.
-
-        Raises
-        ------
-        ValueError
-            As :meth:`task` refuses a record.
-        """
-        return self.task(identity).record
-
     def tasks(self, stage: str | None = None) -> list[Task]:
         """Return the tasks that have a record, in the order of their names.
 
         A task has a record when its directory holds a ``task.json``. Only the
-        directories directly inside the job directory are looked at. Each
-        task is loaded from its record file (:meth:`Task.read`).
+        directories directly inside the job directory are looked at.
 
         Parameters
         ----------
@@ -222,10 +220,15 @@ class Job:
             If a ``task.json`` cannot be read as a record, or its directory
             is not named after the task it identifies.
         """
-        tasks = [
-            Task.read(record_path) for record_path in self._task_record_paths().values()
+        records = [
+            TaskRecord.read(record_path, root_dir=self.root_dir)
+            for record_path in self._task_record_paths().values()
         ]
-        return [task for task in tasks if stage is None or task.identity.stage == stage]
+        return [
+            Task(self, record.identity)
+            for record in records
+            if stage is None or record.identity.stage == stage
+        ]
 
     def _task_record_paths(self) -> dict[str, Path]:
         """Return the path of the record of each task that has one, by the task's name.
@@ -242,56 +245,8 @@ class Job:
         ]
 
     def task(self, identity: TaskIdentity) -> Task:
-        """Return the task `identity` as it is on disk.
-
-        A task that has a record is loaded from its record file
-        (:meth:`Task.read`), which judges its status. A task without a record
-        is not done.
-
-        Raises
-        ------
-        ValueError
-            If the ``task.json`` of the task cannot be read as a record, is
-            not in the directory of its task, or is the record of a task with
-            another identity.
-        """
-        record_path = self.task_record_path(identity)
-        try:
-            task = Task.read(record_path)
-        except FileNotFoundError:
-            return Task(identity, record_path.parent, TaskStatus.NOT_DONE)
-        if task.identity != identity:
-            raise ValueError(
-                f"{record_path} is the record of {task.identity}, not of {identity}"
-            )
-        return task
-
-    def require_done(self, identity: TaskIdentity) -> TaskRecord:
-        """Return the record of the task `identity`.
-
-        The task must be done with its outputs intact.
-
-        Raises
-        ------
-        ValueError
-            If the task is not done or an output is missing. The message
-            names the command to run first.
-
-            If an output has another size than recorded. The message names
-            the file, both sizes and ``--force``.
-        """
-        task = self.task(identity)
-        if task.status is TaskStatus.CHANGED:
-            raise ValueError(
-                f"{task.detail}; run {identity.command} with --force to regenerate "
-                "the file"
-            )
-        if task.record is None or task.status is not TaskStatus.DONE:
-            raise ValueError(
-                f"The {identity.name} task of {self.root_dir} has not run to "
-                f"completion; run {identity.command} first"
-            )
-        return task.record
+        """Return the task `identity` of the job, whether it has run or not."""
+        return Task(self, identity)
 
     def require_events(
         self, identity: TaskIdentity, *, for_tool: EventReadingTool | None = None
@@ -311,14 +266,10 @@ class Job:
         Raises
         ------
         ValueError
-            For the reasons that :meth:`require_done` gives. If the task made
-            no event file. If `for_tool` cannot read the format of the file.
+            As :attr:`Task.events` refuses. If `for_tool` cannot read the format
+            of the file.
         """
-        events = self.require_done(identity).events
-        if events is None:
-            raise ValueError(
-                f"The {identity.name} task of {self.root_dir} made no event file"
-            )
+        events = self.task(identity).events
         if for_tool is not None and events.format not in for_tool.input_formats:
             readable_formats = sorted(
                 event_format.value for event_format in for_tool.input_formats
@@ -428,7 +379,9 @@ class Job:
         task = self.task(identity)
         previous_record = task.record
         if not force:
-            kept_record = self._kept_record(task, parameters, accept_input=accept_input)
+            kept_record = self._kept_record(
+                previous_record, parameters, accept_input=accept_input
+            )
             if kept_record is not None:
                 return kept_record
         overwrite = force or previous_record is not None
@@ -465,12 +418,14 @@ class Job:
 
     def _kept_record(
         self,
-        task: Task,
+        record: TaskRecord | None,
         parameters: dict[str, Any],
         *,
         accept_input: bool,
     ) -> TaskRecord | None:
-        """Return the record of `task` when its result is kept for `parameters`.
+        """Return `record` when the result of its task is kept for `parameters`.
+
+        `record` is the record of the task as found on disk.
 
         Return ``None`` when the task has to run. That is the case for a
         task without a record, for a task that is not done, and for a task
@@ -481,20 +436,20 @@ class Job:
         ValueError
             As :meth:`run_task` refuses a task recorded as done.
         """
-        record = task.record
         if record is None or not record.is_done:
             return None
-        if task.status is TaskStatus.DONE:
+        status, detail = record.current_status()
+        if status is TaskStatus.DONE:
             if record.is_accepted_for(parameters):
                 return record
             if accept_input:
                 return self._accept_input(record, parameters)
         self._check_parameters(record, parameters)
-        if task.status is TaskStatus.DONE:
+        if status is TaskStatus.DONE:
             return record
-        if task.status is TaskStatus.CHANGED:
+        if status is TaskStatus.CHANGED:
             raise ValueError(
-                f"{task.detail}; run {task.identity.command} with --force to "
+                f"{detail}; run {record.identity.command} with --force to "
                 "regenerate the file"
             )
         return None
@@ -604,7 +559,7 @@ class Job:
             return
         identity = record.identity
         differences = Difference.between_nested_mappings(parameters, recorded)
-        record_path = self.relative_path(self.task_record_path(identity))
+        record_path = self.relative_path(self.task(identity).record_path)
         raise ValueError(
             "The current parameters are inconsistent with those of the existing "
             f"{identity.name} task in {self.root_dir} ({record_path}):"
@@ -623,7 +578,7 @@ class Job:
             That record is left unchanged.
         """
         run = record.latest_run
-        recorded = self.task_record(record.identity)
+        recorded = self.task(record.identity).record
         if recorded is not None and recorded.latest_run.run_id != run.run_id:
             raise ReplacedRunError(
                 f"Run {run.run_id!r} of the {record.identity.name} task in "
@@ -646,7 +601,7 @@ class Job:
                 f"{record.identity.name} task ran; "
                 "the outcome of the task is not recorded"
             )
-        record_path = self.task_record_path(record.identity)
+        record_path = self.task(record.identity).record_path
         record_path.parent.mkdir(exist_ok=True)
         record.write(record_path, root_dir=self.root_dir)
         self._write_manifest()

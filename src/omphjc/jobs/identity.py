@@ -112,6 +112,11 @@ class TaskIdentity:
         if self.tag is not None:
             require_plain_name(self.tag, what="Tag")
 
+    def __str__(self) -> str:
+        """Return the stage, the tool and the tag in words, as a message writes them."""
+        tag = "no tag" if self.tag is None else f"tag {self.tag!r}"
+        return f"stage {self.stage!r}, tool {self.tool!r} and {tag}"
+
     @property
     def name(self) -> str:
         """The name of the task in its job, such as ``"shower-pythia"``.
