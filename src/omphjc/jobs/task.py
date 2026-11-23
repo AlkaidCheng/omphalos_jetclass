@@ -158,10 +158,10 @@ record:
 
 **Record and status.** A record only says how each run of the task ended.
 Whether the task is done at this moment also depends on its output files,
-because they may have been deleted or changed since. :class:`Task` holds a
-task as found on disk, and its :class:`TaskStatus` takes the record and the
-files into account. A task whose latest run is done has
-:attr:`TaskStatus.DONE` only while its outputs are intact.
+because they may have been deleted or changed since. The status of a task
+(:attr:`Task.status`, a :class:`TaskStatus`) takes the record and the files
+into account. A task whose latest run is done has :attr:`TaskStatus.DONE`
+only while its outputs are intact.
 """
 
 import secrets
@@ -170,8 +170,9 @@ from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
+from functools import cached_property
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from omphjc.data_files import FileRecord
 from omphjc.events.formats import EventFileRecord
@@ -180,6 +181,9 @@ from omphjc.jobs.job_file import JobFile
 from omphjc.runs import RunResult
 from omphjc.safe_paths import inside, remove_inside
 from omphjc.stamps import COMPACT_UTC_FORMAT
+
+if TYPE_CHECKING:
+    from omphjc.jobs.job import Job
 
 # How a run ended, or that it is still running.
 RUNNING = "running"
@@ -417,7 +421,8 @@ class TaskRecord(JobFile):
         if record.identity.name != path.parent.name:
             raise ValueError(
                 f"{path} is the record of the task {record.identity.name}, "
-                f"but its directory is named {path.parent.name}"
+                f"but its directory is named {path.parent.name}. Name the "
+                f"directory {record.identity.name} again, or remove it."
             )
         return record
 
@@ -493,6 +498,43 @@ class TaskRecord(JobFile):
         )
         return replace(self, runs=runs, result=outcome.result)
 
+    def current_status(self) -> "tuple[TaskStatus, str]":
+        """Return the status of the task now, with its output files checked.
+
+        The record says how the latest run ended. The output files may have
+        been deleted or changed since, so the status is:
+
+        - not done, when the latest run is not done;
+        - done, when every output file has the size in the record;
+        - missing output, when an output file is not there;
+        - changed, when an output file has another size. A changed file
+          counts before a missing one.
+
+        Returns
+        -------
+        tuple[TaskStatus, str]
+            The status, and a clause that names the output that is missing,
+            or the output of another size with the size found and the size
+            recorded. The clause is empty for the other statuses.
+        """
+        if not self.is_done:
+            return TaskStatus.NOT_DONE, ""
+        status, detail = TaskStatus.DONE, ""
+        for output in self.outputs.values():
+            try:
+                n_bytes = output.path.stat().st_size
+            except FileNotFoundError:
+                status, detail = TaskStatus.MISSING_OUTPUT, f"{output.path} is missing"
+                continue
+            if n_bytes != output.n_bytes:
+                status = TaskStatus.CHANGED
+                detail = (
+                    f"{output.path} holds {n_bytes} bytes, not the "
+                    f"{output.n_bytes} the {self.identity.name} task recorded"
+                )
+                break
+        return status, detail
+
     def _runs_with_latest(self, **changes: Any) -> tuple[TaskRun, ...]:
         """Return the runs, the latest with its fields replaced by `changes`."""
         return (*self.runs[:-1], replace(self.latest_run, **changes))
@@ -527,85 +569,111 @@ class TaskStatus(Enum):
 
 @dataclass(frozen=True)
 class Task:
-    """A task of a job, as found on disk.
+    """A task of a job.
 
-    :meth:`read` loads a task from its record file and judges its status.
+    A task is made from the job it belongs to and its identity in that job.
+    It gives:
+
+    - the directory of the task and the path of its record;
+    - its record, its status and its events, read from disk each time they
+      are asked for;
+    - the logs of its runs.
+
     :meth:`omphjc.jobs.Job.task` gives the task with an identity, and
-    :meth:`omphjc.jobs.Job.tasks` every task of a job.
+    :meth:`omphjc.jobs.Job.tasks` every task that has a record.
+
+    Two tasks are equal when they are tasks of the same job with the same
+    identity.
 
     Parameters
     ----------
+    job : Job
+        The job that the task belongs to.
     identity : TaskIdentity
         The stage, the tool and the tag of the task.
-    directory : Path
-        The directory of the task, which holds its record and its logs.
-    status : TaskStatus
-        How the task stands, by its record and its output files.
-    detail : str
-        A clause that names the output that is missing, or the output of
-        another size with the size found and the size recorded. It is empty
-        for the other statuses.
-    record : TaskRecord or None
-        The record of the task, ``None`` when the task has no record.
     """
 
+    job: "Job"
     identity: TaskIdentity
-    directory: Path
-    status: TaskStatus
-    detail: str = ""
-    record: TaskRecord | None = None
-
-    @classmethod
-    def read(cls, record_path: Path) -> "Task":
-        """Return the task whose record is the file `record_path`.
-
-        Everything about the task follows from its record and where it is.
-        The identity of the task is the one in the record. The directory of
-        the task is the one that holds the record, and the job directory is
-        the one above it.
-
-        The status of the task is judged from the record and the output
-        files:
-
-        - A task whose record does not say done is not done.
-        - For a task recorded as done, the size of each output is compared
-          with the size in the record. When one output has another size and
-          another output is missing, the task is reported as changed.
-
-        Raises
-        ------
-        FileNotFoundError
-            If `record_path` does not exist.
-        ValueError
-            If the file cannot be read as a record, or its directory is not
-            named after the task that the record identifies
-            (:meth:`TaskRecord.read`).
-        """
-        directory = record_path.parent
-        record = TaskRecord.read(record_path, root_dir=directory.parent)
-        identity = record.identity
-        if not record.is_done:
-            return cls(identity, directory, TaskStatus.NOT_DONE, record=record)
-        status, detail = TaskStatus.DONE, ""
-        for output in record.outputs.values():
-            try:
-                n_bytes = output.path.stat().st_size
-            except FileNotFoundError:
-                status, detail = TaskStatus.MISSING_OUTPUT, f"{output.path} is missing"
-                continue
-            if n_bytes != output.n_bytes:
-                status = TaskStatus.CHANGED
-                detail = (
-                    f"{output.path} holds {n_bytes} bytes, not the "
-                    f"{output.n_bytes} the {identity.name} task recorded"
-                )
-                break
-        return cls(identity, directory, status, detail, record)
 
     @property
     def name(self) -> str:
         """The name of the task in its job (:attr:`TaskIdentity.name`)."""
         return self.identity.name
+
+    @cached_property
+    def directory(self) -> Path:
+        """The directory of the task, which holds its record, its logs and its files."""
+        return self.job.task_dir(self.identity)
+
+    @cached_property
+    def record_path(self) -> Path:
+        """The file of the record of the task, ``task.json`` in its directory."""
+        return self.directory / TaskRecord.file_name
+
+    @property
+    def record(self) -> TaskRecord | None:
+        """The record of the task as it is on disk, or ``None`` when it has none.
+
+        Raises
+        ------
+        ValueError
+            If the ``task.json`` of the task cannot be read as a record. If
+            it is the record of another task: one with another stage, tool
+            or tag that has the same name, and so the same directory.
+        """
+        try:
+            record = TaskRecord.read(self.record_path, root_dir=self.job.root_dir)
+        except FileNotFoundError:
+            return None
+        if record.identity != self.identity:
+            raise ValueError(
+                f"{self.record_path} is the record of another task named "
+                f"{self.name}: expected {self.identity}, got {record.identity}. "
+                "Give one of the two tasks another tag."
+            )
+        return record
+
+    @property
+    def status(self) -> TaskStatus:
+        """Whether the task is done now, with its output files checked.
+
+        A task without a record is not done. Otherwise the status is the one
+        its record gives (:meth:`TaskRecord.current_status`).
+        """
+        record = self.record
+        return TaskStatus.NOT_DONE if record is None else record.current_status()[0]
+
+    @property
+    def events(self) -> EventFileRecord:
+        """The events that the task made.
+
+        Raises
+        ------
+        ValueError
+            For the reasons that :meth:`require_done` gives. If the task made
+            no event file.
+        """
+        events = self.require_done().events
+        if events is None:
+            raise ValueError(
+                f"The {self.name} task of {self.job.root_dir} made no event file"
+            )
+        return events
+
+    @property
+    def latest_log(self) -> Path:
+        """The log of the latest run of the task.
+
+        Raises
+        ------
+        ValueError
+            If the task has no record, and so no run.
+        """
+        record = self.record
+        if record is None:
+            raise ValueError(f"The {self.name} task in {self.directory} has no run")
+        return self.log_path(record.latest_run.run_id)
 
     def log_path(self, run_id: str) -> Path:
         """Return the log of run `run_id`, ``logs/<run_id>.log`` in the directory.
@@ -619,19 +687,6 @@ class Task:
         """
         return inside(self.directory, LOGS_DIR, f"{run_id}.log")
 
-    @property
-    def latest_log(self) -> Path:
-        """The log of the latest run of the task.
-
-        Raises
-        ------
-        ValueError
-            If the task has no record, and so no run.
-        """
-        if self.record is None:
-            raise ValueError(f"The {self.name} task in {self.directory} has no run")
-        return self.log_path(self.record.latest_run.run_id)
-
     def remove_logs(self, log_paths: Iterable[Path]) -> None:
         """Remove the logs `log_paths` of the task.
 
@@ -640,6 +695,34 @@ class Task:
         """
         logs = [path for path in log_paths if path.is_file() and not path.is_symlink()]
         remove_inside(self.directory / LOGS_DIR, logs)
+
+    def require_done(self) -> TaskRecord:
+        """Return the record of the task, which must be done with its outputs intact.
+
+        Raises
+        ------
+        ValueError
+            If the task is not done or an output is missing. The message
+            names the command to run first.
+
+            If an output has another size than recorded. The message names
+            the file, both sizes and ``--force``.
+        """
+        record = self.record
+        status, detail = (
+            (TaskStatus.NOT_DONE, "") if record is None else record.current_status()
+        )
+        command = self.identity.command
+        if status is TaskStatus.CHANGED:
+            raise ValueError(
+                f"{detail}; run {command} with --force to regenerate the file"
+            )
+        if record is None or status is not TaskStatus.DONE:
+            raise ValueError(
+                f"The {self.name} task of {self.job.root_dir} has not run to "
+                f"completion; run {command} first"
+            )
+        return record
 
 
 def timestamp() -> str:

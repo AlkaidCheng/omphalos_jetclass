@@ -226,6 +226,9 @@
 - The directory of a task is named after its identity: `generate-madgraph`,
   `shower-pythia` and `simulate-delphes`, in place of `generate`, `shower`
   and `simulate`. (#92)
+- `omphjc.jobs.Task` belongs to its job and gives its record, its status and
+  its events, in place of `Job.task_record`, `Job.task_record_path`,
+  `Job.require_done` and `Task.read`. (#94)
 
 ### Fixed
 

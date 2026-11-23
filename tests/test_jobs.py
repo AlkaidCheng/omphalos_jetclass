@@ -86,6 +86,16 @@ def _run_task(
     return job.run_task(identity, parameters, body, **options)
 
 
+def _status_detail_and_record(
+    job: Job, identity: TaskIdentity
+) -> tuple[TaskStatus, str, TaskRecord | None]:
+    """Return the status of the task `identity` of `job`, its detail and its record."""
+    task = _task(job, identity)
+    record = task.record
+    detail = "" if record is None else record.current_status()[1]
+    return task.status, detail, record
+
+
 def _run(status: str, **fields: Any) -> TaskRun:
     """Return a run with `status`, `fields` and a placeholder ID, start and host."""
     return TaskRun(run_id="r1", status=status, started="t", host="h", **fields)
@@ -148,10 +158,10 @@ def test_a_job_has_a_directory_per_process_and_number(
     assert job.identity_path == job.root_dir / "job.json"
     assert job.identity == JobIdentity(process="HToBB", job_id=7, seed=10000007)
     assert (
-        job.task_record_path(GENERATE_TASK)
+        _task(job, GENERATE_TASK).record_path
         == job.root_dir / "generate-madgraph" / "task.json"
     )
-    assert job.task_record(GENERATE_TASK) is None
+    assert _task(job, GENERATE_TASK).record is None
     assert job.tasks() == []
     assert not job.root_dir.exists()
     with pytest.raises(ValueError, match="job_id"):
@@ -418,12 +428,10 @@ def test_a_stage_runs_once_and_its_result_is_kept(
         outputs={"out": FileRecord(job.root_dir / "x-fake" / "out.txt", 4, None)},
         metadata={"n": 1},
     )
-    assert job.task_record(TASK_X) == record
+    assert _task(job, TASK_X).record == record
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert _task(job, TASK_X) == Task(
-        TASK_X, job.task_dir(TASK_X), TaskStatus.DONE, record=record
-    )
+    assert _status_detail_and_record(job, TASK_X) == (TaskStatus.DONE, "", record)
     assert _run_task(job, TASK_X, {"events": 10}, body) == record
     assert calls == [False]
 
@@ -487,14 +495,12 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
         )
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert _task(job, TASK_X) == Task(TASK_X, job.task_dir(TASK_X), TaskStatus.NOT_DONE)
+    assert _status_detail_and_record(job, TASK_X) == (TaskStatus.NOT_DONE, "", None)
     record = _run_task(job, TASK_X, {}, body)
     output_path = job.root_dir / "x-fake" / "out.txt"
     output_path.unlink()
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert _task(job, TASK_X) == Task(
-        TASK_X,
-        job.task_dir(TASK_X),
+    assert _status_detail_and_record(job, TASK_X) == (
         TaskStatus.MISSING_OUTPUT,
         f"{output_path} is missing",
         record,
@@ -505,11 +511,9 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
     assert rerun.metadata == {"n": 2}
 
     running = TaskRecord(TASK_X, {}, (_run("running"),))
-    running.write(job.task_record_path(TASK_X), root_dir=job.root_dir)
+    running.write(_task(job, TASK_X).record_path, root_dir=job.root_dir)
     job = Job(specs["HToBB"], tmp_path, 1)
-    assert _task(job, TASK_X) == Task(
-        TASK_X, job.task_dir(TASK_X), TaskStatus.NOT_DONE, record=running
-    )
+    assert _status_detail_and_record(job, TASK_X) == (TaskStatus.NOT_DONE, "", running)
     after_kill = _run_task(job, TASK_X, {}, body)
     assert [run.status for run in after_kill.runs] == [
         "interrupted",
@@ -525,12 +529,12 @@ def test_require_done_returns_the_record_or_says_which_stage_to_run(
     job = Job(specs["HToBB"], tmp_path, 1)
     not_done = "The x-fake task of .* has not run to completion; run omphjc x first"
     with pytest.raises(ValueError, match=not_done):
-        job.require_done(TASK_X)
+        _task(job, TASK_X).require_done()
     record = _run_task(job, TASK_X, {}, lambda overwrite, log_path: _make_output(job))
-    assert job.require_done(TASK_X) == record
+    assert _task(job, TASK_X).require_done() == record
     (job.root_dir / "x-fake" / "out.txt").unlink()
     with pytest.raises(ValueError, match=not_done):
-        job.require_done(TASK_X)
+        _task(job, TASK_X).require_done()
 
 
 def test_a_stage_whose_output_has_another_size_is_refused_unless_forced(
@@ -548,18 +552,20 @@ def test_a_stage_whose_output_has_another_size_is_refused_unless_forced(
     output_path.write_text("made and changed")
     job = Job(specs["HToBB"], tmp_path, 1)
     detail = f"{output_path} holds 16 bytes, not the 4 the x-fake task recorded"
-    assert _task(job, TASK_X) == Task(
-        TASK_X, job.task_dir(TASK_X), TaskStatus.CHANGED, detail, record
+    assert _status_detail_and_record(job, TASK_X) == (
+        TaskStatus.CHANGED,
+        detail,
+        record,
     )
     refused = re.escape(f"{detail}; run omphjc x with --force to regenerate the file")
     with pytest.raises(ValueError, match=refused):
-        job.require_done(TASK_X)
+        _task(job, TASK_X).require_done()
     with pytest.raises(ValueError, match=refused):
         _run_task(job, TASK_X, {}, body)
     assert calls == [False]
     assert _run_task(job, TASK_X, {}, body, force=True).is_done
     assert calls == [False, True]
-    assert job.require_done(TASK_X).result.outputs["out"].n_bytes == 4
+    assert _task(job, TASK_X).require_done().result.outputs["out"].n_bytes == 4
 
 
 def test_an_output_of_another_size_is_reported_before_a_missing_one(
@@ -580,9 +586,7 @@ def test_an_output_of_another_size_is_reported_before_a_missing_one(
     record = _run_task(job, TASK_X, {}, body)
     first_path.unlink()
     second_path.write_text("made and changed")
-    assert _task(job, TASK_X) == Task(
-        TASK_X,
-        job.task_dir(TASK_X),
+    assert _status_detail_and_record(job, TASK_X) == (
         TaskStatus.CHANGED,
         f"{second_path} holds 16 bytes, not the 4 the x-fake task recorded",
         record,
@@ -629,7 +633,7 @@ def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(RuntimeError, match="boom"):
         _run_task(job, TASK_X, {"events": 10}, failing)
-    record = job.task_record(TASK_X)
+    record = _task(job, TASK_X).record
     assert record is not None
     assert (
         record.latest_run.status == "failed" and record.latest_run.finished is not None
@@ -718,19 +722,21 @@ def test_each_run_of_a_task_has_a_log_named_by_its_run_id(
     assert _task(job, TASK_X).latest_log == logs_dir / f"{second.run_id}.log"
 
 
-def test_a_task_is_loaded_from_its_record_file(
+def test_a_task_states_its_identity_its_directory_and_its_record_path(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    record = _run_task(job, TASK_X, {}, _write_log(job))
-    task = Task.read(job.task_record_path(TASK_X))
-    assert task == _task(job, TASK_X)
+    task = _task(job, TASK_X)
     assert (task.identity, task.name) == (TASK_X, "x-fake")
-    assert task.directory == job.task_dir(TASK_X)
+    assert task.directory == job.task_dir(TASK_X) == job.root_dir / "x-fake"
+    assert task.record_path == job.root_dir / "x-fake" / "task.json"
+    assert (task.record, task.status) == (None, TaskStatus.NOT_DONE)
+    tagged = _task(job, TaskIdentity("x", "fake", "tuneA"))
+    assert tagged.directory == job.root_dir / "x-fake-tuneA"
+    assert not job.root_dir.exists()
+    record = _run_task(job, TASK_X, {}, _write_log(job))
     assert (task.status, task.record) == (TaskStatus.DONE, record)
     assert task.latest_log.read_text() == "finished"
-    with pytest.raises(FileNotFoundError):
-        Task.read(job.task_dir(TASK_Y) / "task.json")
 
 
 def test_a_task_without_a_record_has_no_latest_log(
@@ -778,11 +784,11 @@ def test_a_dropped_run_whose_id_is_not_a_plain_name_is_refused(
         ),
     )
     job.task_dir(TASK_X).mkdir(parents=True)
-    record.write(job.task_record_path(TASK_X), root_dir=job.root_dir)
+    record.write(_task(job, TASK_X).record_path, root_dir=job.root_dir)
     with pytest.raises(ValueError, match="Path component"):
         _run_task(job, TASK_X, {"events": 20}, _write_log(job))
     assert outside_path.read_text() == "not a log of the task"
-    assert job.task_record(TASK_X) == record
+    assert _task(job, TASK_X).record == record
 
 
 def test_a_run_whose_log_directory_cannot_be_made_is_recorded_as_failed(
@@ -801,7 +807,7 @@ def test_a_run_whose_log_directory_cannot_be_made_is_recorded_as_failed(
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(PermissionError):
         _run_task(job, TASK_X, {}, lambda overwrite, log_path: _make_output(job))
-    record = job.task_record(TASK_X)
+    record = _task(job, TASK_X).record
     assert record is not None
     assert record.latest_run.status == "failed"
     assert record.latest_run.error == "no log directory"
@@ -827,7 +833,7 @@ def test_a_run_that_a_signal_ended_is_recorded_as_interrupted(
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(type(error)):
         _run_task(job, TASK_X, {}, stop)
-    record = job.task_record(TASK_X)
+    record = _task(job, TASK_X).record
     assert record is not None
     interrupted_run = record.latest_run
     assert interrupted_run.status == "interrupted"
@@ -846,7 +852,7 @@ def test_a_failure_without_a_message_is_recorded_by_its_type(
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(AssertionError):
         _run_task(job, TASK_X, {}, fail_without_message)
-    record = job.task_record(TASK_X)
+    record = _task(job, TASK_X).record
     assert record is not None
     assert record.latest_run.status == "failed"
     assert record.latest_run.error == "AssertionError"
@@ -863,7 +869,7 @@ def test_a_run_replaced_by_a_newer_run_leaves_that_runs_record(
     def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         replaced_run_ids.append(log_path.stem)
         newer_record = TaskRecord.running(TASK_X, {"events": 20})
-        newer_record.write(job.task_record_path(TASK_X), root_dir=job.root_dir)
+        newer_record.write(_task(job, TASK_X).record_path, root_dir=job.root_dir)
         newer_records.append(newer_record)
         if fails:
             raise RuntimeError("boom")
@@ -873,7 +879,7 @@ def test_a_run_replaced_by_a_newer_run_leaves_that_runs_record(
         _run_task(job, TASK_X, {"events": 10}, body)
     (replaced_run_id,) = replaced_run_ids
     (newer_record,) = newer_records
-    assert job.task_record(TASK_X) == newer_record
+    assert _task(job, TASK_X).record == newer_record
     status = "failed" if fails else "done"
     assert str(refusal.value) == (
         f"Run {replaced_run_id!r} of the x-fake task in {job.root_dir} is not recorded "
@@ -889,12 +895,12 @@ def test_a_run_whose_record_was_deleted_records_its_end(
     job = Job(specs["HToBB"], tmp_path, 1)
 
     def delete_record_then_finish(overwrite: bool, log_path: Path) -> TaskOutcome:
-        job.task_record_path(TASK_X).unlink()
+        _task(job, TASK_X).record_path.unlink()
         return _make_output(job)
 
     record = _run_task(job, TASK_X, {}, delete_record_then_finish)
     assert record.is_done
-    assert job.task_record(TASK_X) == record
+    assert _task(job, TASK_X).record == record
 
 
 PARAMETERS = {"events": 10, "input_fingerprint": "v1:original"}
@@ -928,7 +934,7 @@ def test_an_accepted_input_keeps_a_done_task_without_a_run(
         done_record.runs,
         done_record.result,
     )
-    assert job.task_record(TASK_X) == accepted_record
+    assert _task(job, TASK_X).record == accepted_record
     assert (
         _run_task(job, TASK_X, CHANGED_INPUT_PARAMETERS, _body(job)) == accepted_record
     )
@@ -980,7 +986,7 @@ def test_an_input_is_accepted_only_when_nothing_else_differs(
             accept_input=True,
             force=True,
         )
-    assert job.task_record(TASK_X) == done_record
+    assert _task(job, TASK_X).record == done_record
 
 
 def test_accept_input_changes_nothing_for_a_task_that_is_not_done(
@@ -989,7 +995,7 @@ def test_accept_input_changes_nothing_for_a_task_that_is_not_done(
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(RuntimeError, match="boom"):
         _run_task(job, TASK_X, PARAMETERS, _fail, accept_input=True)
-    failed_record = job.task_record(TASK_X)
+    failed_record = _task(job, TASK_X).record
     assert failed_record is not None
     assert failed_record.latest_run.status == "failed"
     record = _run_task(
@@ -1041,8 +1047,8 @@ def test_two_jobs_opened_on_one_directory_keep_the_records_of_both_tasks(
     job = Job(specs["HToBB"], tmp_path, 1)
     assert [task.name for task in job.tasks()] == ["x-fake", "y-fake"]
     assert [task.name for task in job.tasks("y")] == ["y-fake"]
-    assert job.task_record(TASK_X) == x_record
-    assert job.task_record(TASK_Y) == y_record
+    assert _task(job, TASK_X).record == x_record
+    assert _task(job, TASK_Y).record == y_record
     assert set(Manifest.read(job.manifest_path).tasks) == {"x-fake", "y-fake"}
 
 
@@ -1056,16 +1062,16 @@ def test_the_manifest_lists_every_task_and_is_written_again_when_deleted(
     x_record = _run_task(job, TASK_X, {}, lambda overwrite, log_path: _make_output(job))
     with pytest.raises(RuntimeError, match="boom"):
         _run_task(job, TASK_Y, {}, failing)
-    y_record = job.task_record(TASK_Y)
+    y_record = _task(job, TASK_Y).record
     assert y_record is not None
     manifest = Manifest(
         job.identity,
         {
             "x-fake": TaskSummary(
-                "done", x_record.latest_run.run_id, 1, job.task_record_path(TASK_X)
+                "done", x_record.latest_run.run_id, 1, _task(job, TASK_X).record_path
             ),
             "y-fake": TaskSummary(
-                "failed", y_record.latest_run.run_id, 1, job.task_record_path(TASK_Y)
+                "failed", y_record.latest_run.run_id, 1, _task(job, TASK_Y).record_path
             ),
         },
     )
@@ -1081,7 +1087,7 @@ def test_the_manifest_lists_every_task_and_is_written_again_when_deleted(
         job, TASK_Z, {}, lambda overwrite, log_path: TaskOutcome(RunResult())
     )
     entry = TaskSummary(
-        "done", z_record.latest_run.run_id, 1, job.task_record_path(TASK_Z)
+        "done", z_record.latest_run.run_id, 1, _task(job, TASK_Z).record_path
     )
     assert Manifest.read(job.manifest_path) == Manifest(
         job.identity, {**manifest.tasks, "z-fake": entry}
@@ -1097,11 +1103,16 @@ def test_a_record_of_another_identity_with_the_same_name_is_refused(
     assert _task(job, tagged).name == "x-fake-tuneA"
     same_name = TaskIdentity("x", "fake-tuneA")
     assert same_name.name == tagged.name
-    with pytest.raises(ValueError, match="is the record of"):
-        _task(job, same_name)
+    another_task = (
+        "task.json is the record of another task named x-fake-tuneA: expected "
+        "stage 'x', tool 'fake-tuneA' and no tag, got stage 'x', tool 'fake' and "
+        "tag 'tuneA'. Give one of the two tasks another tag."
+    )
+    with pytest.raises(ValueError, match=re.escape(another_task)):
+        _ = _task(job, same_name).record
     with pytest.raises(ValueError, match="is the record of"):
         _run_task(job, same_name, {}, lambda overwrite, log_path: _make_output(job))
-    assert job.task_record(tagged) == record
+    assert _task(job, tagged).record == record
 
 
 def test_a_record_in_a_directory_of_another_name_is_refused(
@@ -1110,7 +1121,8 @@ def test_a_record_in_a_directory_of_another_name_is_refused(
     job = Job(specs["HToBB"], tmp_path, 1)
     _run_task(job, TASK_X, {}, lambda overwrite, log_path: _make_output(job))
     job.task_dir(TASK_X).rename(job.root_dir / "renamed")
-    with pytest.raises(ValueError, match="its directory is named renamed"):
+    renamed = "its directory is named renamed. Name the directory x-fake again"
+    with pytest.raises(ValueError, match=renamed):
         job.tasks()
 
 
@@ -1119,12 +1131,12 @@ def test_a_record_without_an_identity_is_refused(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     _run_task(job, TASK_X, {}, lambda overwrite, log_path: _make_output(job))
-    record_path = job.task_record_path(TASK_X)
+    record_path = _task(job, TASK_X).record_path
     written = json.loads(record_path.read_text())
     del written["identity"]
     record_path.write_text(json.dumps(written))
     with pytest.raises(ValueError, match="invalid content"):
-        _task(job, TASK_X)
+        _ = _task(job, TASK_X).record
 
 
 def test_a_task_is_found_by_the_record_in_its_own_directory(
@@ -1132,7 +1144,7 @@ def test_a_task_is_found_by_the_record_in_its_own_directory(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     _run_task(job, TASK_X, {}, lambda overwrite, log_path: _make_output(job))
-    record_path = job.task_record_path(TASK_X)
+    record_path = _task(job, TASK_X).record_path
     deeper_dir = job.task_dir(TASK_X) / "deeper"
     deeper_dir.mkdir()
     shutil.copy(record_path, deeper_dir / "task.json")
@@ -1152,11 +1164,11 @@ def test_a_task_record_that_cannot_be_read_stops_every_task_of_the_job(
 
     job = Job(specs["HToBB"], tmp_path, 1)
     _run_task(job, TASK_X, {}, body)
-    record_path = job.task_record_path(TASK_X)
+    record_path = _task(job, TASK_X).record_path
     record_path.write_text("{")
     unreadable = re.escape(f"{record_path} is not valid JSON")
     with pytest.raises(ValueError, match=unreadable):
-        _task(job, TASK_X)
+        _ = _task(job, TASK_X).record
     with pytest.raises(ValueError, match=unreadable):
         _run_task(job, TASK_X, {}, body, force=True)
     with pytest.raises(ValueError, match=unreadable):
@@ -1226,6 +1238,21 @@ def test_a_directory_of_another_job_is_refused(
         Job(specs["HToBB"], tmp_path, 1)
 
 
+def test_two_jobs_are_equal_when_they_are_one_process_in_one_directory(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    assert job == Job(specs["HToBB"], tmp_path, 1)
+    assert hash(job) == hash(Job(specs["HToBB"], tmp_path, 1))
+    assert job != Job(specs["HToBB"], tmp_path, 2)
+    assert job != Job(specs["HToBB"], tmp_path / "elsewhere", 1)
+    assert job != Job(replace(specs["HToBB"], seed_offset=20_000_000), tmp_path, 1)
+    assert repr(job) == f"Job('HToBB', 1, root_dir={str(job.root_dir)!r})"
+    assert _task(job, TASK_X) == _task(Job(specs["HToBB"], tmp_path, 1), TASK_X)
+    assert _task(job, TASK_X) != _task(Job(specs["HToBB"], tmp_path, 2), TASK_X)
+    assert _task(job, TASK_X) != _task(job, TaskIdentity("x", "fake", "tuneA"))
+
+
 def test_identities_differ_by_process_job_number_and_seed() -> None:
     identity = JobIdentity(process="HToBB", job_id=1, seed=10000001)
     same = JobIdentity(process="HToBB", job_id=1, seed=10000001, omphjc_version="0.0.1")
@@ -1284,7 +1311,7 @@ def test_generate_records_what_madgraph_made(
 ) -> None:
     job = Job(specs["TTBar"], tmp_path, 3)
     record = generate(job, n_events=10, mg5_path=mg5_path)
-    assert job.task_record(GENERATE_TASK) == record
+    assert _task(job, GENERATE_TASK).record == record
     assert record.is_done
     assert record.parameters == {"events": 10, "seed": 3}
     metadata = record.result.metadata
@@ -1374,7 +1401,7 @@ def test_a_failed_madgraph_run_is_recorded_and_retried(
     monkeypatch.setenv("FAKE_MG5_FAIL", "launch")
     with pytest.raises(ProgramError):
         generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
-    record = Job(specs["HToBB"], tmp_path, 1).task_record(GENERATE_TASK)
+    record = _task(Job(specs["HToBB"], tmp_path, 1), GENERATE_TASK).record
     assert record is not None
     assert (
         record.latest_run.status == "failed" and record.latest_run.finished is not None
@@ -1413,7 +1440,7 @@ def test_shower_records_what_it_made_and_keeps_it(
     )
     job = Job(specs["HToBB"], tmp_path, 1)
     record = shower(job, delphes_pythia8_path=delphes_pythia8_path)
-    assert job.task_record(SHOWER_TASK) == record
+    assert _task(job, SHOWER_TASK).record == record
     assert record.is_done
     assert record.parameters == {
         "events": 10000,
@@ -1513,7 +1540,7 @@ def test_a_stage_records_the_folder_its_run_set_aside(
 
     record = _run_task(job, TASK_X, {"events": 10}, body)
     assert record.latest_run.set_aside == "x-fake/omphjc-set-aside/20260101T000000Z-abc"
-    assert job.task_record(TASK_X) == record
+    assert _task(job, TASK_X).record == record
 
 
 def test_a_job_lists_and_clears_what_its_stages_set_aside(
@@ -1636,7 +1663,7 @@ def test_simulate_refuses_a_simulator_that_uses_a_key_of_the_stage(
     refusal = "The parameters of fake-simulator use the keys of the stage"
     with pytest.raises(ValueError, match=f"{refusal}: input_fingerprint"):
         simulate(job, simulator)
-    assert job.task_record(SIMULATE_TASK) is None
+    assert _task(job, SIMULATE_TASK).record is None
 
 
 def test_task_parameters_join_the_parameters_of_a_stage_and_its_tool() -> None:
@@ -1871,12 +1898,12 @@ def test_simulate_counts_the_events_of_its_output(
     pids = ak.Array([[2212, 211], [2212], [211, 211, 22]])
     write_delphes_file(showered.path, {"PID": pids}, omit=omit)
     # The shower stage is recorded with the size of the file put in its place.
-    record = job.task_record(SHOWER_TASK)
+    record = _task(job, SHOWER_TASK).record
     assert record is not None
     record.result.outputs[EVENTS_OUTPUT] = replace(
         showered, n_bytes=showered.path.stat().st_size
     )
-    record.write(job.task_record_path(SHOWER_TASK), root_dir=job.root_dir)
+    record.write(_task(job, SHOWER_TASK).record_path, root_dir=job.root_dir)
     simulate(job, _delphes_simulator(job, delphes_root_path))
     assert showered.n_events == 1
     assert job.require_events(SIMULATE_TASK).n_events == 3
@@ -1905,6 +1932,6 @@ def test_a_forced_rerun_of_each_program_leaves_the_record_of_its_task(
         run(False)
         record = run(True)
         assert record.latest_run.set_aside is None
-        assert job.task_record(stage) == record
+        assert _task(job, stage).record == record
         stamp = read_stamp(job.task_dir(stage))
         assert stamp is not None and "task.json" not in stamp.artifacts
