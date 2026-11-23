@@ -229,6 +229,11 @@
 - `omphjc.jobs.Task` belongs to its job and gives its record, its status and
   its events, in place of `Job.task_record`, `Job.task_record_path`,
   `Job.require_done` and `Task.read`. (#94)
+- A task is an object of its class in `omphjc.tasks` (`MadGraphGeneration`,
+  `PythiaShower`, `DelphesSimulation`), which states what it reads, gives
+  its parameters and makes its files. (#95)
+- `task.json` records the `settings` its task was made with, from which
+  `Job.tasks` makes each task again as an object of its class. (#95)
 
 ### Fixed
 

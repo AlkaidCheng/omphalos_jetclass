@@ -1,11 +1,19 @@
-"""A task of a job: its record, what it made, and its status.
+"""A task of a job: its class, its record, what it made, and its status.
 
-A task is the work of one stage in a job. Its record is the file
-``task.json`` in the directory of the task, written as::
+A task is one piece of the work of a stage in a job, done with one tool.
+The tasks that do the same work, such as showering events with Pythia, are
+objects of one class, a subclass of :class:`Task`. The classes of omphjc's
+tasks are in :mod:`omphjc.tasks`.
+
+A task has a directory of its own in the job directory. Its record is the
+file ``task.json`` in that directory, written as::
 
     {
       "schema": 1,
       "identity": {"stage": "generate", "tool": "madgraph", "tag": null},
+      "settings": {
+        "timeout_seconds": null, "program_path": null, "n_events": 1000, "n_cores": null
+      },
       "parameters": {"events": 1000, "seed": 10000001},
       "result": {
         "outputs": {
@@ -66,10 +74,17 @@ keys are:
     The stage, the tool and the tag of the task
     (:class:`~omphjc.jobs.identity.TaskIdentity`). The directory of the task
     is named after them.
+``settings``
+    What the task was made with: the fields of its class, such as the event
+    count of a generation or the time limit of its program
+    (:meth:`Task.settings`). A job makes the task again from them
+    (:meth:`omphjc.jobs.Job.task_from_record`).
 ``parameters``
-    What the task was asked for, including the seed when its stage uses one.
-    A later run compares its own parameters with these to decide whether the
-    result can be kept.
+    What fixes the files of the task, including the seed when the task uses
+    one (:meth:`Task.parameters`). A later request compares its own
+    parameters with these to decide whether the result can be kept. A
+    setting that does not change the files, such as the time limit, is not
+    among them.
 ``result``
     What the task made (:class:`~omphjc.runs.RunResult`). It is ``null`` unless the
     latest run is done.
@@ -80,7 +95,7 @@ keys are:
     ``null`` when there is none.
 
 **The result.** ``outputs`` holds the files the task made, under the names
-the stage gives them. Each output has its ``path``, its size in bytes,
+its class gives them. Each output has its ``path``, its size in bytes,
 ``n_bytes``, and the ``fingerprint`` of its content in its format, which is
 ``null`` for a file recorded without being read
 (:class:`~omphjc.data_files.FileRecord`). An event file also has its
@@ -97,7 +112,7 @@ a record for the reader: they do not count when the status of the task is
 judged.
 
 ``metadata`` is what is known about the task and the sample it made. The
-stage chooses its keys.
+class of the task chooses its keys.
 
 **The runs.** Repeating a task with the same parameters adds a run to the
 record. This happens after a failure, an interruption or the loss of an
@@ -153,8 +168,8 @@ record:
 - :meth:`TaskRecord.with_accepted_input` records an acceptance.
 - :meth:`TaskRecord.failed`, :meth:`TaskRecord.interrupted` and
   :meth:`TaskRecord.done` record how the latest run ended. ``done`` also
-  stores the result of the :class:`TaskOutcome` that the stage returned,
-  unchanged.
+  stores the result of the :class:`TaskOutcome` that
+  :meth:`Task.execute` returned, unchanged.
 
 **Record and status.** A record only says how each run of the task ended.
 Whether the task is done at this moment also depends on its output files,
@@ -166,20 +181,22 @@ only while its outputs are intact.
 
 import secrets
 import socket
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime, timezone
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, get_args
 
 from omphjc.data_files import FileRecord
-from omphjc.events.formats import EventFileRecord
+from omphjc.events.formats import EventFileRecord, EventFormat
 from omphjc.jobs.identity import TaskIdentity
 from omphjc.jobs.job_file import JobFile
 from omphjc.runs import RunResult
 from omphjc.safe_paths import inside, remove_inside
+from omphjc.stages import Stage
 from omphjc.stamps import COMPACT_UTC_FORMAT
 
 if TYPE_CHECKING:
@@ -202,7 +219,7 @@ INPUT_FINGERPRINT_PARAMETER = "input_fingerprint"
 
 @dataclass(frozen=True)
 class TaskOutcome:
-    """What a stage function returns: the task's result and the run's own facts.
+    """What :meth:`Task.execute` returns: the task's result and the run's own facts.
 
     Parameters
     ----------
@@ -289,6 +306,7 @@ class TaskRecord(JobFile):
     file_name: ClassVar[str] = "task.json"
 
     identity: TaskIdentity
+    settings: dict[str, Any]
     parameters: dict[str, Any]
     runs: tuple[TaskRun, ...]
     result: RunResult | None = None
@@ -324,7 +342,7 @@ class TaskRecord(JobFile):
 
     @property
     def outputs(self) -> dict[str, FileRecord]:
-        """The outputs of the task, under the names its stage gives them.
+        """The outputs of the task, under the names its class gives them.
 
         Raises
         ------
@@ -369,11 +387,12 @@ class TaskRecord(JobFile):
         return self._done_result().metadata
 
     def as_record(self) -> dict[str, Any]:
-        """Return the identity, the parameters, the result, the runs and the accepted
-        input by name."""
+        """Return the identity, the settings, the parameters, the result, the runs
+        and the accepted input by name."""
         accepted_input = self.accepted_input
         return {
             "identity": asdict(self.identity),
+            "settings": self.settings,
             "parameters": self.parameters,
             "result": None if self.result is None else asdict(self.result),
             "runs": [asdict(run) for run in self.runs],
@@ -391,14 +410,14 @@ class TaskRecord(JobFile):
         """
         if "runs" not in record:
             raise ValueError("the record has no runs")
-        fields = dict(record)
-        identity = TaskIdentity(**fields.pop("identity"))
-        runs = tuple(TaskRun(**run) for run in fields.pop("runs"))
-        result = fields.pop("result")
-        accepted_input = fields.pop("accepted_input")
+        values = dict(record)
+        identity = TaskIdentity(**values.pop("identity"))
+        runs = tuple(TaskRun(**run) for run in values.pop("runs"))
+        result = values.pop("result")
+        accepted_input = values.pop("accepted_input")
         return cls(
             identity=identity,
-            **fields,
+            **values,
             runs=runs,
             result=None if result is None else RunResult.from_record(result, root_dir),
             accepted_input=(
@@ -428,10 +447,13 @@ class TaskRecord(JobFile):
 
     @classmethod
     def running(
-        cls, identity: TaskIdentity, parameters: dict[str, Any]
+        cls,
+        identity: TaskIdentity,
+        settings: dict[str, Any],
+        parameters: dict[str, Any],
     ) -> "TaskRecord":
         """Return the record of the new task `identity`, whose first run starts now."""
-        return cls(identity, parameters, (TaskRun.started_now(),))
+        return cls(identity, settings, parameters, (TaskRun.started_now(),))
 
     def rerun(self) -> "TaskRecord":
         """Return the record with a further run that starts now.
@@ -567,34 +589,104 @@ class TaskStatus(Enum):
     """The task is recorded as done and each output has its recorded size."""
 
 
+# The names of the fields of a task that are not settings: its job, and its
+# tag, which is a part of its identity.
+_NON_SETTING_FIELD_NAMES = ("job", "tag")
+
+
 @dataclass(frozen=True)
-class Task:
-    """A task of a job.
+class TaskInput:
+    """An input of a task: events that another task of its job made.
 
-    A task is made from the job it belongs to and its identity in that job.
-    It gives:
+    Parameters
+    ----------
+    name : str
+        The name of the input, such as ``"events"``.
+    formats : frozenset[EventFormat]
+        The formats of event file that the task reads for this input.
+    upstream_stage : Stage
+        The stage whose task makes the events. The job must hold exactly one
+        task of that stage.
+    """
 
-    - the directory of the task and the path of its record;
-    - its record, its status and its events, read from disk each time they
+    name: str
+    formats: frozenset[EventFormat]
+    upstream_stage: Stage
+
+
+EVENTS_INPUT = "events"
+"""The name of the input that holds the events a task reads."""
+
+
+_TaskT = TypeVar("_TaskT", bound="Task")
+
+
+@dataclass(frozen=True, kw_only=True)
+class Task(ABC):
+    """One task of a job.
+
+    A task is one piece of the work of a stage, done with one tool, in a
+    directory of its own. This is the base class. The tasks that do the same
+    work are objects of one subclass, such as
+    :class:`omphjc.tasks.PythiaShower` for the showers with Pythia. A
+    subclass:
+
+    - states its stage and its tool;
+    - holds its settings as fields;
+    - gives its parameters (:meth:`parameters`);
+    - does the work of a run (:meth:`execute`).
+
+    The base class gives every task, whatever its class:
+
+    - its identity and its directory;
+    - its record, its status and its logs, read from disk each time they
       are asked for;
-    - the logs of its runs.
+    - the run of the task and the writing of its record (:meth:`run`).
 
-    :meth:`omphjc.jobs.Job.task` gives the task with an identity, and
-    :meth:`omphjc.jobs.Job.tasks` every task that has a record.
+    A task is made in one of two ways. A caller makes it from its class, its
+    job and its settings, as in ``PythiaShower(job, timeout_seconds=600)``. A
+    job makes the
+    tasks it finds on disk from their records (:meth:`omphjc.jobs.Job.tasks`,
+    :meth:`omphjc.jobs.Job.task_from_record`), each as an object of its own
+    class with the settings it ran with.
 
-    Two tasks are equal when they are tasks of the same job with the same
-    identity.
+    Two tasks are equal when they are of the same class and the same job,
+    with the same tag and the same settings.
 
     Parameters
     ----------
     job : Job
         The job that the task belongs to.
-    identity : TaskIdentity
-        The stage, the tool and the tag of the task.
+    tag : str or None, optional
+        A label that tells the task apart from another task of the same stage
+        and tool. Most tasks have none.
+    timeout_seconds : float or None, optional
+        The time limit of the programs of a run. ``None`` sets no limit.
+    program_path : Path or None, optional
+        The file of the task's program. By default the program is looked up
+        on PATH.
     """
 
-    job: "Job"
-    identity: TaskIdentity
+    stage: ClassVar[Stage]
+    """The stage that the task belongs to."""
+
+    tool: ClassVar[str]
+    """The name of the tool that the task uses and is named after, such as
+    ``"pythia"``."""
+
+    inputs: ClassVar[tuple[TaskInput, ...]] = ()
+    """What the task reads from another task of its job. A task has at most one
+    input."""
+
+    job: "Job" = field(kw_only=False)
+    tag: str | None = None
+    timeout_seconds: float | None = None
+    program_path: Path | None = None
+
+    @cached_property
+    def identity(self) -> TaskIdentity:
+        """The stage, the tool and the tag of the task."""
+        return TaskIdentity(self.stage.name, self.tool, self.tag)
 
     @property
     def name(self) -> str:
@@ -696,6 +788,199 @@ class Task:
         logs = [path for path in log_paths if path.is_file() and not path.is_symlink()]
         remove_inside(self.directory / LOGS_DIR, logs)
 
+    @abstractmethod
+    def parameters(self, input_events: Mapping[str, EventFileRecord]) -> dict[str, Any]:
+        """Return what fixes the files of the task, as JSON values.
+
+        A later request compares its parameters with these to decide whether
+        the result can be kept. They hold the seed of the job when the task
+        uses it. The fingerprint of the events that the task reads is added
+        by :meth:`run`.
+
+        Parameters
+        ----------
+        input_events : Mapping[str, EventFileRecord]
+            The events that the task reads, by the name of the input. It is
+            empty for a task without an input.
+        """
+
+    @abstractmethod
+    def execute(
+        self,
+        input_events: Mapping[str, EventFileRecord],
+        overwrite: bool,
+        log_path: Path,
+    ) -> TaskOutcome:
+        """Carry out one run of the task and return what it made.
+
+        A class runs the program of its tool here. The method is called
+        when the task has to run, and what it returns is recorded.
+
+        Parameters
+        ----------
+        input_events : Mapping[str, EventFileRecord]
+            The events that the task reads, by the name of the input. It is
+            empty for a task without an input.
+        overwrite : bool
+            Whether to replace what an earlier run left in the directory.
+        log_path : Path
+            The file that the programs of this run write their output to.
+        """
+
+    def settings(self) -> dict[str, Any]:
+        """Return the settings the task was made with, as JSON values.
+
+        They are the fields of the task, without its job and its tag. A path
+        is recorded as it was given. The record of a task holds them, and
+        :meth:`from_record` makes the task again from them.
+        """
+        settings = {}
+        for task_field in fields(self):
+            if task_field.name in _NON_SETTING_FIELD_NAMES:
+                continue
+            value = getattr(self, task_field.name)
+            if isinstance(value, Path):
+                value = str(value)
+            elif isinstance(value, Mapping):
+                value = dict(value)
+            settings[task_field.name] = value
+        return settings
+
+    @classmethod
+    def from_record(cls: type[_TaskT], job: "Job", record: TaskRecord) -> _TaskT:
+        """Return the task of this class in `job` that `record` describes.
+
+        The record gives the tag of the task and the settings it was made
+        with (:meth:`settings`). A path that was recorded as a string is a
+        :class:`~pathlib.Path` again.
+
+        Parameters
+        ----------
+        job : Job
+            The job that the task belongs to.
+        record : TaskRecord
+            The record of the task.
+
+        Raises
+        ------
+        ValueError
+            If `record` is that of a task of another stage or tool. If its
+            settings are not those of the class.
+        """
+        identity = record.identity
+        if (identity.stage, identity.tool) != (cls.stage.name, cls.tool):
+            raise ValueError(
+                f"{cls.__name__} expects the record of a task with stage "
+                f"{cls.stage.name!r} and tool {cls.tool!r}, got the record of "
+                f"the {identity.name} task. Use Job.task_from_record, which "
+                "picks the class of a record."
+            )
+        settings = dict(record.settings)
+        for task_field in fields(cls):
+            value = settings.get(task_field.name)
+            if isinstance(value, str) and _is_path_type(task_field.type):
+                settings[task_field.name] = Path(value)
+        try:
+            return cls(job, tag=identity.tag, **settings)
+        except TypeError as error:
+            raise ValueError(
+                f"The settings recorded for the {identity.name} task are not "
+                f"those of {cls.__name__} ({error}). Run {identity.command} "
+                "with --force to make the task again."
+            ) from None
+
+    def upstream_tasks(self) -> dict[str, "Task"]:
+        """Return the task that makes each input of the task, by the name of the input.
+
+        The task of an input is the only task of the input's stage that the
+        job holds. A task without an input gives an empty mapping.
+
+        Raises
+        ------
+        ValueError
+            If the job holds no task of an input's stage, or several. The
+            message names the command to run first, or the tasks.
+        """
+        upstream_tasks = {}
+        for task_input in self.inputs:
+            stage_name = task_input.upstream_stage.name
+            stage_tasks = self.job.tasks(stage_name)
+            if not stage_tasks:
+                raise ValueError(
+                    f"The {stage_name} stage of {self.job.root_dir} has no task; "
+                    f"run omphjc {stage_name} first"
+                )
+            if len(stage_tasks) > 1:
+                names = ", ".join(stage_task.name for stage_task in stage_tasks)
+                raise ValueError(
+                    f"The {stage_name} stage of {self.job.root_dir} has several "
+                    f"tasks ({names}), and {self.name} reads the events of one"
+                )
+            upstream_tasks[task_input.name] = stage_tasks[0]
+        return upstream_tasks
+
+    def input_events(self) -> dict[str, EventFileRecord]:
+        """Return the events that the task reads, by the name of the input.
+
+        The events of an input are those that its upstream task made
+        (:meth:`upstream_tasks`). A task without an input gives an empty
+        mapping.
+
+        Raises
+        ------
+        ValueError
+            As :meth:`upstream_tasks` and :attr:`events` refuse. If the events
+            of an input are in a format that the input does not state.
+        """
+        input_events = {}
+        upstream_tasks = self.upstream_tasks()
+        for task_input in self.inputs:
+            upstream_task = upstream_tasks[task_input.name]
+            events = upstream_task.events
+            if events.format not in task_input.formats:
+                readable_formats = sorted(
+                    event_format.value for event_format in task_input.formats
+                )
+                raise ValueError(
+                    f"{self.name} reads {', '.join(readable_formats)} files, but "
+                    f"the {upstream_task.name} task of {self.job.root_dir} made a "
+                    f"{events.format.value} file"
+                )
+            input_events[task_input.name] = events
+        return input_events
+
+    def requested_parameters(
+        self, input_events: Mapping[str, EventFileRecord]
+    ) -> dict[str, Any]:
+        """Return the parameters that a run is recorded and compared with.
+
+        They are the task's own parameters (:meth:`parameters`) and, for a
+        task that reads events, the fingerprint of those events under the key
+        :data:`INPUT_FINGERPRINT_PARAMETER`.
+
+        Parameters
+        ----------
+        input_events : Mapping[str, EventFileRecord]
+            The events that the task reads, by the name of the input
+            (:meth:`input_events`).
+
+        Raises
+        ------
+        ValueError
+            If the task's own parameters use the key of the fingerprint.
+        """
+        parameters = self.parameters(input_events)
+        for task_input in self.inputs:
+            if INPUT_FINGERPRINT_PARAMETER in parameters:
+                raise ValueError(
+                    f"The parameters of {self.name} use the key "
+                    f"{INPUT_FINGERPRINT_PARAMETER}, which holds the fingerprint "
+                    "of its input"
+                )
+            fingerprint = input_events[task_input.name].fingerprint
+            parameters = {INPUT_FINGERPRINT_PARAMETER: fingerprint, **parameters}
+        return parameters
+
     def require_done(self) -> TaskRecord:
         """Return the record of the task, which must be done with its outputs intact.
 
@@ -723,6 +1008,94 @@ class Task:
                 f"completion; run {command} first"
             )
         return record
+
+    def run(self, *, accept_input: bool = False, force: bool = False) -> TaskRecord:
+        """Run the task unless its result can be kept, and return its record.
+
+        The job of the task runs it and records the run
+        (:meth:`omphjc.jobs.Job.run_task`).
+
+        Parameters
+        ----------
+        accept_input : bool, optional
+            Keep a done task whose input alone has changed, and record the
+            acceptance.
+        force : bool, optional
+            Run the task even when its result could be kept.
+
+        Returns
+        -------
+        TaskRecord
+            The record of the task, kept or new.
+
+        Raises
+        ------
+        Exception
+            As :meth:`omphjc.jobs.Job.run_task` raises.
+        """
+        return self.job.run_task(self, accept_input=accept_input, force=force)
+
+
+class TaskRegistry:
+    """The classes of the tasks, by the stage and the tool of each.
+
+    A job finds the class of a task on disk here, from the identity in its
+    record. A class is registered where it is defined::
+
+        @TASK_REGISTRY.register
+        @dataclass(frozen=True, kw_only=True)
+        class PythiaShower(Task): ...
+    """
+
+    def __init__(self) -> None:
+        self._classes: dict[tuple[str, str], type[Task]] = {}
+
+    def register(self, task_class: type[_TaskT]) -> type[_TaskT]:
+        """Register `task_class` under its stage and its tool, and return it.
+
+        Raises
+        ------
+        ValueError
+            If another class is registered for the same stage and tool.
+        """
+        key = (task_class.stage.name, task_class.tool)
+        registered_class = self._classes.setdefault(key, task_class)
+        if registered_class is not task_class:
+            raise ValueError(
+                f"The tasks of stage {key[0]!r} and tool {key[1]!r} already have "
+                f"the class {registered_class.__name__}, so "
+                f"{task_class.__name__} cannot be registered for them"
+            )
+        return task_class
+
+    def get(self, identity: TaskIdentity) -> type[Task]:
+        """Return the class registered for the stage and the tool of `identity`.
+
+        Raises
+        ------
+        ValueError
+            If no class is registered for them. The message names the module
+            that registers the classes of omphjc's own tasks.
+        """
+        try:
+            return self._classes[identity.stage, identity.tool]
+        except KeyError:
+            raise ValueError(
+                f"No task class is registered for the stage {identity.stage!r} "
+                f"and the tool {identity.tool!r}; importing omphjc.tasks registers "
+                "the classes of omphjc's own tasks"
+            ) from None
+
+
+TASK_REGISTRY = TaskRegistry()
+"""The registry of the task classes."""
+
+
+def _is_path_type(field_type: Any) -> bool:
+    """Whether a field of the type `field_type` holds a path, or a path or ``None``."""
+    if isinstance(field_type, str):
+        return "Path" in field_type
+    return field_type is Path or Path in get_args(field_type)
 
 
 def timestamp() -> str:

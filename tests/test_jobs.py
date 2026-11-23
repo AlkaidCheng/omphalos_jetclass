@@ -5,7 +5,7 @@ import shutil
 import signal
 import socket
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar
@@ -16,12 +16,13 @@ from delphes_records import write_delphes_file
 
 from omphjc import __version__
 from omphjc.comparison import Difference
-from omphjc.data_files import Card, FileRecord
-from omphjc.events import EventFileRecord, EventFormat, EventSource
+from omphjc.data_files import FileRecord
+from omphjc.events import EventFileRecord, EventFormat
 from omphjc.events.delphes_root import DelphesROOTFile
 from omphjc.jobs import (
-    GENERATE_TASK,
+    EVENTS_INPUT,
     SHOWER_TASK,
+    TASK_REGISTRY,
     AcceptedInput,
     Job,
     JobIdentity,
@@ -29,8 +30,10 @@ from omphjc.jobs import (
     ReplacedRunError,
     Task,
     TaskIdentity,
+    TaskInput,
     TaskOutcome,
     TaskRecord,
+    TaskRegistry,
     TaskRun,
     TaskStatus,
     TaskSummary,
@@ -40,14 +43,13 @@ from omphjc.jobs import (
     job_seed,
     shower,
     simulate,
-    task_parameters,
 )
-from omphjc.jobs.job import TaskBody
 from omphjc.processes import ProcessSpec, get_process
 from omphjc.programs import ProgramError, available_cores
 from omphjc.runs import EVENTS_OUTPUT, RunResult
-from omphjc.stages import GenerateStage, ShowerStage, SimulateStage
+from omphjc.stages import GenerateStage, ShowerStage, SimulateStage, Stage
 from omphjc.stamps import COMPACT_UTC_FORMAT, read_stamp
+from omphjc.tasks import DelphesSimulation, MadGraphGeneration, PythiaShower
 from omphjc.tools.delphes.adapter import DelphesSimulator
 from omphjc.tools.delphes.card import DetectorCard, ParticlesCard
 from omphjc.tools.madgraph.lhe_file import LHEFile
@@ -57,9 +59,90 @@ from omphjc.tools.pythia.cmnd import PYTHIA_SEED_LIMIT, PythiaCmnd
 RUN_ID = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]{8}")
 
 
+TaskBody = Callable[[bool, Path], TaskOutcome]
+
+
+@dataclass(frozen=True)
+class XStage(Stage):
+    name: ClassVar[str] = "x"
+
+
+@dataclass(frozen=True)
+class YStage(Stage):
+    name: ClassVar[str] = "y"
+
+
+@dataclass(frozen=True)
+class ZStage(Stage):
+    name: ClassVar[str] = "z"
+
+
+@dataclass(frozen=True, kw_only=True)
+class FakeTask(Task):
+    """A task for tests: its parameters are given, and a function makes its files."""
+
+    tool: ClassVar[str] = "fake"
+
+    given_parameters: dict[str, Any] = field(default_factory=dict)
+    body: TaskBody | None = None
+
+    def parameters(self, input_events: Mapping[str, EventFileRecord]) -> dict[str, Any]:
+        return dict(self.given_parameters)
+
+    def execute(
+        self,
+        input_events: Mapping[str, EventFileRecord],
+        overwrite: bool,
+        log_path: Path,
+    ) -> TaskOutcome:
+        assert self.body is not None
+        return self.body(overwrite, log_path)
+
+    def settings(self) -> dict[str, Any]:
+        settings = super().settings()
+        del settings["body"]
+        return settings
+
+
+@TASK_REGISTRY.register
+@dataclass(frozen=True, kw_only=True)
+class FakeX(FakeTask):
+    stage: ClassVar[Stage] = XStage()
+
+
+@TASK_REGISTRY.register
+@dataclass(frozen=True, kw_only=True)
+class FakeY(FakeTask):
+    stage: ClassVar[Stage] = YStage()
+
+
+@TASK_REGISTRY.register
+@dataclass(frozen=True, kw_only=True)
+class FakeZ(FakeTask):
+    stage: ClassVar[Stage] = ZStage()
+
+
+@TASK_REGISTRY.register
+@dataclass(frozen=True, kw_only=True)
+class OtherToolX(FakeTask):
+    """A task of stage ``x`` whose untagged name is that of ``x-fake`` tagged ``tuneA``."""
+
+    stage: ClassVar[Stage] = XStage()
+    tool: ClassVar[str] = "fake-tuneA"
+
+
+@TASK_REGISTRY.register
+@dataclass(frozen=True, kw_only=True)
+class FakeShower(FakeTask):
+    """A task of the shower stage, whose events the simulation tasks read."""
+
+    stage: ClassVar[Stage] = ShowerStage()
+
+
 TASK_X = TaskIdentity("x", "fake")
 TASK_Y = TaskIdentity("y", "fake")
 TASK_Z = TaskIdentity("z", "fake")
+TASK_FAKE_SHOWER = TaskIdentity("shower", "fake")
 SIMULATE_TASK = TaskIdentity("simulate", "delphes")
 
 
@@ -70,9 +153,9 @@ def _delphes_simulator(
     return DelphesSimulator(job.spec, delphes_root_path=delphes_root_path, **options)
 
 
-def _task(job: Job, identity: TaskIdentity) -> Task:
-    """Return the task `identity` of `job`."""
-    return job.task(identity)
+def _task(job: Job, identity: TaskIdentity, **fields: Any) -> Task:
+    """Return the task `identity` of `job`, made from the class registered for it."""
+    return TASK_REGISTRY.get(identity)(job, tag=identity.tag, **fields)
 
 
 def _run_task(
@@ -83,7 +166,7 @@ def _run_task(
     **options: bool,
 ) -> TaskRecord:
     """Run the task `identity` of `job` with `parameters`; `body` makes its files."""
-    return job.run_task(identity, parameters, body, **options)
+    return _task(job, identity, given_parameters=parameters, body=body).run(**options)
 
 
 def _status_detail_and_record(
@@ -117,20 +200,11 @@ def test_a_task_identity_names_the_task_and_its_command() -> None:
         "shower",
         "simulate",
     ]
-    tasks = [GENERATE_TASK, SHOWER_TASK, SIMULATE_TASK]
-    assert [task.name for task in tasks] == [
-        "generate-madgraph",
-        "shower-pythia",
-        "simulate-delphes",
-    ]
-    assert [task.command for task in tasks] == [
-        "omphjc generate",
-        "omphjc shower",
-        "omphjc simulate",
-    ]
+    untagged = TaskIdentity("shower", "pythia")
+    assert (untagged.name, untagged.command) == ("shower-pythia", "omphjc shower")
     tagged = TaskIdentity("shower", "pythia", "tuneA")
-    assert tagged.name == "shower-pythia-tuneA"
-    assert tagged != SHOWER_TASK and TaskIdentity("shower", "pythia") == SHOWER_TASK
+    assert (tagged.name, tagged.command) == ("shower-pythia-tuneA", "omphjc shower")
+    assert tagged != untagged and TaskIdentity("shower", "pythia") == untagged
 
 
 @pytest.mark.parametrize(
@@ -149,7 +223,7 @@ def test_a_job_has_a_directory_per_process_and_number(
     job = Job(specs["HToBB"], tmp_path / "runs", 7)
     assert job.root_dir == (tmp_path / "runs").resolve() / "HToBB" / "job_7"
     assert job.manifest_path == job.root_dir / "manifest.json"
-    assert job.task_dir(GENERATE_TASK) == job.root_dir / "generate-madgraph"
+    assert job.task_dir(TASK_X) == job.root_dir / "x-fake"
     assert (
         job.relative_path(job.root_dir / "generate-madgraph" / "x.log")
         == "generate-madgraph/x.log"
@@ -157,11 +231,6 @@ def test_a_job_has_a_directory_per_process_and_number(
     assert job.seed == 10000007
     assert job.identity_path == job.root_dir / "job.json"
     assert job.identity == JobIdentity(process="HToBB", job_id=7, seed=10000007)
-    assert (
-        _task(job, GENERATE_TASK).record_path
-        == job.root_dir / "generate-madgraph" / "task.json"
-    )
-    assert _task(job, GENERATE_TASK).record is None
     assert job.tasks() == []
     assert not job.root_dir.exists()
     with pytest.raises(ValueError, match="job_id"):
@@ -174,6 +243,7 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
     output_path = tmp_path / "x-fake" / "out"
     record = TaskRecord(
         TASK_X,
+        settings={"timeout_seconds": 30.0},
         parameters={"events": 10},
         runs=(_run("done", finished="u"),),
         result=RunResult(
@@ -203,6 +273,7 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
     written = json.loads(path.read_text())
     assert written["schema"] == 1
     assert written["identity"] == {"stage": "x", "tool": "fake", "tag": None}
+    assert written["settings"] == {"timeout_seconds": 30.0}
     assert written["parameters"] == {"events": 10}
     assert written["runs"] == [
         {
@@ -273,21 +344,23 @@ def test_a_task_record_needs_a_run_and_a_result_that_fits_its_status(
 ) -> None:
     done = _run("done")
     with pytest.raises(ValueError, match="the record has no runs"):
-        TaskRecord(TASK_X, parameters={}, runs=())
+        TaskRecord(TASK_X, settings={}, parameters={}, runs=())
     with pytest.raises(
         ValueError, match="has status 'done' but the record has no result"
     ):
-        TaskRecord(TASK_X, parameters={}, runs=(done,))
+        TaskRecord(TASK_X, settings={}, parameters={}, runs=(done,))
     failed = _run("failed", error="boom")
     with pytest.raises(
         ValueError, match="has status 'failed' but the record has a result"
     ):
-        TaskRecord(TASK_X, parameters={}, runs=(failed,), result=RunResult())
+        TaskRecord(
+            TASK_X, settings={}, parameters={}, runs=(failed,), result=RunResult()
+        )
     with pytest.raises(ValueError, match="unknown run status 'paused'"):
         _run("paused")
     path = tmp_path / "x-fake" / "task.json"
     path.parent.mkdir()
-    without_runs = {"schema": 1, "parameters": {}, "result": None}
+    without_runs = {"schema": 1, "settings": {}, "parameters": {}, "result": None}
     path.write_text(json.dumps(without_runs))
     with pytest.raises(ValueError, match="invalid content: the record has no runs"):
         TaskRecord.read(path, root_dir=tmp_path)
@@ -299,15 +372,16 @@ def test_a_record_gives_its_outputs_only_when_its_latest_run_is_done(
     events = EventFileRecord(tmp_path / "e.lhe", 7, "lhe-v1:abc", EventFormat.LHE, 10)
     done = TaskRecord(
         TASK_X,
+        settings={},
         parameters={},
         runs=(_run("done"),),
         result=RunResult(outputs={EVENTS_OUTPUT: events}, metadata={"n": 1}),
     )
     assert done.events == events and done.metadata == {"n": 1}
     assert done.is_done
-    no_events = TaskRecord(TASK_X, {}, (_run("done"),), RunResult())
+    no_events = TaskRecord(TASK_X, {}, {}, (_run("done"),), RunResult())
     assert no_events.events is None
-    failed = TaskRecord(TASK_X, {}, (_run("failed", error="boom"),))
+    failed = TaskRecord(TASK_X, {}, {}, (_run("failed", error="boom"),))
     assert not failed.is_done
     refusal = "The task record has no result: its latest run has status 'failed'"
     with pytest.raises(ValueError, match=re.escape(refusal)):
@@ -321,6 +395,7 @@ def test_a_task_record_refuses_a_path_outside_its_root_directory(
     path.parent.mkdir(parents=True)
     record = TaskRecord(
         TASK_X,
+        settings={},
         parameters={},
         runs=(_run("done"),),
         result=RunResult(
@@ -332,6 +407,7 @@ def test_a_task_record_refuses_a_path_outside_its_root_directory(
     card_elsewhere = FileRecord(tmp_path / "elsewhere" / "card.dat", 5, None)
     record = TaskRecord(
         TASK_X,
+        settings={},
         parameters={},
         runs=(_run("done"),),
         result=RunResult(cards={"card": card_elsewhere}),
@@ -510,7 +586,7 @@ def test_a_stage_with_missing_outputs_or_left_running_runs_again(
     assert [run.status for run in rerun.runs] == ["done", "done"]
     assert rerun.metadata == {"n": 2}
 
-    running = TaskRecord(TASK_X, {}, (_run("running"),))
+    running = TaskRecord(TASK_X, {}, {}, (_run("running"),))
     running.write(_task(job, TASK_X).record_path, root_dir=job.root_dir)
     job = Job(specs["HToBB"], tmp_path, 1)
     assert _status_detail_and_record(job, TASK_X) == (TaskStatus.NOT_DONE, "", running)
@@ -595,15 +671,15 @@ def test_an_output_of_another_size_is_reported_before_a_missing_one(
         _run_task(job, TASK_X, {}, body)
 
 
-def test_require_events_returns_the_events_a_done_stage_made(
+def test_a_task_gives_its_events_only_once_it_is_done(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(ValueError, match="has not run to completion"):
-        job.require_events(TASK_X)
+        _ = _task(job, TASK_X).events
     _run_task(job, TASK_X, {}, lambda overwrite, log_path: _make_output(job))
     with pytest.raises(ValueError, match="The x-fake task of .* made no event file"):
-        job.require_events(TASK_X)
+        _ = _task(job, TASK_X).events
 
     events = EventFileRecord(
         job.task_dir(TASK_X) / "out.txt",
@@ -621,7 +697,7 @@ def test_require_events_returns_the_events_a_done_stage_made(
         ),
         force=True,
     )
-    assert Job(specs["HToBB"], tmp_path, 1).require_events(TASK_X) == events
+    assert _task(Job(specs["HToBB"], tmp_path, 1), TASK_X).events == events
 
 
 def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
@@ -726,17 +802,150 @@ def test_a_task_states_its_identity_its_directory_and_its_record_path(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    task = _task(job, TASK_X)
+    task = FakeX(job)
     assert (task.identity, task.name) == (TASK_X, "x-fake")
     assert task.directory == job.task_dir(TASK_X) == job.root_dir / "x-fake"
     assert task.record_path == job.root_dir / "x-fake" / "task.json"
     assert (task.record, task.status) == (None, TaskStatus.NOT_DONE)
-    tagged = _task(job, TaskIdentity("x", "fake", "tuneA"))
+    tagged = FakeX(job, tag="tuneA")
+    assert tagged.identity == TaskIdentity("x", "fake", "tuneA")
     assert tagged.directory == job.root_dir / "x-fake-tuneA"
+    with pytest.raises(ValueError, match="must consist of"):
+        _ = FakeX(job, tag="../elsewhere").identity
     assert not job.root_dir.exists()
-    record = _run_task(job, TASK_X, {}, _write_log(job))
-    assert (task.status, task.record) == (TaskStatus.DONE, record)
-    assert task.latest_log.read_text() == "finished"
+
+
+def test_the_task_classes_state_their_stage_tool_and_input(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    tasks = [MadGraphGeneration(job, n_events=10), PythiaShower(job)]
+    tasks.append(DelphesSimulation(job))
+    assert [task.name for task in tasks] == [
+        "generate-madgraph",
+        "shower-pythia",
+        "simulate-delphes",
+    ]
+    assert [task.stage for task in tasks] == [
+        GenerateStage(),
+        ShowerStage(),
+        SimulateStage(),
+    ]
+    assert [TASK_REGISTRY.get(task.identity) for task in tasks] == [
+        MadGraphGeneration,
+        PythiaShower,
+        DelphesSimulation,
+    ]
+    upstream_stages = [
+        task_input.upstream_stage for task in tasks for task_input in task.inputs
+    ]
+    assert upstream_stages == [
+        GenerateStage(),
+        ShowerStage(),
+    ]
+
+
+def test_a_task_records_its_settings_and_is_made_again_from_them(
+    specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    task = MadGraphGeneration(job, n_events=10, n_cores=2, program_path=mg5_path)
+    settings = {
+        "timeout_seconds": None,
+        "program_path": str(mg5_path),
+        "n_events": 10,
+        "n_cores": 2,
+    }
+    assert task.settings() == settings
+    record = task.run()
+    assert record.settings == settings
+    assert json.loads(task.record_path.read_text())["settings"] == settings
+    reopened_job = Job(specs["HToBB"], tmp_path, 1)
+    assert reopened_job.tasks() == [task]
+    assert reopened_job.task_from_record(record) == task
+    assert MadGraphGeneration.from_record(reopened_job, record) == task
+    refusal = (
+        "PythiaShower expects the record of a task with stage 'shower' and tool "
+        "'pythia', got the record of the generate-madgraph task"
+    )
+    with pytest.raises(ValueError, match=refusal):
+        PythiaShower.from_record(reopened_job, record)
+    tagged = PythiaShower(
+        job, tag="tuneA", overrides={"Tune:pp": 14}, timeout_seconds=60.0
+    )
+    assert tagged.settings() == {
+        "timeout_seconds": 60.0,
+        "program_path": None,
+        "overrides": {"Tune:pp": 14},
+    }
+
+
+def test_a_job_makes_each_task_on_disk_as_an_object_of_its_class(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    record = _run_task(job, TASK_X, {"events": 10}, _write_log(job))
+    _run_task(job, TaskIdentity("x", "fake", "tuneA"), {}, _write_log(job))
+    _run_task(job, TASK_Y, {}, _write_log(job))
+    x_task, tagged_task, y_task = Job(specs["HToBB"], tmp_path, 1).tasks()
+    assert [type(task) for task in (x_task, tagged_task, y_task)] == [
+        FakeX,
+        FakeX,
+        FakeY,
+    ]
+    assert x_task == FakeX(job, given_parameters={"events": 10})
+    assert tagged_task == FakeX(job, tag="tuneA")
+    assert (x_task.status, x_task.record) == (TaskStatus.DONE, record)
+    assert x_task.latest_log.read_text() == "finished"
+    assert job.tasks("x") == [x_task, tagged_task]
+    assert job.tasks("y") == [y_task]
+    assert job.tasks("z") == []
+
+
+def test_a_record_of_a_stage_and_tool_without_a_class_is_refused(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    _run_task(job, TASK_X, {}, _write_log(job))
+    unknown = TaskIdentity("x", "unknown")
+    record = TaskRecord(unknown, {}, {}, (_run("failed"),))
+    job.task_dir(unknown).mkdir()
+    record.write(job.task_dir(unknown) / "task.json", root_dir=job.root_dir)
+    refusal = "No task class is registered for the stage 'x' and the tool 'unknown'"
+    with pytest.raises(ValueError, match=refusal):
+        job.tasks()
+
+
+def test_a_record_with_settings_that_are_not_those_of_its_class_is_refused(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    record = TaskRecord(TASK_X, {"n_events": 10}, {}, (_run("failed"),))
+    job.task_dir(TASK_X).mkdir(parents=True)
+    record.write(FakeX(job).record_path, root_dir=job.root_dir)
+    refusal = "The settings recorded for the x-fake task are not those of FakeX"
+    with pytest.raises(ValueError, match=refusal):
+        job.tasks()
+
+
+def test_a_registry_holds_one_class_per_stage_and_tool() -> None:
+    registry = TaskRegistry()
+    assert registry.register(FakeX) is FakeX
+    assert registry.register(FakeX) is FakeX
+    assert registry.get(TaskIdentity("x", "fake", "tuneA")) is FakeX
+
+    @dataclass(frozen=True, kw_only=True)
+    class SecondFakeX(FakeTask):
+        stage: ClassVar[Stage] = XStage()
+
+    refusal = (
+        "The tasks of stage 'x' and tool 'fake' already have the class FakeX, so "
+        "SecondFakeX cannot be registered for them"
+    )
+    with pytest.raises(ValueError, match=refusal):
+        registry.register(SecondFakeX)
+    with pytest.raises(ValueError, match="No task class is registered"):
+        registry.get(TASK_Y)
 
 
 def test_a_task_without_a_record_has_no_latest_log(
@@ -776,6 +985,7 @@ def test_a_dropped_run_whose_id_is_not_a_plain_name_is_refused(
     outside_path.write_text("not a log of the task")
     record = TaskRecord(
         TASK_X,
+        {},
         {},
         (
             TaskRun(
@@ -868,7 +1078,7 @@ def test_a_run_replaced_by_a_newer_run_leaves_that_runs_record(
 
     def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         replaced_run_ids.append(log_path.stem)
-        newer_record = TaskRecord.running(TASK_X, {"events": 20})
+        newer_record = TaskRecord.running(TASK_X, {}, {"events": 20})
         newer_record.write(_task(job, TASK_X).record_path, root_dir=job.root_dir)
         newer_records.append(newer_record)
         if fails:
@@ -1009,7 +1219,7 @@ def test_accept_input_changes_nothing_for_a_task_that_is_not_done(
 def test_a_record_holds_an_accepted_input_only_when_its_latest_run_is_done() -> None:
     with pytest.raises(ValueError, match="has an accepted input"):
         TaskRecord(
-            TASK_X, {}, (_run("failed"),), accepted_input=AcceptedInput("f", "t")
+            TASK_X, {}, {}, (_run("failed"),), accepted_input=AcceptedInput("f", "t")
         )
 
 
@@ -1248,9 +1458,9 @@ def test_two_jobs_are_equal_when_they_are_one_process_in_one_directory(
     assert job != Job(specs["HToBB"], tmp_path / "elsewhere", 1)
     assert job != Job(replace(specs["HToBB"], seed_offset=20_000_000), tmp_path, 1)
     assert repr(job) == f"Job('HToBB', 1, root_dir={str(job.root_dir)!r})"
-    assert _task(job, TASK_X) == _task(Job(specs["HToBB"], tmp_path, 1), TASK_X)
-    assert _task(job, TASK_X) != _task(Job(specs["HToBB"], tmp_path, 2), TASK_X)
-    assert _task(job, TASK_X) != _task(job, TaskIdentity("x", "fake", "tuneA"))
+    assert FakeX(job) == FakeX(Job(specs["HToBB"], tmp_path, 1))
+    assert FakeX(job) != FakeX(Job(specs["HToBB"], tmp_path, 2))
+    assert FakeX(job) != FakeX(job, tag="tuneA")
 
 
 def test_identities_differ_by_process_job_number_and_seed() -> None:
@@ -1310,8 +1520,9 @@ def test_generate_records_what_madgraph_made(
     specs: Mapping[str, ProcessSpec], mg5_path: Path, tmp_path: Path
 ) -> None:
     job = Job(specs["TTBar"], tmp_path, 3)
-    record = generate(job, n_events=10, mg5_path=mg5_path)
-    assert _task(job, GENERATE_TASK).record == record
+    task = MadGraphGeneration(job, n_events=10, program_path=mg5_path)
+    record = task.run()
+    assert task.record == record
     assert record.is_done
     assert record.parameters == {"events": 10, "seed": 3}
     metadata = record.result.metadata
@@ -1336,7 +1547,7 @@ def test_generate_records_what_madgraph_made(
             n_events=10000,
         )
     }
-    assert _task(job, GENERATE_TASK).log_path(record.latest_run.run_id).is_file()
+    assert task.log_path(record.latest_run.run_id).is_file()
     card = job.root_dir / "generate-madgraph" / "cards" / "proc_card_mg5.dat"
     assert card.is_file()
     assert record.cards["proc_card"] == ProcCard.record_file(card)
@@ -1400,8 +1611,11 @@ def test_a_failed_madgraph_run_is_recorded_and_retried(
 ) -> None:
     monkeypatch.setenv("FAKE_MG5_FAIL", "launch")
     with pytest.raises(ProgramError):
-        generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
-    record = _task(Job(specs["HToBB"], tmp_path, 1), GENERATE_TASK).record
+        MadGraphGeneration(
+            Job(specs["HToBB"], tmp_path, 1), n_events=10, program_path=mg5_path
+        ).run()
+    (task,) = Job(specs["HToBB"], tmp_path, 1).tasks()
+    record = task.record
     assert record is not None
     assert (
         record.latest_run.status == "failed" and record.latest_run.finished is not None
@@ -1410,7 +1624,9 @@ def test_a_failed_madgraph_run_is_recorded_and_retried(
         record.latest_run.error is not None and "launch.mg5" in record.latest_run.error
     )
     monkeypatch.delenv("FAKE_MG5_FAIL")
-    done = generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
+    done = MadGraphGeneration(
+        Job(specs["HToBB"], tmp_path, 1), n_events=10, program_path=mg5_path
+    ).run()
     assert done.is_done
     failed_run, done_run = done.runs
     assert failed_run.run_id != done_run.run_id
@@ -1553,10 +1769,12 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
 
     with monkeypatch.context() as killed_before_sealing:
         killed_before_sealing.setattr(workspace, "seal", lambda *_: None)
-        generate(Job(specs["HToBB"], tmp_path, 1), n_events=10, mg5_path=mg5_path)
+        MadGraphGeneration(
+            Job(specs["HToBB"], tmp_path, 1), n_events=10, program_path=mg5_path
+        ).run()
     job = Job(specs["HToBB"], tmp_path, 1)
     assert job.set_aside_folders() == []
-    record = generate(job, n_events=10, force=True, mg5_path=mg5_path)
+    record = MadGraphGeneration(job, n_events=10, program_path=mg5_path).run(force=True)
     assert record.latest_run.set_aside is not None
     assert record.latest_run.set_aside.startswith("generate-madgraph/omphjc-set-aside/")
     folders = job.set_aside_folders()
@@ -1566,48 +1784,53 @@ def test_a_job_lists_and_clears_what_its_stages_set_aside(
     assert folders[0].size() > 0
     assert job.clear_set_aside_folders() == folders
     assert job.set_aside_folders() == []
-    assert not (job.task_dir(GENERATE_TASK) / "omphjc-set-aside").exists()
-    assert _task(job, GENERATE_TASK).status is TaskStatus.DONE
+    (task,) = job.tasks()
+    assert not (task.directory / "omphjc-set-aside").exists()
+    assert task.status is TaskStatus.DONE
 
 
-@dataclass(frozen=True)
-class FakeSimulator:
-    """A simulator for tests: it writes one small file and no events."""
+@TASK_REGISTRY.register
+@dataclass(frozen=True, kw_only=True)
+class FakeSimulation(Task):
+    """A simulation task for tests: it writes one small file and no events."""
 
-    name: ClassVar[str] = "fake-simulator"
-    card_classes: ClassVar[tuple[type[Card], ...]] = ()
+    stage: ClassVar[Stage] = SimulateStage()
+    tool: ClassVar[str] = "fake-simulator"
+    inputs: ClassVar[tuple[TaskInput, ...]] = (
+        TaskInput(EVENTS_INPUT, frozenset({EventFormat.DELPHES_ROOT}), ShowerStage()),
+    )
 
-    input_formats: frozenset[EventFormat] = frozenset({EventFormat.DELPHES_ROOT})
-    extra_parameters: tuple[tuple[str, Any], ...] = ()
+    extra_parameters: dict[str, Any] = field(default_factory=dict)
 
-    def parameters(self, *, seed: int) -> dict[str, Any]:
-        return {"seed": seed, **dict(self.extra_parameters)}
+    def parameters(self, input_events: Mapping[str, EventFileRecord]) -> dict[str, Any]:
+        return {"seed": self.job.seed, **self.extra_parameters}
 
-    def simulate(
+    def execute(
         self,
-        source: EventSource,
-        *,
-        workdir: Path,
-        seed: int,
+        input_events: Mapping[str, EventFileRecord],
         overwrite: bool,
         log_path: Path,
     ) -> TaskOutcome:
-        workdir.mkdir(parents=True, exist_ok=True)
-        output_path = workdir / "simulated.txt"
-        output_path.write_text(f"{source.path.name} {seed}")
+        events = input_events[EVENTS_INPUT]
+        self.directory.mkdir(parents=True, exist_ok=True)
+        output_path = self.directory / "simulated.txt"
+        output_path.write_text(f"{events.path.name} {self.job.seed}")
         log_path.write_text("simulated")
         output = FileRecord(output_path, output_path.stat().st_size, None)
         return TaskOutcome(
             RunResult(
                 outputs={"out": output},
-                metadata={"input_format": source.format.value},
+                metadata={"input_format": events.format.value},
             )
         )
 
 
-def _record_showered_events(job: Job, event_format: EventFormat) -> EventFileRecord:
-    """Record a done shower task of `job` whose events have `event_format`."""
-    events_path = job.task_dir(SHOWER_TASK) / "events.dat"
+def _record_showered_events(
+    job: Job, event_format: EventFormat, tag: str | None = None
+) -> EventFileRecord:
+    """Record a done task of the shower stage of `job` with events in `event_format`."""
+    identity = TaskIdentity("shower", "fake", tag)
+    events_path = job.task_dir(identity) / "events.dat"
 
     def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         events_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1615,17 +1838,24 @@ def _record_showered_events(job: Job, event_format: EventFormat) -> EventFileRec
         events = EventFileRecord(events_path, 6, "fake-v1:abc", event_format, 1)
         return TaskOutcome(RunResult(outputs={EVENTS_OUTPUT: events}))
 
-    record = _run_task(job, SHOWER_TASK, {}, body)
+    record = _run_task(job, identity, {}, body)
     assert record.events is not None
     return record.events
 
 
-def test_simulate_runs_a_simulator_on_the_showered_events(
+def test_a_task_runs_on_the_events_of_the_task_of_its_input_stage(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     events = _record_showered_events(job, EventFormat.DELPHES_ROOT)
-    record = simulate(job, FakeSimulator())
+    task = FakeSimulation(job)
+    upstream_identities = {
+        name: upstream_task.identity
+        for name, upstream_task in task.upstream_tasks().items()
+    }
+    assert upstream_identities == {EVENTS_INPUT: TASK_FAKE_SHOWER}
+    assert task.input_events() == {EVENTS_INPUT: events}
+    record = task.run()
     assert record.is_done
     assert record.parameters == {
         "input_fingerprint": events.fingerprint,
@@ -1633,44 +1863,58 @@ def test_simulate_runs_a_simulator_on_the_showered_events(
     }
     assert record.metadata == {"input_format": "delphes-root"}
     assert record.identity == TaskIdentity("simulate", "fake-simulator")
-    task = _task(job, record.identity)
     assert task.directory == job.root_dir / "simulate-fake-simulator"
     assert (task.directory / "simulated.txt").read_text() == f"events.dat {job.seed}"
     assert task.latest_log.read_text() == "simulated"
-    assert simulate(job, FakeSimulator()) == record
+    assert FakeSimulation(job).run() == record
 
 
-def test_simulate_refuses_events_the_simulator_cannot_read(
+def test_a_task_refuses_events_in_a_format_it_does_not_read(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     _record_showered_events(job, EventFormat.LHE)
     refusal = (
-        "fake-simulator reads delphes-root files, but the shower-pythia task of "
-        f"{job.root_dir} made a lhe file"
+        "simulate-fake-simulator reads delphes-root files, but the shower-fake task "
+        f"of {job.root_dir} made a lhe file"
     )
     with pytest.raises(ValueError, match=re.escape(refusal)):
-        simulate(job, FakeSimulator())
+        FakeSimulation(job).run()
     assert job.tasks("simulate") == []
 
 
-def test_simulate_refuses_a_simulator_that_uses_a_key_of_the_stage(
+def test_a_task_needs_exactly_one_task_of_its_input_stage(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    task = FakeSimulation(job)
+    no_task_refusal = (
+        f"The shower stage of {job.root_dir} has no task; run omphjc shower first"
+    )
+    with pytest.raises(ValueError, match=re.escape(no_task_refusal)):
+        task.run()
+    assert not job.root_dir.exists()
+    _record_showered_events(job, EventFormat.DELPHES_ROOT)
+    _record_showered_events(job, EventFormat.DELPHES_ROOT, tag="tuneA")
+    several_tasks_refusal = (
+        f"The shower stage of {job.root_dir} has several tasks (shower-fake, "
+        "shower-fake-tuneA), and simulate-fake-simulator reads the events of one"
+    )
+    with pytest.raises(ValueError, match=re.escape(several_tasks_refusal)):
+        task.run()
+    assert job.tasks("simulate") == []
+
+
+def test_a_task_whose_parameters_use_the_key_of_the_input_fingerprint_is_refused(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     _record_showered_events(job, EventFormat.DELPHES_ROOT)
-    simulator = FakeSimulator(extra_parameters=(("input_fingerprint", "mine"),))
-    refusal = "The parameters of fake-simulator use the keys of the stage"
-    with pytest.raises(ValueError, match=f"{refusal}: input_fingerprint"):
-        simulate(job, simulator)
-    assert _task(job, SIMULATE_TASK).record is None
-
-
-def test_task_parameters_join_the_parameters_of_a_stage_and_its_tool() -> None:
-    joined = task_parameters({"events": 10}, {"seed": 7}, tool_name="tool")
-    assert joined == {"events": 10, "seed": 7}
-    with pytest.raises(ValueError, match="of tool use the keys of the stage: a, b"):
-        task_parameters({"a": 1, "b": 2, "c": 3}, {"b": 0, "a": 0}, tool_name="tool")
+    task = FakeSimulation(job, extra_parameters={"input_fingerprint": "mine"})
+    refusal = "The parameters of simulate-fake-simulator use the key input_fingerprint"
+    with pytest.raises(ValueError, match=refusal):
+        task.run()
+    assert task.record is None
 
 
 def test_simulate_needs_a_finished_shower_stage(
@@ -1686,9 +1930,9 @@ def _run_all(
     job: Job, mg5_path: Path, delphes_pythia8_path: Path, delphes_root_path: Path
 ) -> tuple[TaskRecord, TaskRecord, TaskRecord]:
     return (
-        generate(job, n_events=10, mg5_path=mg5_path),
-        shower(job, delphes_pythia8_path=delphes_pythia8_path),
-        simulate(job, _delphes_simulator(job, delphes_root_path)),
+        MadGraphGeneration(job, n_events=10, program_path=mg5_path).run(),
+        PythiaShower(job, program_path=delphes_pythia8_path).run(),
+        DelphesSimulation(job, program_path=delphes_root_path).run(),
     )
 
 
@@ -1722,20 +1966,20 @@ def test_a_stage_whose_input_events_changed_is_refused_unless_forced(
         job, mg5_path, delphes_pythia8_path, delphes_root_path
     )
     monkeypatch.setenv("FAKE_MG5_EVENTS", "2")
-    generate(job, n_events=10, mg5_path=mg5_path, force=True)
-    lhe_fingerprint = job.require_events(GENERATE_TASK).fingerprint
+    MadGraphGeneration(job, n_events=10, program_path=mg5_path).run(force=True)
+    lhe_fingerprint = job.tasks("generate")[0].events.fingerprint
     assert lhe_fingerprint != generated.result.outputs[EVENTS_OUTPUT].fingerprint
     with pytest.raises(ValueError, match="input_fingerprint: expected lhe-v1:"):
-        shower(job, delphes_pythia8_path=delphes_pythia8_path)
-    forced = shower(job, delphes_pythia8_path=delphes_pythia8_path, force=True)
+        PythiaShower(job, program_path=delphes_pythia8_path).run()
+    forced = PythiaShower(job, program_path=delphes_pythia8_path).run(force=True)
     assert forced.parameters["input_fingerprint"] == lhe_fingerprint
     root_fingerprint = forced.result.outputs[EVENTS_OUTPUT].fingerprint
     assert root_fingerprint != showered.result.outputs[EVENTS_OUTPUT].fingerprint
     with pytest.raises(
         ValueError, match="input_fingerprint: expected delphes_root-v1:"
     ):
-        simulate(job, _delphes_simulator(job, delphes_root_path))
-    forced = simulate(job, _delphes_simulator(job, delphes_root_path), force=True)
+        DelphesSimulation(job, program_path=delphes_root_path).run()
+    forced = DelphesSimulation(job, program_path=delphes_root_path).run(force=True)
     assert forced.parameters["input_fingerprint"] == root_fingerprint
 
 
@@ -1752,25 +1996,25 @@ def test_an_accepted_input_keeps_a_stage_and_the_stages_after_it(
         job, mg5_path, delphes_pythia8_path, delphes_root_path
     )
     monkeypatch.setenv("FAKE_MG5_EVENTS", "2")
-    generate(job, n_events=10, mg5_path=mg5_path, force=True)
-    lhe_fingerprint = job.require_events(GENERATE_TASK).fingerprint
-    accepted_record = shower(
-        job, delphes_pythia8_path=delphes_pythia8_path, accept_input=True
+    MadGraphGeneration(job, n_events=10, program_path=mg5_path).run(force=True)
+    lhe_fingerprint = job.tasks("generate")[0].events.fingerprint
+    accepted_record = PythiaShower(job, program_path=delphes_pythia8_path).run(
+        accept_input=True
     )
     assert accepted_record.accepted_input is not None
     assert accepted_record.accepted_input.fingerprint == lhe_fingerprint
     assert accepted_record.parameters == showered.parameters
     assert accepted_record.runs == showered.runs
-    assert shower(job, delphes_pythia8_path=delphes_pythia8_path) == accepted_record
-    assert simulate(job, _delphes_simulator(job, delphes_root_path)) == simulated
+    assert PythiaShower(job, program_path=delphes_pythia8_path).run() == accepted_record
+    assert DelphesSimulation(job, program_path=delphes_root_path).run() == simulated
     assert (
-        simulate(job, _delphes_simulator(job, delphes_root_path), accept_input=True)
+        DelphesSimulation(job, program_path=delphes_root_path).run(accept_input=True)
         == simulated
     )
     with pytest.raises(ValueError, match="cannot both be set"):
-        shower(job, accept_input=True, force=True)
+        PythiaShower(job).run(force=True, accept_input=True)
     with pytest.raises(ValueError, match="cannot both be set"):
-        simulate(job, DelphesSimulator(job.spec), accept_input=True, force=True)
+        DelphesSimulation(job).run(accept_input=True, force=True)
 
 
 def test_a_kept_stage_reads_no_event_file(
@@ -1782,8 +2026,8 @@ def test_a_kept_stage_reads_no_event_file(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     done = _run_all(job, mg5_path, delphes_pythia8_path, delphes_root_path)
-    for stage in (GENERATE_TASK, SHOWER_TASK, SIMULATE_TASK):
-        event_path = job.require_events(stage).path
+    for task in job.tasks():
+        event_path = task.events.path
         event_path.write_bytes(bytes(event_path.stat().st_size))
     job = Job(specs["HToBB"], tmp_path, 1)
     assert _run_all(job, mg5_path, delphes_pythia8_path, delphes_root_path) == done
@@ -1797,9 +2041,9 @@ def test_an_event_file_of_another_size_is_refused_by_its_stage_and_the_next(
     tmp_path: Path,
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    generate(job, n_events=10, mg5_path=mg5_path)
-    shower(job, delphes_pythia8_path=delphes_pythia8_path)
-    root_path = job.require_events(SHOWER_TASK).path
+    MadGraphGeneration(job, n_events=10, program_path=mg5_path).run()
+    PythiaShower(job, program_path=delphes_pythia8_path).run()
+    root_path = PythiaShower(job).events.path
     recorded = root_path.stat().st_size
     root_path.write_bytes(root_path.read_bytes()[: recorded // 2])
     refused = re.escape(
@@ -1808,11 +2052,11 @@ def test_an_event_file_of_another_size_is_refused_by_its_stage_and_the_next(
         "regenerate the file"
     )
     with pytest.raises(ValueError, match=refused):
-        shower(job, delphes_pythia8_path=delphes_pythia8_path)
+        PythiaShower(job, program_path=delphes_pythia8_path).run()
     with pytest.raises(ValueError, match=refused):
-        simulate(job, _delphes_simulator(job, delphes_root_path))
-    shower(job, delphes_pythia8_path=delphes_pythia8_path, force=True)
-    assert simulate(job, _delphes_simulator(job, delphes_root_path)).is_done
+        DelphesSimulation(job, program_path=delphes_root_path).run()
+    PythiaShower(job, program_path=delphes_pythia8_path).run(force=True)
+    assert DelphesSimulation(job, program_path=delphes_root_path).run().is_done
 
 
 def test_simulate_records_what_it_made_and_keeps_it(
@@ -1890,23 +2134,23 @@ def test_simulate_counts_the_events_of_its_output(
     omit: tuple[str, ...],
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    generate(job, n_events=10, mg5_path=mg5_path)
-    shower(job, delphes_pythia8_path=delphes_pythia8_path)
-    showered = job.require_events(SHOWER_TASK)
+    MadGraphGeneration(job, n_events=10, program_path=mg5_path).run()
+    PythiaShower(job, program_path=delphes_pythia8_path).run()
+    showered = PythiaShower(job).events
     # The fake DelphesROOT copies its input, so the simulated file holds three
     # events while the shower stage recorded one.
     pids = ak.Array([[2212, 211], [2212], [211, 211, 22]])
     write_delphes_file(showered.path, {"PID": pids}, omit=omit)
     # The shower stage is recorded with the size of the file put in its place.
-    record = _task(job, SHOWER_TASK).record
+    record = PythiaShower(job).record
     assert record is not None
     record.result.outputs[EVENTS_OUTPUT] = replace(
         showered, n_bytes=showered.path.stat().st_size
     )
-    record.write(_task(job, SHOWER_TASK).record_path, root_dir=job.root_dir)
-    simulate(job, _delphes_simulator(job, delphes_root_path))
+    record.write(PythiaShower(job).record_path, root_dir=job.root_dir)
+    DelphesSimulation(job, program_path=delphes_root_path).run()
     assert showered.n_events == 1
-    assert job.require_events(SIMULATE_TASK).n_events == 3
+    assert DelphesSimulation(job).events.n_events == 3
 
 
 def test_a_forced_rerun_of_each_program_leaves_the_record_of_its_task(
@@ -1917,21 +2161,15 @@ def test_a_forced_rerun_of_each_program_leaves_the_record_of_its_task(
     tmp_path: Path,
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    runs = {
-        GENERATE_TASK: lambda force: generate(
-            job, n_events=10, force=force, mg5_path=mg5_path
-        ),
-        SHOWER_TASK: lambda force: shower(
-            job, force=force, delphes_pythia8_path=delphes_pythia8_path
-        ),
-        SIMULATE_TASK: lambda force: simulate(
-            job, _delphes_simulator(job, delphes_root_path), force=force
-        ),
-    }
-    for stage, run in runs.items():
-        run(False)
-        record = run(True)
+    tasks: list[Task] = [
+        MadGraphGeneration(job, n_events=10, program_path=mg5_path),
+        PythiaShower(job, program_path=delphes_pythia8_path),
+        DelphesSimulation(job, program_path=delphes_root_path),
+    ]
+    for task in tasks:
+        task.run()
+        record = task.run(force=True)
         assert record.latest_run.set_aside is None
-        assert _task(job, stage).record == record
-        stamp = read_stamp(job.task_dir(stage))
+        assert task.record == record
+        stamp = read_stamp(task.directory)
         assert stamp is not None and "task.json" not in stamp.artifacts

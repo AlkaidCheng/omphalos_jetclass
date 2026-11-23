@@ -1,155 +1,55 @@
-"""The simulation stage: a detector simulation of the showered events."""
+"""The simulation stage: the Delphes simulation of the showered events."""
 
-from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING
 
-from omphjc.data_files import Card
-from omphjc.events.formats import EventFormat, EventSource
-from omphjc.jobs.identity import TaskIdentity
-from omphjc.jobs.job import Job, task_parameters
-from omphjc.jobs.stages.shower import SHOWER_TASK
-from omphjc.jobs.task import INPUT_FINGERPRINT_PARAMETER, TaskOutcome, TaskRecord
-from omphjc.stages import SimulateStage
+import omphjc.tasks
+from omphjc.jobs.job import Job
+from omphjc.jobs.task import TaskRecord
 
-
-class DetectorSimulator(Protocol):
-    """A tool that simulates a detector on the showered events of a job.
-
-    A simulator holds the configuration of its tool and the options of a run.
-    The simulation stage asks it for its parameters and calls it to make the
-    events.
-    """
-
-    @property
-    def name(self) -> str:
-        """The name of the simulator, such as ``"delphes"``."""
-        ...
-
-    @property
-    def input_formats(self) -> frozenset[EventFormat]:
-        """The formats of event file the simulator reads."""
-        ...
-
-    @property
-    def card_classes(self) -> tuple[type[Card], ...]:
-        """The class of each card a run of the simulator uses.
-
-        Each class names its card, so the names are those of the cards in the
-        result of the task.
-        """
-        ...
-
-    def parameters(self, *, seed: int) -> dict[str, Any]:
-        """Return the simulator's part of the task's parameters, as JSON values.
-
-        The parameters hold `seed` only when the simulator uses it.
-        """
-        ...
-
-    def simulate(
-        self,
-        source: EventSource,
-        *,
-        workdir: Path,
-        seed: int,
-        overwrite: bool,
-        log_path: Path,
-    ) -> TaskOutcome:
-        """Simulate the detector on the events in `source`.
-
-        Parameters
-        ----------
-        source : EventSource
-            The showered events, in one of :attr:`input_formats`.
-        workdir : Path
-            The directory of the task, where the simulator works.
-        seed : int
-            The seed of the job.
-        overwrite : bool
-            Whether to replace what an earlier run left in `workdir`.
-        log_path : Path
-            The file that the program writes its log to.
-
-        Returns
-        -------
-        TaskOutcome
-            The simulated events as the output named
-            :data:`~omphjc.runs.EVENTS_OUTPUT`, the simulator's cards
-            and metadata, and what the run took and set aside.
-        """
-        ...
-
-
-def simulate_task(simulator: DetectorSimulator) -> TaskIdentity:
-    """Return the identity of the task that simulates the detector with `simulator`."""
-    return TaskIdentity(SimulateStage.name, simulator.name)
+if TYPE_CHECKING:
+    # The adapter loads the array libraries, so it is not imported when a
+    # command starts.
+    from omphjc.tools.delphes.adapter import DelphesSimulator
 
 
 def simulate(
     job: Job,
-    simulator: DetectorSimulator,
+    simulator: "DelphesSimulator",
     *,
     accept_input: bool = False,
     force: bool = False,
 ) -> TaskRecord:
-    """Simulate the detector on the showered events of `job` with `simulator`.
+    """Simulate the detector on the showered events of `job` with Delphes.
 
-    The task (:func:`simulate_task`) reads the event file that the shower task
-    made. `simulator` works in the directory of the task, such as
-    ``simulate-delphes/``, with the job's seed.
-
-    The parameters of the task are the fingerprint of the event file it
-    reads and the parameters of `simulator`. A shower that is repeated with
-    the same events therefore keeps its simulation.
+    It makes a :class:`~omphjc.tasks.DelphesSimulation` from the options that
+    `simulator` holds and runs it.
 
     Parameters
     ----------
     job : Job
-        The job; its shower stage must be done.
-    simulator : DetectorSimulator
-        The tool that simulates the detector.
+        The job; its shower task must be done.
+    simulator : DelphesSimulator
+        The detector card, the time limit and the path of ``DelphesROOT``.
     accept_input : bool, optional
-        Keep the stage's result although the events it reads have changed
-        since it ran, and record that (:meth:`omphjc.jobs.Job.run_task`). A
-        stage that is not done runs as it does without the option.
+        Keep the result of the task although the events it reads have
+        changed since it ran, and record that.
     force : bool, optional
-        Run the stage again even when its result could be kept.
+        Run the task again even when its result could be kept.
 
     Returns
     -------
     TaskRecord
-        The stage's record, kept or new.
+        The record of the task, kept or new.
 
     Raises
     ------
-    ValueError
-        If the shower stage of `job` has not run to completion. If
-        `simulator` cannot read the format of the showered events. If the
-        parameters of `simulator` use a key of the stage. If `accept_input`
-        and `force` are both set.
+    Exception
+        As :meth:`omphjc.jobs.Task.run` raises.
     """
-    identity = simulate_task(simulator)
-    events = job.require_events(SHOWER_TASK, for_tool=simulator)
-    workdir = job.task_dir(identity)
-    parameters = task_parameters(
-        {INPUT_FINGERPRINT_PARAMETER: events.fingerprint},
-        simulator.parameters(seed=job.seed),
-        tool_name=simulator.name,
+    task = omphjc.tasks.DelphesSimulation(
+        job,
+        detector_card_path=simulator.detector_card_path,
+        timeout_seconds=simulator.timeout_seconds,
+        program_path=simulator.delphes_root_path,
     )
-
-    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
-        return simulator.simulate(
-            EventSource(events.path, events.format),
-            workdir=workdir,
-            seed=job.seed,
-            overwrite=overwrite,
-            log_path=log_path,
-        )
-
-    return job.run_task(
-        identity,
-        parameters,
-        body,
-        accept_input=accept_input,
-        force=force,
-    )
+    return task.run(accept_input=accept_input, force=force)
