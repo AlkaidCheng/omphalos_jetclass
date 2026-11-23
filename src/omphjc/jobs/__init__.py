@@ -12,13 +12,12 @@ depend on.
 
 The modules, by what they hold::
 
-    job.py          Job: the job directory, its seed, its tasks and its manifest,
-                    with the rules that decide whether a task runs again
-                    (Job.run_task)
-    task.py         Task, the base class of a task; TaskRegistry and
-                    TASK_REGISTRY, the registry of the task classes;
-                    TaskRecord, the content of task.json, with a TaskRun for
-                    each run; TaskOutcome, what a run made
+    job.py          Job: the job directory, its seed, its tasks and its manifest
+    task.py         Task, the base class of a task, which runs the task and
+                    writes its record; TaskRegistry and TASK_REGISTRY, the
+                    registry of the task classes; TaskRecord, the content
+                    of task.json, with a TaskRun for each run; TaskOutcome,
+                    what a run made
     identity.py     JobIdentity, the content of job.json, and TaskIdentity, the
                     stage, the tool and the tag of a task
     manifest.py     Manifest, the content of manifest.json, which lists a
@@ -29,7 +28,7 @@ The classes of the tasks are in :mod:`omphjc.tasks`.
 
 How a task is recorded:
 
-1. :meth:`Job.run_task` calls :meth:`Task.execute` of the task's class, which
+1. :meth:`Task.run` calls :meth:`Task.execute` of the task's class, which
    calls a driver, such as
    :func:`omphjc.tools.madgraph.driver.generate_events`. The driver returns a
    run record with absolute paths.
@@ -40,20 +39,14 @@ How a task is recorded:
    :class:`~omphjc.events.formats.EventFileRecord` for an event file. A card
    is a :class:`~omphjc.data_files.FileRecord` that the driver's workspace
    made (:meth:`omphjc.workspace.ProgramWorkspace.card_records`).
-3. :meth:`Job.run_task` records the run as a :class:`TaskRun`, with its status,
+3. :meth:`Task.run` records the run as a :class:`TaskRun`, with its status,
    start and finish times and usage. It writes the identity of the task, its
    settings, the run, the parameters and the result to ``task.json`` as a
    :class:`TaskRecord`, with every path relative to the job directory.
 """
 
 from omphjc.jobs.identity import JobIdentity, TaskIdentity
-from omphjc.jobs.job import (
-    Job,
-    ReplacedRunError,
-    TerminationError,
-    exception_on_termination,
-    job_seed,
-)
+from omphjc.jobs.job import Job, exception_on_termination, job_seed
 from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.stages import GENERATE_TASK, SHOWER_TASK, generate, shower, simulate
 from omphjc.jobs.task import (
@@ -65,6 +58,7 @@ from omphjc.jobs.task import (
     RUNNING,
     TASK_REGISTRY,
     AcceptedInput,
+    ReplacedRunError,
     Task,
     TaskInput,
     TaskOutcome,
@@ -72,6 +66,7 @@ from omphjc.jobs.task import (
     TaskRegistry,
     TaskRun,
     TaskStatus,
+    TerminationError,
 )
 
 __all__ = [
