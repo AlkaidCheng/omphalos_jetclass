@@ -155,7 +155,7 @@ Each run has these keys:
     The value is ``null`` otherwise.
 
 **The accepted input.** ``accepted_input`` is set when the task was kept for
-another input than the one it read (:meth:`omphjc.jobs.Job.run_task`). It
+another input than the one it read (:meth:`Task.run`). It
 holds the ``fingerprint`` of that input and the time of the acceptance,
 ``accepted_at``. ``parameters`` still hold the fingerprint of the input the
 task read. A further run of the task clears ``accepted_input``.
@@ -181,6 +181,7 @@ only while its outputs are intact.
 
 import secrets
 import socket
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field, fields, replace
@@ -190,6 +191,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, get_args
 
+from omphjc.comparison import Difference
 from omphjc.data_files import FileRecord
 from omphjc.events.formats import EventFileRecord, EventFormat
 from omphjc.jobs.identity import TaskIdentity
@@ -227,7 +229,7 @@ class TaskOutcome:
         What the task made.
     usage : dict[str, float]
         Resources the task's program used, such as ``cpu_seconds`` and
-        ``peak_memory_mib``. The job adds ``wall_seconds``.
+        ``peak_memory_mib``. :meth:`Task.run` adds ``wall_seconds``.
     set_aside_dir : Path or None
         The folder, inside the job directory, that holds what an earlier run
         left and this run could not confirm as that run's
@@ -588,6 +590,20 @@ class TaskStatus(Enum):
     DONE = "done"
     """The task is recorded as done and each output has its recorded size."""
 
+
+class TerminationError(RuntimeError):
+    """The process received a termination signal."""
+
+
+class ReplacedRunError(RuntimeError):
+    """A newer run of the task started before this one ended.
+
+    The end of this run is then not recorded.
+    """
+
+
+# What ends a run without its program or omphjc failing.
+_INTERRUPTIONS = (TerminationError, KeyboardInterrupt)
 
 # The names of the fields of a task that are not settings: its job, and its
 # tag, which is a part of its identity.
@@ -1010,16 +1026,59 @@ class Task(ABC):
         return record
 
     def run(self, *, accept_input: bool = False, force: bool = False) -> TaskRecord:
-        """Run the task unless its result can be kept, and return its record.
+        """Run the task unless its result can be kept.
 
-        The job of the task runs it and records the run
-        (:meth:`omphjc.jobs.Job.run_task`).
+        The parameters of the request are those of :meth:`parameters`, with
+        the fingerprint of the events that the task reads
+        (:data:`INPUT_FINGERPRINT_PARAMETER`). The run is recorded in the
+        record of the task, with the settings of the task.
+
+        The events that the task reads are found once, before anything else,
+        and given to :meth:`parameters` and to :meth:`execute`.
+
+        **A task recorded as done.**
+
+        - It is kept when its outputs are present and the parameters are the
+          same.
+        - It is refused when the parameters differ, or when an output has
+          another size than recorded. `force` overrides the refusal.
+        - With `accept_input`, it is also kept when its outputs are present
+          and the parameters differ only in the fingerprint of its input.
+          The record then stores that fingerprint and the time as its
+          ``accepted_input``, which replaces an earlier one. Its parameters
+          keep the fingerprint of the input the task read, and it gains no
+          run. From then on the task is kept for either input, without
+          `accept_input` too.
+
+        **A task that is not kept.** A task without a record runs. A task
+        that failed, was interrupted or lost an output runs again. The new
+        run is added to the record when the parameters are the same. With
+        other parameters, or under `force`, the task starts a new record,
+        and the logs of the runs that the earlier record listed are removed.
+        In both cases :meth:`execute` is told to replace what the earlier
+        run left.
+
+        **What is written.** The first task of a job creates the job
+        directory with its ``job.json``. Each run gets a run ID and a log,
+        ``logs/<run_id>.log`` in the directory of the task
+        (:meth:`log_path`).
+
+        The record, ``task.json`` in the directory of the task, is written
+        before :meth:`execute` is called and again after it returns or
+        raises. A failed or interrupted run therefore records how far it got.
+        The manifest of the job is written again after each of these writes.
+
+        A run that ``SIGTERM`` or a keyboard interrupt ended is recorded as
+        interrupted, and a run that raised anything else as failed. The end
+        of a run is written only while that run is still the latest one in
+        the record on disk.
 
         Parameters
         ----------
         accept_input : bool, optional
             Keep a done task whose input alone has changed, and record the
-            acceptance.
+            acceptance. It changes nothing for a task that is not done or has
+            lost an output.
         force : bool, optional
             Run the task even when its result could be kept.
 
@@ -1030,10 +1089,200 @@ class Task(ABC):
 
         Raises
         ------
+        ValueError
+            If the task is recorded as done with other parameters, or with an
+            output of another size than recorded, and `force` is not set; the
+            message names each parameter that differs. If the ``job.json`` of
+            the directory identifies another job. If the ``task.json`` of a
+            task of the job cannot be read as a record. If `accept_input` and
+            `force` are both set. If the record that a new one replaces lists
+            a run whose ID is not a plain name; the record is then left as it
+            was. If the events that the task reads cannot be given
+            (:meth:`input_events`). If the parameters of the task use the key
+            of the input fingerprint.
+        FileNotFoundError
+            If the ``job.json`` of the directory was removed while the task
+            ran. The task is then not recorded.
+        ReplacedRunError
+            If a newer run of the task started before this one ended. The
+            record of the newer run is left unchanged, and the end of this
+            one is not recorded.
         Exception
-            As :meth:`omphjc.jobs.Job.run_task` raises.
+            Whatever :meth:`parameters` raised, before anything is recorded.
+            Whatever :meth:`execute` raised, after the failure is recorded.
         """
-        return self.job.run_task(self, accept_input=accept_input, force=force)
+        if accept_input and force:
+            raise ValueError("accept_input and force cannot both be set")
+        input_events = self.input_events()
+        parameters = self.requested_parameters(input_events)
+        previous_record = self.record
+        if not force:
+            kept_record = self._kept_record(
+                previous_record, parameters, accept_input=accept_input
+            )
+            if kept_record is not None:
+                return kept_record
+        overwrite = force or previous_record is not None
+        clock = time.monotonic()
+        self.job.record_identity()
+        dropped_runs: tuple[TaskRun, ...] = ()
+        if previous_record is None or force or previous_record.parameters != parameters:
+            record = TaskRecord.running(self.identity, self.settings(), parameters)
+            if previous_record is not None:
+                dropped_runs = previous_record.runs
+        else:
+            record = replace(previous_record.rerun(), settings=self.settings())
+        log_path = self.log_path(record.latest_run.run_id)
+        # Named before the record is replaced, so that a run ID that is not a
+        # plain name is refused while the earlier record is still in place.
+        dropped_logs = [self.log_path(run.run_id) for run in dropped_runs]
+        self._write_record(record)
+        try:
+            self.remove_logs(dropped_logs)
+            log_path.parent.mkdir(exist_ok=True)
+            outcome = self.execute(input_events, overwrite, log_path)
+        except BaseException as error:
+            message = str(error) or type(error).__name__
+            if isinstance(error, _INTERRUPTIONS):
+                self._write_run_end(record.interrupted(error=message))
+            else:
+                self._write_run_end(record.failed(error=message))
+            raise
+        record = record.done(
+            outcome, wall_seconds=time.monotonic() - clock, root_dir=self.job.root_dir
+        )
+        self._write_run_end(record)
+        return record
+
+    def _kept_record(
+        self,
+        record: TaskRecord | None,
+        parameters: dict[str, Any],
+        *,
+        accept_input: bool,
+    ) -> TaskRecord | None:
+        """Return `record` when the result of the task is kept for `parameters`.
+
+        `record` is the record of the task as found on disk.
+
+        Return ``None`` when the task has to run. That is the case for a
+        task without a record, for a task that is not done, and for a task
+        that lost an output and has the same parameters.
+
+        Raises
+        ------
+        ValueError
+            As :meth:`run` refuses a task recorded as done.
+        """
+        if record is None or not record.is_done:
+            return None
+        status, detail = record.current_status()
+        if status is TaskStatus.DONE:
+            if record.is_accepted_for(parameters):
+                return record
+            if accept_input:
+                return self._accept_input(record, parameters)
+        self._check_parameters(record, parameters)
+        if status is TaskStatus.DONE:
+            return record
+        if status is TaskStatus.CHANGED:
+            raise ValueError(
+                f"{detail}; run {self.identity.command} with --force to "
+                "regenerate the file"
+            )
+        return None
+
+    def _accept_input(
+        self, record: TaskRecord, parameters: dict[str, Any]
+    ) -> TaskRecord:
+        """Keep the done task for the input in `parameters`; record that.
+
+        `record` is returned as it is when `parameters` are those of the
+        task. Otherwise they may differ in the input fingerprint alone, and
+        the record is written with that fingerprint as its accepted input.
+
+        Raises
+        ------
+        ValueError
+            If another parameter differs; the message names each one, and
+            leaves out the input fingerprint.
+        """
+        if parameters == record.parameters:
+            return record
+        key = INPUT_FINGERPRINT_PARAMETER
+        # The parameters the task ran with, with the requested input in place.
+        acceptable_parameters = dict(record.parameters)
+        if key in parameters:
+            acceptable_parameters[key] = parameters[key]
+        self._check_parameters(record, parameters, recorded=acceptable_parameters)
+        record = record.with_accepted_input(parameters[key])
+        self._write_record(record)
+        return record
+
+    def _check_parameters(
+        self,
+        record: TaskRecord,
+        parameters: dict[str, Any],
+        *,
+        recorded: dict[str, Any] | None = None,
+    ) -> None:
+        """Refuse `parameters` when the task ran with other ones.
+
+        The message names each parameter that differs. A nested parameter
+        is named by the dotted path of its keys. The value the task ran with
+        is shown as the expected one.
+
+        `recorded` are the parameters to compare with, when they are not
+        those of `record`.
+        """
+        if recorded is None:
+            recorded = record.parameters
+        if parameters == recorded:
+            return
+        differences = Difference.between_nested_mappings(parameters, recorded)
+        record_path = self.job.relative_path(self.record_path)
+        raise ValueError(
+            "The current parameters are inconsistent with those of the existing "
+            f"{self.name} task in {self.job.root_dir} ({record_path}):"
+            + "".join(f"\n  {difference}" for difference in differences)
+            + "\nRerun with the parameters the task ran with, or run "
+            f"{self.identity.command} with --force to replace its result."
+        )
+
+    def _write_run_end(self, record: TaskRecord) -> None:
+        """Write `record`, which says how the latest run of the task ended.
+
+        Raises
+        ------
+        ReplacedRunError
+            If the record on disk already holds a newer run of the task.
+            That record is left unchanged.
+        """
+        run = record.latest_run
+        recorded = self.record
+        if recorded is not None and recorded.latest_run.run_id != run.run_id:
+            raise ReplacedRunError(
+                f"Run {run.run_id!r} of the {self.name} task in "
+                f"{self.job.root_dir} is not "
+                f"recorded as {run.status}: run {recorded.latest_run.run_id!r} of "
+                "the task started before it ended"
+            )
+        self._write_record(record)
+
+    def _write_record(self, record: TaskRecord) -> None:
+        """Write `record` as the record of the task, then the manifest of the job.
+
+        The job directory must still hold its ``job.json``.
+        """
+        if not self.job.identity_path.exists():
+            raise FileNotFoundError(
+                f"{self.job.identity_path} was removed while the "
+                f"{self.name} task ran; "
+                "the outcome of the task is not recorded"
+            )
+        self.record_path.parent.mkdir(exist_ok=True)
+        record.write(self.record_path, root_dir=self.job.root_dir)
+        self.job.write_manifest(record)
 
 
 class TaskRegistry:

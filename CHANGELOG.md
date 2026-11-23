@@ -234,6 +234,8 @@
   its parameters and makes its files. (#95)
 - `task.json` records the `settings` its task was made with, from which
   `Job.tasks` makes each task again as an object of its class. (#95)
+- `omphjc.jobs.Task.run` runs a task and records it, in place of
+  `Job.run_task`. (#96)
 
 ### Fixed
 
