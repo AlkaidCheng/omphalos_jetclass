@@ -101,8 +101,8 @@ files.
 
 omphjc records a fingerprint of each stage's event file in the stage's
 `task.json`, and the fingerprint leaves those differences out. The shower and
-the simulation record the fingerprint of the events they read as the
-parameter `input_fingerprint`. A stage run again with the same events therefore keeps the
+the simulation record the fingerprint of the events they read under
+`inputs`. A stage run again with the same events therefore keeps the
 stages after it, and a stage whose input events changed is refused unless
 forced.
 

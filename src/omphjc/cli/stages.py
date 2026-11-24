@@ -24,7 +24,6 @@ from omphjc.cli.options import (
     parse_assignment,
 )
 from omphjc.jobs import (
-    INPUT_FINGERPRINT_PARAMETER,
     Job,
     ReplacedRunError,
     TaskRecord,
@@ -295,8 +294,8 @@ def _run_stage_command(
     - `title`, which names the task, and whether the result was kept;
     - the ID of the task's latest run;
     - the rows that `lines` gives;
-    - an ``input`` row, when the task was kept for other events than those
-      it read;
+    - an ``input <name>`` row for each input that the task was kept for
+      although it read other events;
     - the number of runs and the status of each, when the task has more than
       one run;
     - what the latest run took.
@@ -327,26 +326,24 @@ def _run_stage_command(
 
 
 def _report_accepted_input(job: Job, record: TaskRecord) -> None:
-    """Print the ``input`` row of a task that was kept for another input.
+    """Print the ``input`` rows of a task that was kept for other inputs.
 
-    The row is printed when the record holds an accepted input and the events
-    that the task reads now are not the ones it read when it ran.
+    One row is printed for each input that holds an acceptance and whose
+    events differ from those the task read.
     """
-    accepted_input = record.accepted_input
-    if accepted_input is None:
+    if all(input_record.accepted is None for input_record in record.inputs.values()):
         return
-    input_fingerprint = record.parameters[INPUT_FINGERPRINT_PARAMETER]
     task = job.task_from_record(record)
-    current_fingerprints = {
-        events.fingerprint for events in task.input_events().values()
-    }
-    if input_fingerprint in current_fingerprints:
-        return
-    acceptance = (
-        f"accepted (ran on {format_fingerprint(input_fingerprint)}, "
-        f"accepted for {format_fingerprint(accepted_input.fingerprint)})"
-    )
-    click.echo(format_row("input", acceptance))
+    for input_name, events in task.input_events().items():
+        input_record = record.inputs[input_name]
+        accepted = input_record.accepted
+        if accepted is None or events.fingerprint == input_record.fingerprint:
+            continue
+        acceptance = (
+            f"accepted (ran on {format_fingerprint(input_record.fingerprint)}, "
+            f"accepted for {format_fingerprint(accepted.fingerprint)})"
+        )
+        click.echo(format_row(f"input {input_name}", acceptance))
 
 
 def _refuse_accept_input_with_force(accept_input: bool, force: bool) -> None:

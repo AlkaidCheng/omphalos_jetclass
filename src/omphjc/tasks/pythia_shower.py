@@ -23,9 +23,9 @@ class PythiaShower(Task):
     the generate stage made, and uses the seed of the job and the event count
     that task recorded.
 
-    Its parameters are the event count, the seed, the Pythia overrides and
-    the fingerprint of the event file it reads. A sample that is generated
-    again with the same events therefore keeps its shower.
+    Its parameters are the event count, the seed and the Pythia overrides.
+    Its record also holds the fingerprint of the event file it reads, so a
+    sample that is generated again with the same events keeps its shower.
 
     Its events are the ROOT file, recorded with the number of events Pythia
     accepted and the fingerprint of its content

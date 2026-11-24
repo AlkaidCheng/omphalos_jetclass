@@ -239,6 +239,8 @@
 - The parameters in `task.json` name the event count `n_events`, in place of
   `events`, and the Pythia overrides of a shower `overrides`, in place of
   `pythia`. (#97)
+- `task.json` records each input of its task under `inputs`, with the task
+  that made its events and their fingerprint, apart from its `parameters`. (#98)
 
 ### Fixed
 

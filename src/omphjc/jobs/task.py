@@ -15,6 +15,7 @@ file ``task.json`` in that directory, written as::
         "timeout_seconds": null, "program_path": null, "n_events": 1000, "n_cores": null
       },
       "parameters": {"n_events": 1000, "seed": 10000001},
+      "inputs": {},
       "result": {
         "outputs": {
           "events": {
@@ -61,8 +62,7 @@ file ``task.json`` in that directory, written as::
           "set_aside": null,
           "error": null
         }
-      ],
-      "accepted_input": null
+      ]
     }
 
 Every path in the record is relative to the job directory. The top-level
@@ -80,19 +80,19 @@ keys are:
     (:meth:`Task.settings`). A job makes the task again from them
     (:meth:`omphjc.jobs.Job.task_from_record`).
 ``parameters``
-    What fixes the files of the task, including the seed when the task uses
-    one (:meth:`Task.parameters`). A later request compares its own
-    parameters with these to decide whether the result can be kept. A
-    setting that does not change the files, such as the time limit, is not
-    among them.
+    What fixes the files of the task apart from its inputs, including the
+    seed when the task uses one (:meth:`Task.parameters`). A later request
+    compares its own parameters with these to decide whether the result can
+    be kept. A setting that does not change the files, such as the time
+    limit, is not among them.
+``inputs``
+    What the task read from other tasks of its job, by the name of the input
+    (:attr:`Task.inputs`). The mapping is empty for a task without an input.
 ``result``
     What the task made (:class:`~omphjc.runs.RunResult`). It is ``null`` unless the
     latest run is done.
 ``runs``
     The runs of the task, oldest first.
-``accepted_input``
-    An input that the task was kept for although it read another one. It is
-    ``null`` when there is none.
 
 **The result.** ``outputs`` holds the files the task made, under the names
 its class gives them. Each output has its ``path``, its size in bytes,
@@ -154,18 +154,32 @@ Each run has these keys:
     The error of a failed run, or the signal that ended an interrupted one.
     The value is ``null`` otherwise.
 
-**The accepted input.** ``accepted_input`` is set when the task was kept for
-another input than the one it read (:meth:`Task.run`). It
-holds the ``fingerprint`` of that input and the time of the acceptance,
-``accepted_at``. ``parameters`` still hold the fingerprint of the input the
-task read. A further run of the task clears ``accepted_input``.
+**The inputs.** Each input (:class:`InputRecord`) holds the name of the
+``task`` that made its events, the ``fingerprint`` of the events that the
+task read, and ``accepted``. The record of a shower holds::
+
+    "inputs": {
+      "events": {
+        "task": "generate-madgraph",
+        "fingerprint": "lhe-v1:<sha256>",
+        "accepted": null
+      }
+    }
+
+A later request compares the fingerprint of the events of each input with
+the recorded one, as it compares the parameters. The task is not compared.
+
+``accepted`` is set when the task was kept for other events of the input than
+the ones it read (:meth:`Task.run`). It holds their ``fingerprint`` and the
+time of the acceptance, ``accepted_at``, and it is ``null`` otherwise. A
+further run of the task clears it.
 
 **Making a record.** These methods of :class:`TaskRecord` return a new
 record:
 
 - :meth:`TaskRecord.running` starts the record of a task.
 - :meth:`TaskRecord.rerun` adds a run to it.
-- :meth:`TaskRecord.with_accepted_input` records an acceptance.
+- :meth:`TaskRecord.with_accepted_inputs` records an acceptance.
 - :meth:`TaskRecord.failed`, :meth:`TaskRecord.interrupted` and
   :meth:`TaskRecord.done` record how the latest run ended. ``done`` also
   stores the result of the :class:`TaskOutcome` that
@@ -214,9 +228,6 @@ _STATUSES = (RUNNING, DONE, FAILED, INTERRUPTED)
 
 _RUN_ID_RANDOM_BYTES = 4
 """Random bytes in a run ID, written as twice as many hexadecimal digits."""
-
-INPUT_FINGERPRINT_PARAMETER = "input_fingerprint"
-"""The parameter that holds the fingerprint of the events a task reads."""
 
 
 @dataclass(frozen=True)
@@ -279,18 +290,59 @@ class TaskRun:
 
 @dataclass(frozen=True)
 class AcceptedInput:
-    """An input that a task was kept for although it read another one.
+    """Events of an input that a task was kept for although it read others.
 
     Parameters
     ----------
     fingerprint : str
-        The fingerprint of the events the task was kept for.
+        The fingerprint of the events that the task was kept for.
     accepted_at : str
         The time of the acceptance, in the format of :func:`timestamp`.
     """
 
     fingerprint: str
     accepted_at: str
+
+
+@dataclass(frozen=True)
+class InputRecord:
+    """What a task read for one of its inputs.
+
+    Parameters
+    ----------
+    task : str
+        The name of the task that made the events, such as
+        ``"generate-madgraph"``.
+    fingerprint : str
+        The fingerprint of the events that the task read.
+    accepted : AcceptedInput or None, optional
+        Other events of the input that the task was kept for, or ``None``.
+    """
+
+    task: str
+    fingerprint: str
+    accepted: AcceptedInput | None = None
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "InputRecord":
+        """Return the input that `record` describes, as ``task.json`` holds it."""
+        accepted = record["accepted"]
+        return cls(
+            **{
+                **record,
+                "accepted": None if accepted is None else AcceptedInput(**accepted),
+            }
+        )
+
+    def is_kept_for(self, fingerprint: str) -> bool:
+        """Whether the task is kept for the events with `fingerprint`.
+
+        They must be the events that the task read or the ones that it was
+        accepted for.
+        """
+        return fingerprint == self.fingerprint or (
+            self.accepted is not None and self.accepted.fingerprint == fingerprint
+        )
 
 
 @dataclass(frozen=True)
@@ -312,7 +364,7 @@ class TaskRecord(JobFile):
     parameters: dict[str, Any]
     runs: tuple[TaskRun, ...]
     result: RunResult | None = None
-    accepted_input: AcceptedInput | None = None
+    inputs: dict[str, InputRecord] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.runs:
@@ -326,7 +378,9 @@ class TaskRecord(JobFile):
             raise ValueError(
                 f"the latest run has status {status!r} but the record has a result"
             )
-        if not self.is_done and self.accepted_input is not None:
+        if not self.is_done and any(
+            input_record.accepted is not None for input_record in self.inputs.values()
+        ):
             raise ValueError(
                 f"the latest run has status {status!r} but the record has an "
                 "accepted input"
@@ -341,6 +395,14 @@ class TaskRecord(JobFile):
     def is_done(self) -> bool:
         """Whether the latest run of the task is done."""
         return self.latest_run.status == DONE
+
+    @property
+    def input_fingerprints(self) -> dict[str, str]:
+        """The fingerprint of the events of each input that the task read, by name."""
+        return {
+            input_name: input_record.fingerprint
+            for input_name, input_record in self.inputs.items()
+        }
 
     @property
     def outputs(self) -> dict[str, FileRecord]:
@@ -389,18 +451,18 @@ class TaskRecord(JobFile):
         return self._done_result().metadata
 
     def as_record(self) -> dict[str, Any]:
-        """Return the identity, the settings, the parameters, the result, the runs
-        and the accepted input by name."""
-        accepted_input = self.accepted_input
+        """Return the identity, the settings, the parameters, the inputs, the
+        result and the runs by name."""
         return {
             "identity": asdict(self.identity),
             "settings": self.settings,
             "parameters": self.parameters,
+            "inputs": {
+                input_name: asdict(input_record)
+                for input_name, input_record in self.inputs.items()
+            },
             "result": None if self.result is None else asdict(self.result),
             "runs": [asdict(run) for run in self.runs],
-            "accepted_input": (
-                None if accepted_input is None else asdict(accepted_input)
-            ),
         }
 
     @classmethod
@@ -416,15 +478,16 @@ class TaskRecord(JobFile):
         identity = TaskIdentity(**values.pop("identity"))
         runs = tuple(TaskRun(**run) for run in values.pop("runs"))
         result = values.pop("result")
-        accepted_input = values.pop("accepted_input")
+        inputs = {
+            input_name: InputRecord.from_record(input_record)
+            for input_name, input_record in values.pop("inputs").items()
+        }
         return cls(
             identity=identity,
             **values,
             runs=runs,
             result=None if result is None else RunResult.from_record(result, root_dir),
-            accepted_input=(
-                None if accepted_input is None else AcceptedInput(**accepted_input)
-            ),
+            inputs=inputs,
         )
 
     @classmethod
@@ -453,49 +516,70 @@ class TaskRecord(JobFile):
         identity: TaskIdentity,
         settings: dict[str, Any],
         parameters: dict[str, Any],
+        inputs: dict[str, InputRecord],
     ) -> "TaskRecord":
-        """Return the record of the new task `identity`, whose first run starts now."""
-        return cls(identity, settings, parameters, (TaskRun.started_now(),))
+        """Start the record of the task `identity` with its first run."""
+        return cls(
+            identity, settings, parameters, (TaskRun.started_now(),), inputs=inputs
+        )
 
     def rerun(self) -> "TaskRecord":
-        """Return the record with a further run that starts now.
+        """Record that the task runs again.
 
         A latest run that is still ``running`` was left by a killed process,
-        so it becomes ``interrupted``. The returned record has no result and
-        no accepted input.
+        so it becomes ``interrupted``. The new run has no result yet, and no
+        input holds an acceptance.
         """
         previous_runs = self.runs
         if self.latest_run.status == RUNNING:
             previous_runs = self._runs_with_latest(status=INTERRUPTED)
         runs = (*previous_runs, TaskRun.started_now())
-        return replace(self, runs=runs, result=None, accepted_input=None)
-
-    def with_accepted_input(self, fingerprint: str) -> "TaskRecord":
-        """Return the record with `fingerprint` as its accepted input, dated now."""
-        accepted_input = AcceptedInput(fingerprint, accepted_at=timestamp())
-        return replace(self, accepted_input=accepted_input)
-
-    def is_accepted_for(self, parameters: Mapping[str, Any]) -> bool:
-        """Whether the task was accepted for the input in `parameters`.
-
-        The other parameters must be those of the task. It is ``False`` for a
-        record without an accepted input.
-        """
-        if self.accepted_input is None:
-            return False
-        fingerprint = self.accepted_input.fingerprint
-        return parameters == {
-            **self.parameters,
-            INPUT_FINGERPRINT_PARAMETER: fingerprint,
+        inputs = {
+            input_name: replace(input_record, accepted=None)
+            for input_name, input_record in self.inputs.items()
         }
+        return replace(self, runs=runs, result=None, inputs=inputs)
+
+    def with_accepted_inputs(
+        self, input_fingerprints: Mapping[str, str]
+    ) -> "TaskRecord":
+        """Record that the task is kept for the changed inputs of `input_fingerprints`.
+
+        `input_fingerprints` holds the current fingerprint of each input, by
+        the name of the input. An input that is not kept for its fingerprint
+        (:meth:`InputRecord.is_kept_for`) is accepted for it, and the time of
+        the acceptance is recorded; it replaces an earlier acceptance. The
+        other inputs are left as they are.
+        """
+        accepted_at = timestamp()
+        inputs = {}
+        for input_name, input_record in self.inputs.items():
+            fingerprint = input_fingerprints[input_name]
+            if not input_record.is_kept_for(fingerprint):
+                accepted = AcceptedInput(fingerprint, accepted_at)
+                input_record = replace(input_record, accepted=accepted)
+            inputs[input_name] = input_record
+        return replace(self, inputs=inputs)
+
+    def is_kept_for(self, input_fingerprints: Mapping[str, str]) -> bool:
+        """Whether the task is kept for inputs with the given fingerprints.
+
+        `input_fingerprints` holds the fingerprint of each input, by the name
+        of the input. Each must be the one that the task read or the one that
+        it was accepted for.
+        """
+        return input_fingerprints.keys() == self.inputs.keys() and all(
+            self.inputs[input_name].is_kept_for(fingerprint)
+            for input_name, fingerprint in input_fingerprints.items()
+        )
 
     def failed(self, *, error: str) -> "TaskRecord":
-        """Return the record with its latest run failed with `error`."""
+        """Record that the latest run failed with `error`."""
         runs = self._runs_with_latest(status=FAILED, finished=timestamp(), error=error)
         return replace(self, runs=runs)
 
     def interrupted(self, *, error: str) -> "TaskRecord":
-        """Return the record with its latest run interrupted by `error`."""
+        """Record that a signal interrupted the latest run; `error` names it."""
         runs = self._runs_with_latest(
             status=INTERRUPTED, finished=timestamp(), error=error
         )
@@ -504,10 +588,10 @@ class TaskRecord(JobFile):
     def done(
         self, outcome: TaskOutcome, *, wall_seconds: float, root_dir: Path
     ) -> "TaskRecord":
-        """Return the record with its latest run done and the result of `outcome`.
+        """Record that the latest run is done, with what `outcome` says it made.
 
-        The set-aside folder of `outcome` is made relative to `root_dir`, the
-        job directory, and `wall_seconds` is added to its usage.
+        `wall_seconds` is added to the usage of `outcome`, and its set-aside
+        folder is made relative to `root_dir`, the job directory.
         """
         set_aside_dir = outcome.set_aside_dir
         runs = self._runs_with_latest(
@@ -691,8 +775,7 @@ class Task(ABC):
     ``"pythia"``."""
 
     inputs: ClassVar[tuple[TaskInput, ...]] = ()
-    """What the task reads from another task of its job. A task has at most one
-    input."""
+    """What the task reads from other tasks of its job."""
 
     job: "Job" = field(kw_only=False)
     tag: str | None = None
@@ -810,8 +893,8 @@ class Task(ABC):
 
         A later request compares its parameters with these to decide whether
         the result can be kept. They hold the seed of the job when the task
-        uses it. The fingerprint of the events that the task reads is added
-        by :meth:`run`.
+        uses it. They leave out the events that the task reads, which
+        :meth:`run` records and compares by their fingerprints.
 
         Parameters
         ----------
@@ -948,8 +1031,20 @@ class Task(ABC):
             As :meth:`upstream_tasks` and :attr:`events` refuse. If the events
             of an input are in a format that the input does not state.
         """
+        return self._events_made_by(self.upstream_tasks())
+
+    def _events_made_by(
+        self, upstream_tasks: Mapping[str, "Task"]
+    ) -> dict[str, EventFileRecord]:
+        """Return the events that `upstream_tasks` made, by the name of the input.
+
+        Raises
+        ------
+        ValueError
+            As :attr:`events` refuses. If the events of an input are in a
+            format that the input does not state.
+        """
         input_events = {}
-        upstream_tasks = self.upstream_tasks()
         for task_input in self.inputs:
             upstream_task = upstream_tasks[task_input.name]
             events = upstream_task.events
@@ -964,38 +1059,6 @@ class Task(ABC):
                 )
             input_events[task_input.name] = events
         return input_events
-
-    def requested_parameters(
-        self, input_events: Mapping[str, EventFileRecord]
-    ) -> dict[str, Any]:
-        """Return the parameters that a run is recorded and compared with.
-
-        They are the task's own parameters (:meth:`parameters`) and, for a
-        task that reads events, the fingerprint of those events under the key
-        :data:`INPUT_FINGERPRINT_PARAMETER`.
-
-        Parameters
-        ----------
-        input_events : Mapping[str, EventFileRecord]
-            The events that the task reads, by the name of the input
-            (:meth:`input_events`).
-
-        Raises
-        ------
-        ValueError
-            If the task's own parameters use the key of the fingerprint.
-        """
-        parameters = self.parameters(input_events)
-        for task_input in self.inputs:
-            if INPUT_FINGERPRINT_PARAMETER in parameters:
-                raise ValueError(
-                    f"The parameters of {self.name} use the key "
-                    f"{INPUT_FINGERPRINT_PARAMETER}, which holds the fingerprint "
-                    "of its input"
-                )
-            fingerprint = input_events[task_input.name].fingerprint
-            parameters = {INPUT_FINGERPRINT_PARAMETER: fingerprint, **parameters}
-        return parameters
 
     def require_done(self) -> TaskRecord:
         """Return the record of the task, which must be done with its outputs intact.
@@ -1028,35 +1091,36 @@ class Task(ABC):
     def run(self, *, accept_input: bool = False, force: bool = False) -> TaskRecord:
         """Run the task unless its result can be kept.
 
-        The parameters of the request are those of :meth:`parameters`, with
-        the fingerprint of the events that the task reads
-        (:data:`INPUT_FINGERPRINT_PARAMETER`). The run is recorded in the
-        record of the task, with the settings of the task.
+        A request is compared with the record of the task in two parts: the
+        parameters of the task (:meth:`parameters`), and the fingerprint of
+        the events of each input that it reads. A run is recorded with both,
+        with the task that made each input and with the settings of the task.
 
         The events that the task reads are found once, before anything else,
         and given to :meth:`parameters` and to :meth:`execute`.
 
         **A task recorded as done.**
 
-        - It is kept when its outputs are present and the parameters are the
-          same.
-        - It is refused when the parameters differ, or when an output has
-          another size than recorded. `force` overrides the refusal.
+        - It is kept when its outputs are present and the parameters and the
+          inputs are the same.
+        - It is refused when the parameters or the inputs differ, or when an
+          output has another size than recorded. `force` overrides the
+          refusal.
         - With `accept_input`, it is also kept when its outputs are present
-          and the parameters differ only in the fingerprint of its input.
-          The record then stores that fingerprint and the time as its
-          ``accepted_input``, which replaces an earlier one. Its parameters
-          keep the fingerprint of the input the task read, and it gains no
-          run. From then on the task is kept for either input, without
-          `accept_input` too.
+          and only the inputs differ. Each input whose events changed then
+          records the fingerprint of the current events and the time as
+          ``accepted``, which replaces an earlier acceptance of that input.
+          The fingerprints that the task read stay, and the record gains no
+          run. From then on the task is kept for the events it read and for
+          the accepted ones, without `accept_input` too.
 
         **A task that is not kept.** A task without a record runs. A task
         that failed, was interrupted or lost an output runs again. The new
-        run is added to the record when the parameters are the same. With
-        other parameters, or under `force`, the task starts a new record,
-        and the logs of the runs that the earlier record listed are removed.
-        In both cases :meth:`execute` is told to replace what the earlier
-        run left.
+        run is added to the record when the parameters and the inputs are the
+        same. Otherwise, or under `force`, the task starts a new record, and
+        the logs of the runs that the earlier record listed are removed. In
+        both cases :meth:`execute` is told to replace what the earlier run
+        left.
 
         **What is written.** The first task of a job creates the job
         directory with its ``job.json``. Each run gets a run ID and a log,
@@ -1090,16 +1154,16 @@ class Task(ABC):
         Raises
         ------
         ValueError
-            If the task is recorded as done with other parameters, or with an
-            output of another size than recorded, and `force` is not set; the
-            message names each parameter that differs. If the ``job.json`` of
+            If the task is recorded as done with other parameters or other
+            inputs, or with an output of another size than recorded, and
+            `force` is not set; the message names each parameter or each
+            input that differs. If the ``job.json`` of
             the directory identifies another job. If the ``task.json`` of a
             task of the job cannot be read as a record. If `accept_input` and
             `force` are both set. If the record that a new one replaces lists
             a run whose ID is not a plain name; the record is then left as it
             was. If the events that the task reads cannot be given
-            (:meth:`input_events`). If the parameters of the task use the key
-            of the input fingerprint.
+            (:meth:`input_events`).
         FileNotFoundError
             If the ``job.json`` of the directory was removed while the task
             ran. The task is then not recorded.
@@ -1113,12 +1177,24 @@ class Task(ABC):
         """
         if accept_input and force:
             raise ValueError("accept_input and force cannot both be set")
-        input_events = self.input_events()
-        parameters = self.requested_parameters(input_events)
+        upstream_tasks = self.upstream_tasks()
+        input_events = self._events_made_by(upstream_tasks)
+        parameters = self.parameters(input_events)
+        input_fingerprints = {
+            input_name: events.fingerprint
+            for input_name, events in input_events.items()
+        }
+        inputs = {
+            input_name: InputRecord(upstream_tasks[input_name].name, fingerprint)
+            for input_name, fingerprint in input_fingerprints.items()
+        }
         previous_record = self.record
         if not force:
             kept_record = self._kept_record(
-                previous_record, parameters, accept_input=accept_input
+                previous_record,
+                parameters,
+                input_fingerprints,
+                accept_input=accept_input,
             )
             if kept_record is not None:
                 return kept_record
@@ -1126,12 +1202,21 @@ class Task(ABC):
         clock = time.monotonic()
         self.job.record_identity()
         dropped_runs: tuple[TaskRun, ...] = ()
-        if previous_record is None or force or previous_record.parameters != parameters:
-            record = TaskRecord.running(self.identity, self.settings(), parameters)
+        if (
+            previous_record is None
+            or force
+            or previous_record.parameters != parameters
+            or previous_record.input_fingerprints != input_fingerprints
+        ):
+            record = TaskRecord.running(
+                self.identity, self.settings(), parameters, inputs
+            )
             if previous_record is not None:
                 dropped_runs = previous_record.runs
         else:
-            record = replace(previous_record.rerun(), settings=self.settings())
+            record = replace(
+                previous_record.rerun(), settings=self.settings(), inputs=inputs
+            )
         log_path = self.log_path(record.latest_run.run_id)
         # Named before the record is replaced, so that a run ID that is not a
         # plain name is refused while the earlier record is still in place.
@@ -1158,16 +1243,19 @@ class Task(ABC):
         self,
         record: TaskRecord | None,
         parameters: dict[str, Any],
+        input_fingerprints: dict[str, str],
         *,
         accept_input: bool,
     ) -> TaskRecord | None:
-        """Return `record` when the result of the task is kept for `parameters`.
+        """Return `record` when the result of the task is kept for a request.
 
-        `record` is the record of the task as found on disk.
+        `record` is the record of the task as found on disk. The request has
+        `parameters`, and its inputs have `input_fingerprints`. The
+        parameters are compared first, then the inputs.
 
         Return ``None`` when the task has to run. That is the case for a
         task without a record, for a task that is not done, and for a task
-        that lost an output and has the same parameters.
+        that lost an output and has the same parameters and inputs.
 
         Raises
         ------
@@ -1176,14 +1264,19 @@ class Task(ABC):
         """
         if record is None or not record.is_done:
             return None
-        status, detail = record.current_status()
-        if status is TaskStatus.DONE:
-            if record.is_accepted_for(parameters):
-                return record
-            if accept_input:
-                return self._accept_input(record, parameters)
         self._check_parameters(record, parameters)
-        if status is TaskStatus.DONE:
+        status, detail = record.current_status()
+        is_intact = status is TaskStatus.DONE
+        if input_fingerprints != record.input_fingerprints:
+            if is_intact and record.is_kept_for(input_fingerprints):
+                return record
+            same_inputs = input_fingerprints.keys() == record.inputs.keys()
+            if is_intact and accept_input and same_inputs:
+                record = record.with_accepted_inputs(input_fingerprints)
+                self._write_record(record)
+                return record
+            raise self._changed_inputs_error(record, input_fingerprints)
+        if is_intact:
             return record
         if status is TaskStatus.CHANGED:
             raise ValueError(
@@ -1192,61 +1285,59 @@ class Task(ABC):
             )
         return None
 
-    def _accept_input(
-        self, record: TaskRecord, parameters: dict[str, Any]
-    ) -> TaskRecord:
-        """Keep the done task for the input in `parameters`; record that.
-
-        `record` is returned as it is when `parameters` are those of the
-        task. Otherwise they may differ in the input fingerprint alone, and
-        the record is written with that fingerprint as its accepted input.
-
-        Raises
-        ------
-        ValueError
-            If another parameter differs; the message names each one, and
-            leaves out the input fingerprint.
-        """
-        if parameters == record.parameters:
-            return record
-        key = INPUT_FINGERPRINT_PARAMETER
-        # The parameters the task ran with, with the requested input in place.
-        acceptable_parameters = dict(record.parameters)
-        if key in parameters:
-            acceptable_parameters[key] = parameters[key]
-        self._check_parameters(record, parameters, recorded=acceptable_parameters)
-        record = record.with_accepted_input(parameters[key])
-        self._write_record(record)
-        return record
-
-    def _check_parameters(
-        self,
-        record: TaskRecord,
-        parameters: dict[str, Any],
-        *,
-        recorded: dict[str, Any] | None = None,
-    ) -> None:
+    def _check_parameters(self, record: TaskRecord, parameters: dict[str, Any]) -> None:
         """Refuse `parameters` when the task ran with other ones.
 
         The message names each parameter that differs. A nested parameter
         is named by the dotted path of its keys. The value the task ran with
         is shown as the expected one.
-
-        `recorded` are the parameters to compare with, when they are not
-        those of `record`.
         """
-        if recorded is None:
-            recorded = record.parameters
-        if parameters == recorded:
+        if parameters == record.parameters:
             return
-        differences = Difference.between_nested_mappings(parameters, recorded)
+        raise self._inconsistency_error(
+            "parameters",
+            Difference.between_nested_mappings(parameters, record.parameters),
+            "Rerun with the parameters the task ran with, or run "
+            f"{self.identity.command} with --force to replace its result.",
+        )
+
+    def _changed_inputs_error(
+        self, record: TaskRecord, input_fingerprints: dict[str, str]
+    ) -> ValueError:
+        """Return the error of a request whose inputs are not those the task read.
+
+        The message names each input whose fingerprint differs. The
+        fingerprint of the input that the task read is shown as the expected
+        one.
+        """
+        differences = Difference.between_mappings(
+            input_fingerprints,
+            record.input_fingerprints,
+            name=lambda input_name: f"fingerprint of {input_name}",
+        )
+        fix = f"Run {self.identity.command} with --force to replace its result."
+        return self._inconsistency_error("inputs", differences, fix)
+
+    def _inconsistency_error(
+        self, subject: str, differences: list[Difference], fix: str
+    ) -> ValueError:
+        """Return the error of a request that differs from the record of the task.
+
+        Parameters
+        ----------
+        subject : str
+            What differs, in the plural: ``"parameters"`` or ``"inputs"``.
+        differences : list[Difference]
+            The differences, each of which is one line of the message.
+        fix : str
+            The sentence that says how to resolve the refusal.
+        """
         record_path = self.job.relative_path(self.record_path)
-        raise ValueError(
-            "The current parameters are inconsistent with those of the existing "
+        return ValueError(
+            f"The current {subject} are inconsistent with those of the existing "
             f"{self.name} task in {self.job.root_dir} ({record_path}):"
             + "".join(f"\n  {difference}" for difference in differences)
-            + "\nRerun with the parameters the task ran with, or run "
-            f"{self.identity.command} with --force to replace its result."
+            + f"\n{fix}"
         )
 
     def _write_run_end(self, record: TaskRecord) -> None:
