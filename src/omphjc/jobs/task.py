@@ -14,7 +14,7 @@ file ``task.json`` in that directory, written as::
       "settings": {
         "timeout_seconds": null, "program_path": null, "n_events": 1000, "n_cores": null
       },
-      "parameters": {"events": 1000, "seed": 10000001},
+      "parameters": {"n_events": 1000, "seed": 10000001},
       "result": {
         "outputs": {
           "events": {

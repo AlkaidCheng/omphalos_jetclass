@@ -62,7 +62,7 @@ class MadGraphGeneration(Task):
 
     def parameters(self, input_events: Mapping[str, EventFileRecord]) -> dict[str, Any]:
         """Return the event count and the seed of the job."""
-        return {"events": self.n_events, "seed": self.job.seed}
+        return {"n_events": self.n_events, "seed": self.job.seed}
 
     def execute(
         self,
