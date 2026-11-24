@@ -420,7 +420,8 @@ number or seed. The directory of a stage is named after the stage and its
 tool, such as `shower-pythia`. Each stage keeps a record, `task.json`, in its
 directory: the stage and the tool, the settings its command was given, such
 as the time limit and the path of the program, the parameters that fix what
-it makes, its result, and one entry per run of the stage
+it makes, the events it read, its result, and one entry
+per run of the stage
 with the run's ID, its status, its start and end times, the host it ran on,
 and what it took: the wall time of the run and the CPU time and peak
 memory of the program's processes. The run ID is the start time in UTC and
@@ -442,22 +443,24 @@ the run used them, each with its path, its size and the fingerprint of its
 settings as the program reads them, so that comments and layout do not count.
 It holds the metadata of what the stage made as well.
 
-| Stage | Parameters | Cards | Metadata |
-|---|---|---|---|
-| `generate` | event count, seed | process card, run card, parameter card, MadSpin card | MadGraph version, cross section with its error, cores MadGraph ran on |
-| `shower` | event count, seed, Pythia overrides, fingerprint of the generated events | Pythia command file, record-only Delphes card | Pythia version, events read, fraction kept by matching for a matched process |
-| `simulate` | seed, SHA-256 of the detector card chosen, fingerprint of the showered events | detector card with the seed | none; the number of events is counted in `delphes.root` |
+| Stage | Parameters | Input | Cards | Metadata |
+|---|---|---|---|---|
+| `generate` | event count, seed | none | process card, run card, parameter card, MadSpin card | MadGraph version, cross section with its error, cores MadGraph ran on |
+| `shower` | event count, seed, Pythia overrides | the generated events | Pythia command file, record-only Delphes card | Pythia version, events read, fraction kept by matching for a matched process |
+| `simulate` | seed, SHA-256 of the detector card chosen | the showered events | detector card with the seed | none; the number of events is counted in `delphes.root` |
 
-A stage run again with the same events
+Apart from its parameters, the record holds each input under `inputs`, by the
+name of the input: the task that made its events and the fingerprint of the
+events read. A stage run again with the same events
 therefore keeps the stages after it, and a stage whose input events changed is
 refused unless `--force` is given. `--accept-input`, on `omphjc shower` and
 `omphjc simulate`, keeps the result of such a stage without running it, when
 nothing but its input events differs; a stage that has not finished runs as it
-does without the option. The record then keeps the fingerprint of the events
-the stage ran on among its parameters and adds `accepted_input`, the
-fingerprint it was accepted for and the time, and the stage's report shows both
-in an `input` row. The stages after it stay as they are, since its output has
-not changed, and a further run of the stage drops the acceptance.
+does without the option. The input then keeps the fingerprint of the events
+the stage ran on and adds `accepted`, the fingerprint it was accepted for and
+the time, and the stage's report shows both in an `input events` row. The
+stages after it stay as they are, since its output has not changed, and a
+further run of the stage drops the acceptance.
 
 `manifest.json` is an index of the job: the process, the job number, the seed
 and the omphjc version, and for each stage that has a record its status, the
@@ -467,12 +470,13 @@ commands read the records and never the manifest, so a deleted manifest is
 written again by the next stage that runs.
 
 Running a stage again keeps a result recorded as done whose outputs are
-present and whose parameters match, runs again a stage that failed, was
-interrupted or lost an output, replacing what it left, and refuses other
-parameters unless `--force` is given. Such a run with the same parameters is
+present and whose parameters and input events match, runs again a stage that
+failed, was interrupted or lost an output, replacing what it left, and refuses
+other parameters or input events unless `--force` is given. Such a run with
+the same parameters and input events is
 added to the stage's record, which marks a run left behind by a killed
 process as interrupted, and the report then counts the runs; a run with other
-parameters or with `--force` starts a new record. A changed seed, as after an edit of the process's
+parameters or input events, or with `--force`, starts a new record. A changed seed, as after an edit of the process's
 `seed_offset`, is refused with `--force` too, since the job keeps the seed in
 its `job.json`. A stage with an output that no
 longer has the size in the stage's record, as after a truncated copy, is

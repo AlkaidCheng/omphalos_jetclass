@@ -24,6 +24,7 @@ from omphjc.jobs import (
     SHOWER_TASK,
     TASK_REGISTRY,
     AcceptedInput,
+    InputRecord,
     Job,
     JobIdentity,
     Manifest,
@@ -139,10 +140,48 @@ class FakeShower(FakeTask):
     stage: ClassVar[Stage] = ShowerStage()
 
 
+@dataclass(frozen=True)
+class FakeUpstream:
+    """Stands for the task that makes an input of a ``FakeReader``."""
+
+    name: str
+    events: EventFileRecord
+
+
+@TASK_REGISTRY.register
+@dataclass(frozen=True, kw_only=True)
+class FakeReader(FakeTask):
+    """A task of stage ``x`` with two inputs, whose fingerprints a test gives."""
+
+    stage: ClassVar[Stage] = XStage()
+    tool: ClassVar[str] = "reader"
+    inputs: ClassVar[tuple[TaskInput, ...]] = (
+        TaskInput(EVENTS_INPUT, frozenset({EventFormat.LHE}), YStage()),
+        TaskInput("pileup", frozenset({EventFormat.LHE}), YStage()),
+    )
+
+    given_input_fingerprints: dict[str, str] = field(default_factory=dict)
+
+    def upstream_tasks(self) -> dict[str, Task]:
+        return {
+            input_name: FakeUpstream(
+                f"y-{input_name}",
+                EventFileRecord(Path(input_name), 0, fingerprint, EventFormat.LHE, 0),
+            )
+            for input_name, fingerprint in self.given_input_fingerprints.items()
+        }
+
+    def settings(self) -> dict[str, Any]:
+        settings = super().settings()
+        del settings["given_input_fingerprints"]
+        return settings
+
+
 TASK_X = TaskIdentity("x", "fake")
 TASK_Y = TaskIdentity("y", "fake")
 TASK_Z = TaskIdentity("z", "fake")
 TASK_FAKE_SHOWER = TaskIdentity("shower", "fake")
+TASK_READER = TaskIdentity("x", "reader")
 SIMULATE_TASK = TaskIdentity("simulate", "delphes")
 
 
@@ -245,6 +284,11 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
         TASK_X,
         settings={"timeout_seconds": 30.0},
         parameters={"n_events": 10},
+        inputs={
+            "events": InputRecord(
+                "generate-fake", "lhe-v1:def", AcceptedInput("lhe-v1:ghi", "t")
+            )
+        },
         runs=(_run("done", finished="u"),),
         result=RunResult(
             outputs={
@@ -275,6 +319,13 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
     assert written["identity"] == {"stage": "x", "tool": "fake", "tag": None}
     assert written["settings"] == {"timeout_seconds": 30.0}
     assert written["parameters"] == {"n_events": 10}
+    assert written["inputs"] == {
+        "events": {
+            "task": "generate-fake",
+            "fingerprint": "lhe-v1:def",
+            "accepted": {"fingerprint": "lhe-v1:ghi", "accepted_at": "t"},
+        }
+    }
     assert written["runs"] == [
         {
             "run_id": "r1",
@@ -287,7 +338,6 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
             "error": None,
         }
     ]
-    assert written["accepted_input"] is None
     assert written["result"] == {
         "outputs": {
             "events": {
@@ -451,8 +501,8 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
     assert Manifest.read(path) == manifest
 
 
-def _make_output(job: Job) -> TaskOutcome:
-    directory = job.task_dir(TASK_X)
+def _make_output(job: Job, identity: TaskIdentity = TASK_X) -> TaskOutcome:
+    directory = job.task_dir(identity)
     directory.mkdir(parents=True, exist_ok=True)
     output = directory / "out.txt"
     output.write_text("made")
@@ -500,6 +550,7 @@ def test_a_stage_runs_once_and_its_result_is_kept(
     assert record.is_done and record.latest_run.finished is not None
     assert len(record.runs) == 1
     assert record.parameters == {"n_events": 10}
+    assert record.inputs == {}
     assert record.result == RunResult(
         outputs={"out": FileRecord(job.root_dir / "x-fake" / "out.txt", 4, None)},
         metadata={"n": 1},
@@ -1086,7 +1137,7 @@ def test_a_run_replaced_by_a_newer_run_leaves_that_runs_record(
 
     def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         replaced_run_ids.append(log_path.stem)
-        newer_record = TaskRecord.running(TASK_X, {}, {"n_events": 20})
+        newer_record = TaskRecord.running(TASK_X, {}, {"n_events": 20}, {})
         newer_record.write(_task(job, TASK_X).record_path, root_dir=job.root_dir)
         newer_records.append(newer_record)
         if fails:
@@ -1121,90 +1172,158 @@ def test_a_run_whose_record_was_deleted_records_its_end(
     assert _task(job, TASK_X).record == record
 
 
-PARAMETERS = {"n_events": 10, "input_fingerprint": "v1:original"}
-CHANGED_INPUT_PARAMETERS = {"n_events": 10, "input_fingerprint": "v1:changed"}
+PARAMETERS = {"n_events": 10}
+INPUT_FINGERPRINTS = {"events": "v1:original", "pileup": "v1:minimum-bias"}
+CHANGED_INPUT_FINGERPRINTS = {**INPUT_FINGERPRINTS, "events": "v1:changed"}
+CHANGED_INPUT = "  fingerprint of events: expected v1:original, got v1:changed\n"
 
 
-def _body(job: Job) -> Callable[[bool, Path], TaskOutcome]:
-    """Return a body that makes the output of task ``x`` of `job`."""
-    return lambda overwrite, log_path: _make_output(job)
+def _run_on_inputs(
+    job: Job,
+    input_fingerprints: dict[str, str],
+    *,
+    parameters: Mapping[str, Any] = PARAMETERS,
+    body: TaskBody | None = None,
+    **options: bool,
+) -> TaskRecord:
+    """Run the reader task of `job` on inputs with `input_fingerprints`.
+
+    The task has `parameters`. `body` makes its files, and by default it makes
+    one output in the directory of the task.
+    """
+    task = _task(
+        job,
+        TASK_READER,
+        given_parameters=dict(parameters),
+        given_input_fingerprints=input_fingerprints,
+        body=body or (lambda overwrite, log_path: _make_output(job, TASK_READER)),
+    )
+    return task.run(**options)
+
+
+def _acceptances(record: TaskRecord) -> dict[str, str | None]:
+    """Return the fingerprint each input of `record` was accepted for, or ``None``."""
+    return {
+        input_name: (
+            None if input_record.accepted is None else input_record.accepted.fingerprint
+        )
+        for input_name, input_record in record.inputs.items()
+    }
+
+
+def test_a_task_records_each_input_apart_from_its_parameters(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    record = _run_on_inputs(job, INPUT_FINGERPRINTS)
+    assert record.parameters == PARAMETERS
+    assert record.inputs == {
+        "events": InputRecord("y-events", "v1:original"),
+        "pileup": InputRecord("y-pileup", "v1:minimum-bias"),
+    }
+    assert record.input_fingerprints == INPUT_FINGERPRINTS
+    assert _run_on_inputs(job, INPUT_FINGERPRINTS) == record
+    other_pileup = {**INPUT_FINGERPRINTS, "pileup": "v1:other"}
+    with pytest.raises(ValueError) as refusal:
+        _run_on_inputs(job, other_pileup)
+    assert str(refusal.value).splitlines()[1:-1] == [
+        "  fingerprint of pileup: expected v1:minimum-bias, got v1:other"
+    ]
+
+
+def test_a_done_task_whose_inputs_changed_is_refused_unless_forced(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    done_record = _run_on_inputs(job, INPUT_FINGERPRINTS)
+    with pytest.raises(ValueError) as refusal:
+        _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS)
+    assert str(refusal.value) == (
+        "The current inputs are inconsistent with those of the existing "
+        f"x-reader task in {job.root_dir} (x-reader/task.json):\n" + CHANGED_INPUT + ""
+        "Run omphjc x with --force to replace its result."
+    )
+    assert _task(job, TASK_READER).record == done_record
+    forced = _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS, force=True)
+    assert forced.input_fingerprints == CHANGED_INPUT_FINGERPRINTS
+    assert len(forced.runs) == 1
 
 
 def test_an_accepted_input_keeps_a_done_task_without_a_run(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    done_record = _run_task(job, TASK_X, PARAMETERS, _body(job))
-    with pytest.raises(ValueError, match="input_fingerprint: expected v1:original"):
-        _run_task(job, TASK_X, CHANGED_INPUT_PARAMETERS, _body(job))
-    accepted_record = _run_task(
-        job, TASK_X, CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True
-    )
-    assert accepted_record.accepted_input is not None
-    assert accepted_record.accepted_input.fingerprint == "v1:changed"
+    done_record = _run_on_inputs(job, INPUT_FINGERPRINTS)
+    accepted_record = _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS, accept_input=True)
+    assert _acceptances(accepted_record) == {"events": "v1:changed", "pileup": None}
     assert accepted_record.is_done
     assert (
         accepted_record.parameters,
+        accepted_record.input_fingerprints,
         accepted_record.runs,
         accepted_record.result,
     ) == (
         done_record.parameters,
+        done_record.input_fingerprints,
         done_record.runs,
         done_record.result,
     )
-    assert _task(job, TASK_X).record == accepted_record
-    assert (
-        _run_task(job, TASK_X, CHANGED_INPUT_PARAMETERS, _body(job)) == accepted_record
-    )
-    assert _run_task(job, TASK_X, PARAMETERS, _body(job)) == accepted_record
-    assert (
-        _run_task(job, TASK_X, CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
-        == accepted_record
-    )
-    assert (
-        _run_task(job, TASK_X, PARAMETERS, _body(job), accept_input=True)
-        == accepted_record
-    )
+    assert _task(job, TASK_READER).record == accepted_record
+    for input_fingerprints in (CHANGED_INPUT_FINGERPRINTS, INPUT_FINGERPRINTS):
+        for accept_input in (False, True):
+            kept_record = _run_on_inputs(
+                job, input_fingerprints, accept_input=accept_input
+            )
+            assert kept_record == accepted_record
+
+
+def test_each_input_is_accepted_on_its_own(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    _run_on_inputs(job, INPUT_FINGERPRINTS)
+    other_pileup = {**INPUT_FINGERPRINTS, "pileup": "v1:other"}
+    pileup_record = _run_on_inputs(job, other_pileup, accept_input=True)
+    assert _acceptances(pileup_record) == {"events": None, "pileup": "v1:other"}
+    both_changed = {**other_pileup, "events": "v1:changed"}
+    both_record = _run_on_inputs(job, both_changed, accept_input=True)
+    assert _acceptances(both_record) == {"events": "v1:changed", "pileup": "v1:other"}
+    assert both_record.inputs["pileup"] == pileup_record.inputs["pileup"]
+    assert _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS) == both_record
+    assert _run_on_inputs(job, other_pileup) == both_record
 
 
 def test_a_later_acceptance_replaces_the_earlier_one(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    _run_task(job, TASK_X, PARAMETERS, _body(job))
-    _run_task(job, TASK_X, CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
-    later_parameters = {**PARAMETERS, "input_fingerprint": "v1:later"}
-    later_record = _run_task(
-        job, TASK_X, later_parameters, _body(job), accept_input=True
-    )
-    assert later_record.accepted_input is not None
-    assert later_record.accepted_input.fingerprint == "v1:later"
-    assert _run_task(job, TASK_X, later_parameters, _body(job)) == later_record
-    with pytest.raises(ValueError, match="input_fingerprint: expected v1:original"):
-        _run_task(job, TASK_X, CHANGED_INPUT_PARAMETERS, _body(job))
+    _run_on_inputs(job, INPUT_FINGERPRINTS)
+    _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS, accept_input=True)
+    later_input_fingerprints = {**INPUT_FINGERPRINTS, "events": "v1:later"}
+    later_record = _run_on_inputs(job, later_input_fingerprints, accept_input=True)
+    assert _acceptances(later_record) == {"events": "v1:later", "pileup": None}
+    assert _run_on_inputs(job, later_input_fingerprints) == later_record
+    with pytest.raises(ValueError, match=CHANGED_INPUT):
+        _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS)
 
 
-def test_an_input_is_accepted_only_when_nothing_else_differs(
+def test_other_parameters_are_refused_before_the_inputs_are_compared(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    done_record = _run_task(job, TASK_X, PARAMETERS, _body(job))
-    other_parameters = {**CHANGED_INPUT_PARAMETERS, "n_events": 20}
-    with pytest.raises(ValueError, match="n_events: expected 10") as refusal:
-        _run_task(job, TASK_X, other_parameters, _body(job), accept_input=True)
-    assert "input_fingerprint" not in str(refusal.value)
-    with pytest.raises(ValueError, match="n_events: expected 10"):
-        _run_task(job, TASK_X, {"n_events": 20}, _body(job), accept_input=True)
+    done_record = _run_on_inputs(job, INPUT_FINGERPRINTS)
+    for accept_input in (False, True):
+        with pytest.raises(ValueError, match="n_events: expected 10") as refusal:
+            _run_on_inputs(
+                job,
+                CHANGED_INPUT_FINGERPRINTS,
+                parameters={"n_events": 20},
+                accept_input=accept_input,
+            )
+        assert "fingerprint of events" not in str(refusal.value)
     with pytest.raises(ValueError, match="cannot both be set"):
-        _run_task(
-            job,
-            TASK_X,
-            CHANGED_INPUT_PARAMETERS,
-            _body(job),
-            accept_input=True,
-            force=True,
-        )
-    assert _task(job, TASK_X).record == done_record
+        _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS, accept_input=True, force=True)
+    assert _task(job, TASK_READER).record == done_record
 
 
 def test_accept_input_changes_nothing_for_a_task_that_is_not_done(
@@ -1212,43 +1331,41 @@ def test_accept_input_changes_nothing_for_a_task_that_is_not_done(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(RuntimeError, match="boom"):
-        _run_task(job, TASK_X, PARAMETERS, _fail, accept_input=True)
-    failed_record = _task(job, TASK_X).record
+        _run_on_inputs(job, INPUT_FINGERPRINTS, body=_fail, accept_input=True)
+    failed_record = _task(job, TASK_READER).record
     assert failed_record is not None
     assert failed_record.latest_run.status == "failed"
-    record = _run_task(
-        job, TASK_X, CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True
-    )
+    record = _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS, accept_input=True)
     assert record.is_done and len(record.runs) == 1
-    assert record.parameters == CHANGED_INPUT_PARAMETERS
-    assert record.accepted_input is None
+    assert record.input_fingerprints == CHANGED_INPUT_FINGERPRINTS
+    assert _acceptances(record) == {"events": None, "pileup": None}
 
 
 def test_a_record_holds_an_accepted_input_only_when_its_latest_run_is_done() -> None:
+    accepted = InputRecord("y-events", "v1:original", AcceptedInput("v1:changed", "t"))
     with pytest.raises(ValueError, match="has an accepted input"):
-        TaskRecord(
-            TASK_X, {}, {}, (_run("failed"),), accepted_input=AcceptedInput("f", "t")
-        )
+        TaskRecord(TASK_READER, {}, {}, (_run("failed"),), inputs={"events": accepted})
 
 
-def test_a_task_run_again_after_an_acceptance_compares_the_input_it_ran_on(
+def test_a_task_that_lost_an_output_runs_again_only_on_the_inputs_it_ran_on(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    _run_task(job, TASK_X, PARAMETERS, _body(job))
-    _run_task(job, TASK_X, CHANGED_INPUT_PARAMETERS, _body(job), accept_input=True)
-    (job.task_dir(TASK_X) / "out.txt").unlink()
-    with pytest.raises(ValueError, match="input_fingerprint: expected v1:original"):
-        _run_task(job, TASK_X, CHANGED_INPUT_PARAMETERS, _body(job))
-    rerun = _run_task(job, TASK_X, PARAMETERS, _body(job))
+    _run_on_inputs(job, INPUT_FINGERPRINTS)
+    _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS, accept_input=True)
+    (job.task_dir(TASK_READER) / "out.txt").unlink()
+    refusal = CHANGED_INPUT + "Run omphjc x with --force to replace its result."
+    for accept_input in (False, True):
+        with pytest.raises(ValueError, match=re.escape(refusal)):
+            _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS, accept_input=accept_input)
+    rerun = _run_on_inputs(job, INPUT_FINGERPRINTS)
     assert len(rerun.runs) == 2
-    assert rerun.accepted_input is None
-    with pytest.raises(ValueError, match="input_fingerprint: expected v1:original"):
-        _run_task(job, TASK_X, CHANGED_INPUT_PARAMETERS, _body(job))
-    forced = _run_task(job, TASK_X, CHANGED_INPUT_PARAMETERS, _body(job), force=True)
-    assert (
-        forced.parameters == CHANGED_INPUT_PARAMETERS and forced.accepted_input is None
-    )
+    assert _acceptances(rerun) == {"events": None, "pileup": None}
+    with pytest.raises(ValueError, match=CHANGED_INPUT):
+        _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS)
+    forced = _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS, force=True)
+    assert forced.input_fingerprints == CHANGED_INPUT_FINGERPRINTS
+    assert _acceptances(forced) == {"events": None, "pileup": None}
 
 
 def test_two_jobs_opened_on_one_directory_keep_the_records_of_both_tasks(
@@ -1670,7 +1787,11 @@ def test_shower_records_what_it_made_and_keeps_it(
         "n_events": 10000,
         "seed": 10000001,
         "overrides": {},
-        "input_fingerprint": generated.result.outputs[EVENTS_OUTPUT].fingerprint,
+    }
+    assert record.inputs == {
+        EVENTS_INPUT: InputRecord(
+            "generate-madgraph", generated.result.outputs[EVENTS_OUTPUT].fingerprint
+        )
     }
     metadata = record.result.metadata
     assert metadata["pythia_version"] == "8.318"
@@ -1808,10 +1929,8 @@ class FakeSimulation(Task):
         TaskInput(EVENTS_INPUT, frozenset({EventFormat.DELPHES_ROOT}), ShowerStage()),
     )
 
-    extra_parameters: dict[str, Any] = field(default_factory=dict)
-
     def parameters(self, input_events: Mapping[str, EventFileRecord]) -> dict[str, Any]:
-        return {"seed": self.job.seed, **self.extra_parameters}
+        return {"seed": self.job.seed}
 
     def execute(
         self,
@@ -1865,9 +1984,9 @@ def test_a_task_runs_on_the_events_of_the_task_of_its_input_stage(
     assert task.input_events() == {EVENTS_INPUT: events}
     record = task.run()
     assert record.is_done
-    assert record.parameters == {
-        "input_fingerprint": events.fingerprint,
-        "seed": job.seed,
+    assert record.parameters == {"seed": job.seed}
+    assert record.inputs == {
+        EVENTS_INPUT: InputRecord("shower-fake", events.fingerprint)
     }
     assert record.metadata == {"input_format": "delphes-root"}
     assert record.identity == TaskIdentity("simulate", "fake-simulator")
@@ -1911,18 +2030,6 @@ def test_a_task_needs_exactly_one_task_of_its_input_stage(
     with pytest.raises(ValueError, match=re.escape(several_tasks_refusal)):
         task.run()
     assert job.tasks("simulate") == []
-
-
-def test_a_task_whose_parameters_use_the_key_of_the_input_fingerprint_is_refused(
-    specs: Mapping[str, ProcessSpec], tmp_path: Path
-) -> None:
-    job = Job(specs["HToBB"], tmp_path, 1)
-    _record_showered_events(job, EventFormat.DELPHES_ROOT)
-    task = FakeSimulation(job, extra_parameters={"input_fingerprint": "mine"})
-    refusal = "The parameters of simulate-fake-simulator use the key input_fingerprint"
-    with pytest.raises(ValueError, match=refusal):
-        task.run()
-    assert task.record is None
 
 
 def test_simulate_needs_a_finished_shower_stage(
@@ -1977,18 +2084,18 @@ def test_a_stage_whose_input_events_changed_is_refused_unless_forced(
     MadGraphGeneration(job, n_events=10, program_path=mg5_path).run(force=True)
     lhe_fingerprint = job.tasks("generate")[0].events.fingerprint
     assert lhe_fingerprint != generated.result.outputs[EVENTS_OUTPUT].fingerprint
-    with pytest.raises(ValueError, match="input_fingerprint: expected lhe-v1:"):
+    with pytest.raises(ValueError, match="fingerprint of events: expected lhe-v1:"):
         PythiaShower(job, program_path=delphes_pythia8_path).run()
     forced = PythiaShower(job, program_path=delphes_pythia8_path).run(force=True)
-    assert forced.parameters["input_fingerprint"] == lhe_fingerprint
+    assert forced.input_fingerprints == {EVENTS_INPUT: lhe_fingerprint}
     root_fingerprint = forced.result.outputs[EVENTS_OUTPUT].fingerprint
     assert root_fingerprint != showered.result.outputs[EVENTS_OUTPUT].fingerprint
     with pytest.raises(
-        ValueError, match="input_fingerprint: expected delphes_root-v1:"
+        ValueError, match="fingerprint of events: expected delphes_root-v1:"
     ):
         DelphesSimulation(job, program_path=delphes_root_path).run()
     forced = DelphesSimulation(job, program_path=delphes_root_path).run(force=True)
-    assert forced.parameters["input_fingerprint"] == root_fingerprint
+    assert forced.input_fingerprints == {EVENTS_INPUT: root_fingerprint}
 
 
 def test_an_accepted_input_keeps_a_stage_and_the_stages_after_it(
@@ -2009,9 +2116,10 @@ def test_an_accepted_input_keeps_a_stage_and_the_stages_after_it(
     accepted_record = PythiaShower(job, program_path=delphes_pythia8_path).run(
         accept_input=True
     )
-    assert accepted_record.accepted_input is not None
-    assert accepted_record.accepted_input.fingerprint == lhe_fingerprint
+    accepted = accepted_record.inputs[EVENTS_INPUT].accepted
+    assert accepted is not None and accepted.fingerprint == lhe_fingerprint
     assert accepted_record.parameters == showered.parameters
+    assert accepted_record.input_fingerprints == showered.input_fingerprints
     assert accepted_record.runs == showered.runs
     assert PythiaShower(job, program_path=delphes_pythia8_path).run() == accepted_record
     assert DelphesSimulation(job, program_path=delphes_root_path).run() == simulated
@@ -2080,10 +2188,11 @@ def test_simulate_records_what_it_made_and_keeps_it(
     record = simulate(job, _delphes_simulator(job, delphes_root_path))
     assert record.is_done
     assert record.parameters["seed"] == job.seed
-    assert (
-        record.parameters["input_fingerprint"]
-        == showered.result.outputs[EVENTS_OUTPUT].fingerprint
-    )
+    assert record.inputs == {
+        EVENTS_INPUT: InputRecord(
+            "shower-pythia", showered.result.outputs[EVENTS_OUTPUT].fingerprint
+        )
+    }
     assert len(record.parameters["card"]) == 64
     card_path = job.root_dir / "simulate-delphes" / "delphes_card.tcl"
     assert record.cards == {"detector_card": DetectorCard.record_file(card_path)}

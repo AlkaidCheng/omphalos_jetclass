@@ -332,7 +332,7 @@ def test_accept_input_keeps_a_shower_whose_events_changed(
 
     refused = CliRunner().invoke(cli, shower)
     assert refused.exit_code != 0
-    assert "input_fingerprint: expected lhe-v1:" in refused.output
+    assert "  fingerprint of events: expected lhe-v1:" in refused.output
     conflicting = CliRunner().invoke(cli, [*shower, "--accept-input", "--force"])
     assert conflicting.exit_code == 2
     assert "--accept-input and --force cannot be used together." in conflicting.output
@@ -341,13 +341,13 @@ def test_accept_input_keeps_a_shower_whose_events_changed(
     assert accepted.exit_code == 0, accepted.output
     assert "Pythia shower: done, kept from an earlier run" in accepted.output
     input_row = re.compile(
-        r"  input             accepted \(ran on lhe-v1:[0-9a-f]{8}\.\.\., "
+        r"  input events      accepted \(ran on lhe-v1:[0-9a-f]{8}\.\.\., "
         r"accepted for lhe-v1:[0-9a-f]{8}\.\.\.\)"
     )
     assert any(input_row.fullmatch(line) for line in accepted.output.splitlines())
     again = CliRunner().invoke(cli, shower)
     assert again.exit_code == 0, again.output
-    assert "  input             accepted (ran on" in again.output
+    assert "  input events      accepted (ran on" in again.output
     kept = CliRunner().invoke(cli, simulate)
     assert kept.exit_code == 0, kept.output
     assert "Delphes simulation: done, kept from an earlier run" in kept.output

@@ -22,9 +22,9 @@ class DelphesSimulation(Task):
     directory, ``simulate-delphes/``, on the event file that the task of the
     shower stage made, with the seed of the job.
 
-    Its parameters are the seed, the SHA-256 of the detector card and the
-    fingerprint of the event file it reads. A shower that is repeated with
-    the same events therefore keeps its simulation.
+    Its parameters are the seed and the SHA-256 of the detector card. Its
+    record also holds the fingerprint of the event file it reads, so a shower
+    that is repeated with the same events keeps its simulation.
 
     Its events are the ROOT file Delphes wrote, recorded with the number of
     entries in its tree and the fingerprint of its content

@@ -41,7 +41,8 @@ How a task is recorded:
    made (:meth:`omphjc.workspace.ProgramWorkspace.card_records`).
 3. :meth:`Task.run` records the run as a :class:`TaskRun`, with its status,
    start and finish times and usage. It writes the identity of the task, its
-   settings, the run, the parameters and the result to ``task.json`` as a
+   settings, the run, the parameters, its inputs (an
+   :class:`InputRecord` each) and the result to ``task.json`` as a
    :class:`TaskRecord`, with every path relative to the job directory.
 """
 
@@ -53,11 +54,11 @@ from omphjc.jobs.task import (
     DONE,
     EVENTS_INPUT,
     FAILED,
-    INPUT_FINGERPRINT_PARAMETER,
     INTERRUPTED,
     RUNNING,
     TASK_REGISTRY,
     AcceptedInput,
+    InputRecord,
     ReplacedRunError,
     Task,
     TaskInput,
@@ -74,12 +75,12 @@ __all__ = [
     "EVENTS_INPUT",
     "FAILED",
     "GENERATE_TASK",
-    "INPUT_FINGERPRINT_PARAMETER",
     "INTERRUPTED",
     "RUNNING",
     "SHOWER_TASK",
     "TASK_REGISTRY",
     "AcceptedInput",
+    "InputRecord",
     "Job",
     "JobIdentity",
     "Manifest",
