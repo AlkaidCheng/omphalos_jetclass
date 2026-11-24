@@ -61,9 +61,9 @@ class PythiaShower(Task):
         """Return the event count of the input, the job's seed and the overrides."""
         events = input_events[EVENTS_INPUT]
         return {
-            "events": events.n_events,
+            "n_events": events.n_events,
             "seed": self.job.seed,
-            "pythia": dict(self.overrides),
+            "overrides": dict(self.overrides),
         }
 
     def execute(

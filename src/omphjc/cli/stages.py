@@ -114,7 +114,7 @@ def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     task = job.task_from_record(record)
     events = task.events
     yield f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
-    yield format_row("events requested", record.parameters["events"])
+    yield format_row("events requested", record.parameters["n_events"])
     yield format_row("events generated", events.n_events)
     cross_section = (
         f"{metadata['cross_section_pb']:g}"

@@ -244,7 +244,7 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
     record = TaskRecord(
         TASK_X,
         settings={"timeout_seconds": 30.0},
-        parameters={"events": 10},
+        parameters={"n_events": 10},
         runs=(_run("done", finished="u"),),
         result=RunResult(
             outputs={
@@ -274,7 +274,7 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
     assert written["schema"] == 1
     assert written["identity"] == {"stage": "x", "tool": "fake", "tag": None}
     assert written["settings"] == {"timeout_seconds": 30.0}
-    assert written["parameters"] == {"events": 10}
+    assert written["parameters"] == {"n_events": 10}
     assert written["runs"] == [
         {
             "run_id": "r1",
@@ -495,11 +495,11 @@ def test_a_stage_runs_once_and_its_result_is_kept(
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    record = _run_task(job, TASK_X, {"events": 10}, body)
+    record = _run_task(job, TASK_X, {"n_events": 10}, body)
     assert calls == [False]
     assert record.is_done and record.latest_run.finished is not None
     assert len(record.runs) == 1
-    assert record.parameters == {"events": 10}
+    assert record.parameters == {"n_events": 10}
     assert record.result == RunResult(
         outputs={"out": FileRecord(job.root_dir / "x-fake" / "out.txt", 4, None)},
         metadata={"n": 1},
@@ -508,7 +508,7 @@ def test_a_stage_runs_once_and_its_result_is_kept(
 
     job = Job(specs["HToBB"], tmp_path, 1)
     assert _status_detail_and_record(job, TASK_X) == (TaskStatus.DONE, "", record)
-    assert _run_task(job, TASK_X, {"events": 10}, body) == record
+    assert _run_task(job, TASK_X, {"n_events": 10}, body) == record
     assert calls == [False]
 
 
@@ -522,19 +522,19 @@ def test_other_parameters_need_force_and_force_replaces(
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    _run_task(job, TASK_X, {"events": 10}, body)
+    _run_task(job, TASK_X, {"n_events": 10}, body)
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(ValueError) as refusal:
-        _run_task(job, TASK_X, {"events": 20}, body)
+        _run_task(job, TASK_X, {"n_events": 20}, body)
     assert str(refusal.value) == (
         "The current parameters are inconsistent with those of the existing "
         f"x-fake task in {job.root_dir} (x-fake/task.json):\n"
-        "  events: expected 10, got 20\n"
+        "  n_events: expected 10, got 20\n"
         "Rerun with the parameters the task ran with, or run omphjc x with "
         "--force to replace its result."
     )
-    forced = _run_task(job, TASK_X, {"events": 20}, body, force=True)
-    assert forced.parameters == {"events": 20}
+    forced = _run_task(job, TASK_X, {"n_events": 20}, body, force=True)
+    assert forced.parameters == {"n_events": 20}
     assert len(forced.runs) == 1
     assert calls == [False, True]
 
@@ -543,18 +543,24 @@ def test_a_refusal_names_only_the_parameters_that_differ(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    pythia = {"Main:timesAllowErrors": 5, "Tune:pp": 14}
+    overrides = {"Main:timesAllowErrors": 5, "Tune:pp": 14}
     _run_task(
-        job, TASK_X, {"events": 10, "pythia": pythia}, lambda *_: _make_output(job)
+        job,
+        TASK_X,
+        {"n_events": 10, "overrides": overrides},
+        lambda *_: _make_output(job),
     )
-    changed = {**pythia, "Main:timesAllowErrors": 7, "Next:numberCount": 0}
+    changed = {**overrides, "Main:timesAllowErrors": 7, "Next:numberCount": 0}
     with pytest.raises(ValueError) as refusal:
         _run_task(
-            job, TASK_X, {"events": 10, "pythia": changed}, lambda *_: _make_output(job)
+            job,
+            TASK_X,
+            {"n_events": 10, "overrides": changed},
+            lambda *_: _make_output(job),
         )
     assert str(refusal.value).splitlines()[1:-1] == [
-        "  pythia.Main:timesAllowErrors: expected 5, got 7",
-        "  unexpected pythia.Next:numberCount: 0",
+        "  overrides.Main:timesAllowErrors: expected 5, got 7",
+        "  unexpected overrides.Next:numberCount: 0",
     ]
 
 
@@ -708,13 +714,13 @@ def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
 
     job = Job(specs["HToBB"], tmp_path, 1)
     with pytest.raises(RuntimeError, match="boom"):
-        _run_task(job, TASK_X, {"events": 10}, failing)
+        _run_task(job, TASK_X, {"n_events": 10}, failing)
     record = _task(job, TASK_X).record
     assert record is not None
     assert (
         record.latest_run.status == "failed" and record.latest_run.finished is not None
     )
-    assert record.parameters == {"events": 10} and record.result is None
+    assert record.parameters == {"n_events": 10} and record.result is None
     assert record.latest_run.error == "boom"
 
     calls: list[bool] = []
@@ -724,15 +730,15 @@ def test_a_failed_stage_is_recorded_raised_and_replaced_on_retry(
         return _make_output(job)
 
     job = Job(specs["HToBB"], tmp_path, 1)
-    rerun = _run_task(job, TASK_X, {"events": 10}, body)
+    rerun = _run_task(job, TASK_X, {"n_events": 10}, body)
     assert [run.status for run in rerun.runs] == ["failed", "done"]
     assert rerun.runs[0].usage == {}
     assert rerun.runs[1].usage["wall_seconds"] >= 0
     assert calls == [True]
 
     with pytest.raises(RuntimeError, match="boom"):
-        _run_task(job, TASK_Y, {"events": 10}, failing)
-    other = _run_task(job, TASK_Y, {"events": 20}, body)
+        _run_task(job, TASK_Y, {"n_events": 10}, failing)
+    other = _run_task(job, TASK_Y, {"n_events": 20}, body)
     assert len(other.runs) == 1
 
 
@@ -884,7 +890,7 @@ def test_a_job_makes_each_task_on_disk_as_an_object_of_its_class(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    record = _run_task(job, TASK_X, {"events": 10}, _write_log(job))
+    record = _run_task(job, TASK_X, {"n_events": 10}, _write_log(job))
     _run_task(job, TaskIdentity("x", "fake", "tuneA"), {}, _write_log(job))
     _run_task(job, TASK_Y, {}, _write_log(job))
     x_task, tagged_task, y_task = Job(specs["HToBB"], tmp_path, 1).tasks()
@@ -893,7 +899,7 @@ def test_a_job_makes_each_task_on_disk_as_an_object_of_its_class(
         FakeX,
         FakeY,
     ]
-    assert x_task == FakeX(job, given_parameters={"events": 10})
+    assert x_task == FakeX(job, given_parameters={"n_events": 10})
     assert tagged_task == FakeX(job, tag="tuneA")
     assert (x_task.status, x_task.record) == (TaskStatus.DONE, record)
     assert x_task.latest_log.read_text() == "finished"
@@ -957,7 +963,9 @@ def test_a_task_without_a_record_has_no_latest_log(
         _ = task.latest_log
 
 
-@pytest.mark.parametrize(("parameters", "force"), [({"events": 20}, False), ({}, True)])
+@pytest.mark.parametrize(
+    ("parameters", "force"), [({"n_events": 20}, False), ({}, True)]
+)
 def test_a_new_record_removes_the_logs_of_the_runs_it_drops(
     specs: Mapping[str, ProcessSpec],
     tmp_path: Path,
@@ -996,7 +1004,7 @@ def test_a_dropped_run_whose_id_is_not_a_plain_name_is_refused(
     job.task_dir(TASK_X).mkdir(parents=True)
     record.write(_task(job, TASK_X).record_path, root_dir=job.root_dir)
     with pytest.raises(ValueError, match="Path component"):
-        _run_task(job, TASK_X, {"events": 20}, _write_log(job))
+        _run_task(job, TASK_X, {"n_events": 20}, _write_log(job))
     assert outside_path.read_text() == "not a log of the task"
     assert _task(job, TASK_X).record == record
 
@@ -1078,7 +1086,7 @@ def test_a_run_replaced_by_a_newer_run_leaves_that_runs_record(
 
     def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         replaced_run_ids.append(log_path.stem)
-        newer_record = TaskRecord.running(TASK_X, {}, {"events": 20})
+        newer_record = TaskRecord.running(TASK_X, {}, {"n_events": 20})
         newer_record.write(_task(job, TASK_X).record_path, root_dir=job.root_dir)
         newer_records.append(newer_record)
         if fails:
@@ -1086,7 +1094,7 @@ def test_a_run_replaced_by_a_newer_run_leaves_that_runs_record(
         return _make_output(job)
 
     with pytest.raises(ReplacedRunError) as refusal:
-        _run_task(job, TASK_X, {"events": 10}, body)
+        _run_task(job, TASK_X, {"n_events": 10}, body)
     (replaced_run_id,) = replaced_run_ids
     (newer_record,) = newer_records
     assert _task(job, TASK_X).record == newer_record
@@ -1113,8 +1121,8 @@ def test_a_run_whose_record_was_deleted_records_its_end(
     assert _task(job, TASK_X).record == record
 
 
-PARAMETERS = {"events": 10, "input_fingerprint": "v1:original"}
-CHANGED_INPUT_PARAMETERS = {"events": 10, "input_fingerprint": "v1:changed"}
+PARAMETERS = {"n_events": 10, "input_fingerprint": "v1:original"}
+CHANGED_INPUT_PARAMETERS = {"n_events": 10, "input_fingerprint": "v1:changed"}
 
 
 def _body(job: Job) -> Callable[[bool, Path], TaskOutcome]:
@@ -1181,12 +1189,12 @@ def test_an_input_is_accepted_only_when_nothing_else_differs(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     done_record = _run_task(job, TASK_X, PARAMETERS, _body(job))
-    other_parameters = {**CHANGED_INPUT_PARAMETERS, "events": 20}
-    with pytest.raises(ValueError, match="events: expected 10") as refusal:
+    other_parameters = {**CHANGED_INPUT_PARAMETERS, "n_events": 20}
+    with pytest.raises(ValueError, match="n_events: expected 10") as refusal:
         _run_task(job, TASK_X, other_parameters, _body(job), accept_input=True)
     assert "input_fingerprint" not in str(refusal.value)
-    with pytest.raises(ValueError, match="events: expected 10"):
-        _run_task(job, TASK_X, {"events": 20}, _body(job), accept_input=True)
+    with pytest.raises(ValueError, match="n_events: expected 10"):
+        _run_task(job, TASK_X, {"n_events": 20}, _body(job), accept_input=True)
     with pytest.raises(ValueError, match="cannot both be set"):
         _run_task(
             job,
@@ -1524,7 +1532,7 @@ def test_generate_records_what_madgraph_made(
     record = task.run()
     assert task.record == record
     assert record.is_done
-    assert record.parameters == {"events": 10, "seed": 3}
+    assert record.parameters == {"n_events": 10, "seed": 3}
     metadata = record.result.metadata
     assert metadata["madgraph_version"] == "3.5.7"
     assert metadata["cross_section_pb"] == pytest.approx(1.052824254921272)
@@ -1587,7 +1595,7 @@ def test_generate_keeps_a_finished_run_unless_forced(
         == first
     )
     assert [path.name for path in logs_dir.iterdir()] == [first_log]
-    with pytest.raises(ValueError, match="events: expected 10, got 20"):
+    with pytest.raises(ValueError, match="n_events: expected 10, got 20"):
         generate(Job(specs["HToBB"], tmp_path, 1), n_events=20, mg5_path=mg5_path)
     shifted = replace(specs["HToBB"], seed_offset=20_000_000)
     with pytest.raises(ValueError, match="seed: expected 10000001, got 20000001"):
@@ -1596,7 +1604,7 @@ def test_generate_keeps_a_finished_run_unless_forced(
         Job(specs["HToBB"], tmp_path, 1), n_events=20, mg5_path=mg5_path, force=True
     )
     assert again.is_done
-    assert again.parameters == {"events": 20, "seed": 10000001}
+    assert again.parameters == {"n_events": 20, "seed": 10000001}
     assert len(again.runs) == 1
     assert [path.name for path in logs_dir.iterdir()] == [
         f"{again.latest_run.run_id}.log"
@@ -1659,9 +1667,9 @@ def test_shower_records_what_it_made_and_keeps_it(
     assert _task(job, SHOWER_TASK).record == record
     assert record.is_done
     assert record.parameters == {
-        "events": 10000,
+        "n_events": 10000,
         "seed": 10000001,
-        "pythia": {},
+        "overrides": {},
         "input_fingerprint": generated.result.outputs[EVENTS_OUTPUT].fingerprint,
     }
     metadata = record.result.metadata
@@ -1699,7 +1707,7 @@ def test_shower_records_what_it_made_and_keeps_it(
     )
     assert kept == record
     overrides = {"Main:timesAllowErrors": 5}
-    added = re.escape("unexpected pythia.Main:timesAllowErrors: 5")
+    added = re.escape("unexpected overrides.Main:timesAllowErrors: 5")
     with pytest.raises(ValueError, match=added):
         shower(
             Job(specs["HToBB"], tmp_path, 1),
@@ -1712,7 +1720,7 @@ def test_shower_records_what_it_made_and_keeps_it(
         force=True,
         delphes_pythia8_path=delphes_pythia8_path,
     )
-    assert forced.parameters["pythia"] == overrides
+    assert forced.parameters["overrides"] == overrides
     assert (
         "Main:timesAllowErrors = 5"
         in (job.root_dir / "shower-pythia" / "pythia.cmnd").read_text()
@@ -1754,7 +1762,7 @@ def test_a_stage_records_the_folder_its_run_set_aside(
         aside.mkdir(parents=True)
         return replace(_make_output(job), set_aside_dir=aside)
 
-    record = _run_task(job, TASK_X, {"events": 10}, body)
+    record = _run_task(job, TASK_X, {"n_events": 10}, body)
     assert record.latest_run.set_aside == "x-fake/omphjc-set-aside/20260101T000000Z-abc"
     assert _task(job, TASK_X).record == record
 

@@ -236,6 +236,9 @@
   `Job.tasks` makes each task again as an object of its class. (#95)
 - `omphjc.jobs.Task.run` runs a task and records it, in place of
   `Job.run_task`. (#96)
+- The parameters in `task.json` name the event count `n_events`, in place of
+  `events`, and the Pythia overrides of a shower `overrides`, in place of
+  `pythia`. (#97)
 
 ### Fixed
 

@@ -80,7 +80,7 @@ class Difference:
         When both mappings hold a mapping under the same key, these two inner
         mappings are compared in the same way. A difference inside them is
         named by the dotted path of its keys, such as
-        ``pythia.Main:timesAllowErrors``.
+        ``overrides.Main:timesAllowErrors``.
 
         Any other key is compared as :meth:`between_mappings` compares it, and
         its values are written with :class:`str`. The differences come in the

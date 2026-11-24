@@ -55,12 +55,12 @@ def test_equal_mappings_and_equal_collections_have_no_differences() -> None:
 
 def test_nested_mappings_differ_by_the_dotted_path_of_each_value() -> None:
     differences = Difference.between_nested_mappings(
-        {"events": 10, "pythia": {"a": 1, "b": 3, "c": 4}, "card": {"x.tcl": "h"}},
-        {"events": 10, "pythia": {"a": 1, "b": 2}, "card": "h", "seed": 1},
+        {"n_events": 10, "overrides": {"a": 1, "b": 3, "c": 4}, "card": {"x.tcl": "h"}},
+        {"n_events": 10, "overrides": {"a": 1, "b": 2}, "card": "h", "seed": 1},
     )
     assert [str(difference) for difference in differences] == [
         "card: expected h, got {'x.tcl': 'h'}",
-        "pythia.b: expected 2, got 3",
-        "unexpected pythia.c: 4",
+        "overrides.b: expected 2, got 3",
+        "unexpected overrides.c: 4",
         "missing seed: 1",
     ]

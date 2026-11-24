@@ -186,7 +186,7 @@ def test_generate_runs_a_job_and_keeps_a_finished_one(
 
     other_count = CliRunner().invoke(cli, [*arguments, "--events", "20"])
     assert other_count.exit_code != 0
-    assert "  events: expected 10, got 20\n" in other_count.output
+    assert "  n_events: expected 10, got 20\n" in other_count.output
     assert (
         CliRunner()
         .invoke(cli, [*arguments, "--events", "10", "--job-id", "0"])
