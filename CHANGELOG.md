@@ -254,6 +254,8 @@
 - A job file that cannot be read raises `omphjc.jobs.JobFileError`; for a
   `task.json` it is a `TaskRecordError`, which adds the likely cause and the ways
   to go on. (#100)
+- The refusal of a done task whose inputs changed names `--accept-input` when
+  that option would keep the task's result. (#101)
 
 ### Fixed
 
