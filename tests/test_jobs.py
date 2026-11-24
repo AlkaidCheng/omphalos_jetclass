@@ -405,6 +405,29 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
         TaskRecord.read(path, root_dir=tmp_path)
 
 
+def test_a_run_records_its_end_and_keeps_its_start() -> None:
+    run = TaskRun.started_now()
+    failed = run.ended_now(RunStatus.FAILED, error="boom")
+    assert (failed.run_id, failed.started, failed.host) == (
+        run.run_id,
+        run.started,
+        run.host,
+    )
+    assert (failed.status, failed.error, failed.usage, failed.set_aside) == (
+        RunStatus.FAILED,
+        "boom",
+        {},
+        None,
+    )
+    assert failed.finished is not None
+    done = run.ended_now(RunStatus.DONE, usage={"wall_seconds": 1.0}, set_aside="s")
+    assert (done.error, done.usage, done.set_aside) == (
+        None,
+        {"wall_seconds": 1.0},
+        "s",
+    )
+
+
 def test_a_task_record_needs_a_run_and_a_result_that_fits_its_status(
     tmp_path: Path,
 ) -> None:
