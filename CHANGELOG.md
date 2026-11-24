@@ -241,6 +241,16 @@
   `pythia`. (#97)
 - `task.json` records each input of its task under `inputs`, with the task
   that made its events and their fingerprint, apart from its `parameters`. (#98)
+- `omphjc.jobs.TaskInput` names the class of the task that makes an input, such
+  as the family `omphjc.tasks.ShowerTask`, and the output of that class it
+  reads (`TaskOutput`, with the format of its file), in place of its stage, and
+  a task is bound when it is made to the only task of that class in its job
+  unless its `upstream` names one. (#99)
+- `omphjc.jobs.Job.get_task` returns a task of the job from its name or its
+  record, in place of `Job.task_from_record`. (#99)
+- `omphjc.jobs.Task.input_files` gives a task the files it reads, in any
+  format, in place of `Task.input_events`, and `parameters` and `execute` take
+  them. (#99)
 
 ### Fixed
 

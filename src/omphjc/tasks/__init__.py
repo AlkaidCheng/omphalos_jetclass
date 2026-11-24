@@ -7,13 +7,25 @@ files (:class:`omphjc.jobs.task.Task`):
 - :class:`PythiaShower` showers the generated events;
 - :class:`DelphesSimulation` simulates the detector on the showered events.
 
+Each class is a member of the family of its stage: :class:`GenerationTask`,
+:class:`ShowerTask` and :class:`SimulationTask`. A family states what its tasks
+read, and an input reads from a task of a family, whatever its tool.
+
 Importing this package registers the three classes
 (:data:`omphjc.jobs.task.TASK_REGISTRY`), so that a job can make the tasks it
 finds on disk.
 """
 
 from omphjc.tasks.delphes_simulation import DelphesSimulation
+from omphjc.tasks.families import GenerationTask, ShowerTask, SimulationTask
 from omphjc.tasks.madgraph_generation import MadGraphGeneration
 from omphjc.tasks.pythia_shower import PythiaShower
 
-__all__ = ["DelphesSimulation", "MadGraphGeneration", "PythiaShower"]
+__all__ = [
+    "DelphesSimulation",
+    "GenerationTask",
+    "MadGraphGeneration",
+    "PythiaShower",
+    "ShowerTask",
+    "SimulationTask",
+]

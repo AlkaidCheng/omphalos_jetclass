@@ -78,7 +78,7 @@ keys are:
     What the task was made with: the fields of its class, such as the event
     count of a generation or the time limit of its program
     (:meth:`Task.settings`). A job makes the task again from them
-    (:meth:`omphjc.jobs.Job.task_from_record`).
+    (:meth:`omphjc.jobs.Job.get_task`).
 ``parameters``
     What fixes the files of the task apart from its inputs, including the
     seed when the task uses one (:meth:`Task.parameters`). A later request
@@ -155,8 +155,8 @@ Each run has these keys:
     The value is ``null`` otherwise.
 
 **The inputs.** Each input (:class:`InputRecord`) holds the name of the
-``task`` that made its events, the ``fingerprint`` of the events that the
-task read, and ``accepted``. The record of a shower holds::
+``task`` that made its file, the ``fingerprint`` of the file that the task
+read, and ``accepted``. The record of a shower holds::
 
     "inputs": {
       "events": {
@@ -166,11 +166,11 @@ task read, and ``accepted``. The record of a shower holds::
       }
     }
 
-A later request compares the fingerprint of the events of each input with
+A later request compares the fingerprint of the file of each input with
 the recorded one, as it compares the parameters. The task is not compared.
 
-``accepted`` is set when the task was kept for other events of the input than
-the ones it read (:meth:`Task.run`). It holds their ``fingerprint`` and the
+``accepted`` is set when the task was kept for another file of the input
+than the one it read (:meth:`Task.run`). It holds its ``fingerprint`` and the
 time of the acceptance, ``accepted_at``, and it is ``null`` otherwise. A
 further run of the task clears it.
 
@@ -207,10 +207,10 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, get_args
 
 from omphjc.comparison import Difference
 from omphjc.data_files import FileRecord
-from omphjc.events.formats import EventFileRecord, EventFormat
+from omphjc.events.formats import EventFileRecord
 from omphjc.jobs.identity import TaskIdentity
 from omphjc.jobs.job_file import JobFile
-from omphjc.runs import RunResult
+from omphjc.runs import EVENTS_OUTPUT, RunResult
 from omphjc.safe_paths import inside, remove_inside
 from omphjc.stages import Stage
 from omphjc.stamps import COMPACT_UTC_FORMAT
@@ -290,12 +290,12 @@ class TaskRun:
 
 @dataclass(frozen=True)
 class AcceptedInput:
-    """Events of an input that a task was kept for although it read others.
+    """A file of an input that a task was kept for although it read another.
 
     Parameters
     ----------
     fingerprint : str
-        The fingerprint of the events that the task was kept for.
+        The fingerprint of the file that the task was kept for.
     accepted_at : str
         The time of the acceptance, in the format of :func:`timestamp`.
     """
@@ -311,12 +311,12 @@ class InputRecord:
     Parameters
     ----------
     task : str
-        The name of the task that made the events, such as
+        The name of the task that made the file, such as
         ``"generate-madgraph"``.
     fingerprint : str
-        The fingerprint of the events that the task read.
+        The fingerprint of the file that the task read.
     accepted : AcceptedInput or None, optional
-        Other events of the input that the task was kept for, or ``None``.
+        Another file of the input that the task was kept for, or ``None``.
     """
 
     task: str
@@ -335,9 +335,9 @@ class InputRecord:
         )
 
     def is_kept_for(self, fingerprint: str) -> bool:
-        """Whether the task is kept for the events with `fingerprint`.
+        """Whether the task is kept for the file with `fingerprint`.
 
-        They must be the events that the task read or the ones that it was
+        It must be the file that the task read or the one that it was
         accepted for.
         """
         return fingerprint == self.fingerprint or (
@@ -398,7 +398,7 @@ class TaskRecord(JobFile):
 
     @property
     def input_fingerprints(self) -> dict[str, str]:
-        """The fingerprint of the events of each input that the task read, by name."""
+        """The fingerprint of the file of each input that the task read, by name."""
         return {
             input_name: input_record.fingerprint
             for input_name, input_record in self.inputs.items()
@@ -689,29 +689,86 @@ class ReplacedRunError(RuntimeError):
 # What ends a run without its program or omphjc failing.
 _INTERRUPTIONS = (TerminationError, KeyboardInterrupt)
 
-# The names of the fields of a task that are not settings: its job, and its
-# tag, which is a part of its identity.
-_NON_SETTING_FIELD_NAMES = ("job", "tag")
+# The names of the fields of a task that are not settings: its job; its tag,
+# which is a part of its identity; and the tasks it names for its inputs, which
+# the record holds in its inputs.
+_NON_SETTING_FIELD_NAMES = ("job", "tag", "upstream")
+
+
+@dataclass(frozen=True)
+class TaskOutput:
+    """An output of a task: a file that each run of the task makes, under a name.
+
+    Parameters
+    ----------
+    name : str
+        The name of the output in the result of a run, such as ``"events"``.
+    file_format : str
+        The format of the file: the :attr:`~omphjc.data_files.DataFile.format_name`
+        of the class that reads it, such as ``"lhe"`` or ``"delphes_root"``.
+        A task that reads the output knows its parser from it, and the
+        fingerprint of the file in a record carries it
+        (:attr:`~omphjc.data_files.FileRecord.file_format`).
+    """
+
+    name: str
+    file_format: str
 
 
 @dataclass(frozen=True)
 class TaskInput:
-    """An input of a task: events that another task of its job made.
+    """An input of a task: a file that another task of its job made.
+
+    The input is a contract of the task's class: it states the class of the
+    task that makes the file and which of that class's outputs it reads, so
+    the format of the file is the one that the output declares. When a task
+    is made, each input is bound to the only task of that class in its job,
+    unless the task names another (:attr:`Task.upstream`).
 
     Parameters
     ----------
     name : str
         The name of the input, such as ``"events"``.
-    formats : frozenset[EventFormat]
-        The formats of event file that the task reads for this input.
-    upstream_stage : Stage
-        The stage whose task makes the events. The job must hold exactly one
-        task of that stage.
+    upstream_class : type[Task]
+        The class of the task that makes the file. It is a family of tasks,
+        such as :class:`omphjc.tasks.ShowerTask` for a shower with any tool,
+        or one class of task.
+    upstream_output : str, optional
+        The name of the output of the upstream class that the input reads
+        (:attr:`Task.outputs`). It is ``"events"`` unless given.
+
+    Raises
+    ------
+    ValueError
+        If the upstream class declares no output of that name.
     """
 
     name: str
-    formats: frozenset[EventFormat]
-    upstream_stage: Stage
+    upstream_class: type["Task"]
+    upstream_output: str = EVENTS_OUTPUT
+
+    def __post_init__(self) -> None:
+        upstream_class_name = self.upstream_class.__name__
+        output_names = sorted(output.name for output in self.upstream_class.outputs)
+        if self.upstream_output not in output_names:
+            declared = f"the outputs {output_names}" if output_names else "no output"
+            fix = "Declare the output on the class."
+            if output_names:
+                fix = "Name one of them in upstream_output, or " + fix.lower()
+            raise ValueError(
+                f"The {self.name} input reads the {self.upstream_output} output "
+                f"of a {upstream_class_name} task, but {upstream_class_name} "
+                f"declares {declared}. {fix}"
+            )
+
+    @property
+    def file_format(self) -> str:
+        """The file format that the input reads, as its upstream class declares it."""
+        return next(
+            output.file_format
+            for output in self.upstream_class.outputs
+            if output.name == self.upstream_output
+        )
 
 
 EVENTS_INPUT = "events"
@@ -745,13 +802,20 @@ class Task(ABC):
 
     A task is made in one of two ways. A caller makes it from its class, its
     job and its settings, as in ``PythiaShower(job, timeout_seconds=600)``. A
-    job makes the
-    tasks it finds on disk from their records (:meth:`omphjc.jobs.Job.tasks`,
-    :meth:`omphjc.jobs.Job.task_from_record`), each as an object of its own
-    class with the settings it ran with.
+    job makes the tasks it finds on disk from their records
+    (:meth:`omphjc.jobs.Job.tasks`, :meth:`omphjc.jobs.Job.get_task`),
+    each as an object of its own class with the settings it ran with and the
+    tasks it read.
 
     Two tasks are equal when they are of the same class and the same job,
-    with the same tag and the same settings.
+    with the same tag, the same upstream and the same settings.
+
+    Raises
+    ------
+    ValueError
+        If `upstream` names a task for something that is not an input of the
+        task. If an input that `upstream` leaves out has no task of its class
+        in the job, or several; the message says what to run or to name.
 
     Parameters
     ----------
@@ -760,6 +824,11 @@ class Task(ABC):
     tag : str or None, optional
         A label that tells the task apart from another task of the same stage
         and tool. Most tasks have none.
+    upstream : Mapping[str, str], optional
+        The name of the task to read an input from, by the name of the input.
+        An input that it leaves out is bound, when the task is made, to the
+        only task of the input's upstream class in the job. After that,
+        `upstream` names the task of every input.
     timeout_seconds : float or None, optional
         The time limit of the programs of a run. ``None`` sets no limit.
     program_path : Path or None, optional
@@ -777,10 +846,29 @@ class Task(ABC):
     inputs: ClassVar[tuple[TaskInput, ...]] = ()
     """What the task reads from other tasks of its job."""
 
+    outputs: ClassVar[tuple[TaskOutput, ...]] = ()
+    """What each run of the task makes, under the names that inputs read."""
+
     job: "Job" = field(kw_only=False)
     tag: str | None = None
+    upstream: Mapping[str, str] = field(default_factory=dict)
     timeout_seconds: float | None = None
     program_path: Path | None = None
+
+    def __post_init__(self) -> None:
+        input_names = sorted(task_input.name for task_input in self.inputs)
+        unknown_names = sorted(set(self.upstream) - set(input_names))
+        if unknown_names:
+            reads = f"the inputs {input_names}" if input_names else "no input"
+            raise ValueError(
+                f"The {self.name} task reads {reads}, but its upstream names a "
+                f"task for {unknown_names}. Leave those out of upstream."
+            )
+        upstream = dict(self.upstream)
+        for task_input in self.inputs:
+            if task_input.name not in upstream:
+                upstream[task_input.name] = self._only_task_of(task_input).name
+        object.__setattr__(self, "upstream", upstream)
 
     @cached_property
     def identity(self) -> TaskIdentity:
@@ -888,25 +976,25 @@ class Task(ABC):
         remove_inside(self.directory / LOGS_DIR, logs)
 
     @abstractmethod
-    def parameters(self, input_events: Mapping[str, EventFileRecord]) -> dict[str, Any]:
+    def parameters(self, input_files: Mapping[str, FileRecord]) -> dict[str, Any]:
         """Return what fixes the files of the task, as JSON values.
 
         A later request compares its parameters with these to decide whether
         the result can be kept. They hold the seed of the job when the task
-        uses it. They leave out the events that the task reads, which
+        uses it. They leave out the files that the task reads, which
         :meth:`run` records and compares by their fingerprints.
 
         Parameters
         ----------
-        input_events : Mapping[str, EventFileRecord]
-            The events that the task reads, by the name of the input. It is
-            empty for a task without an input.
+        input_files : Mapping[str, FileRecord]
+            The files that the task reads, by the name of the input
+            (:meth:`input_files`). It is empty for a task without an input.
         """
 
     @abstractmethod
     def execute(
         self,
-        input_events: Mapping[str, EventFileRecord],
+        input_files: Mapping[str, FileRecord],
         overwrite: bool,
         log_path: Path,
     ) -> TaskOutcome:
@@ -917,9 +1005,9 @@ class Task(ABC):
 
         Parameters
         ----------
-        input_events : Mapping[str, EventFileRecord]
-            The events that the task reads, by the name of the input. It is
-            empty for a task without an input.
+        input_files : Mapping[str, FileRecord]
+            The files that the task reads, by the name of the input
+            (:meth:`input_files`). It is empty for a task without an input.
         overwrite : bool
             Whether to replace what an earlier run left in the directory.
         log_path : Path
@@ -949,9 +1037,10 @@ class Task(ABC):
     def from_record(cls: type[_TaskT], job: "Job", record: TaskRecord) -> _TaskT:
         """Return the task of this class in `job` that `record` describes.
 
-        The record gives the tag of the task and the settings it was made
-        with (:meth:`settings`). A path that was recorded as a string is a
-        :class:`~pathlib.Path` again.
+        The record gives the tag of the task, the settings it was made with
+        (:meth:`settings`) and the task it read each input from, which
+        becomes its :attr:`upstream`. A path that was recorded as a string is
+        a :class:`~pathlib.Path` again.
 
         Parameters
         ----------
@@ -971,7 +1060,7 @@ class Task(ABC):
             raise ValueError(
                 f"{cls.__name__} expects the record of a task with stage "
                 f"{cls.stage.name!r} and tool {cls.tool!r}, got the record of "
-                f"the {identity.name} task. Use Job.task_from_record, which "
+                f"the {identity.name} task. Use Job.get_task, which "
                 "picks the class of a record."
             )
         settings = dict(record.settings)
@@ -979,8 +1068,12 @@ class Task(ABC):
             value = settings.get(task_field.name)
             if isinstance(value, str) and _is_path_type(task_field.type):
                 settings[task_field.name] = Path(value)
+        upstream = {
+            input_name: input_record.task
+            for input_name, input_record in record.inputs.items()
+        }
         try:
-            return cls(job, tag=identity.tag, **settings)
+            return cls(job, tag=identity.tag, upstream=upstream, **settings)
         except TypeError as error:
             raise ValueError(
                 f"The settings recorded for the {identity.name} task are not "
@@ -989,76 +1082,64 @@ class Task(ABC):
             ) from None
 
     def upstream_tasks(self) -> dict[str, "Task"]:
-        """Return the task that makes each input of the task, by the name of the input.
+        """Return the task that makes each input, by the name of the input.
 
-        The task of an input is the only task of the input's stage that the
-        job holds. A task without an input gives an empty mapping.
-
-        Raises
-        ------
-        ValueError
-            If the job holds no task of an input's stage, or several. The
-            message names the command to run first, or the tasks.
-        """
-        upstream_tasks = {}
-        for task_input in self.inputs:
-            stage_name = task_input.upstream_stage.name
-            stage_tasks = self.job.tasks(stage_name)
-            if not stage_tasks:
-                raise ValueError(
-                    f"The {stage_name} stage of {self.job.root_dir} has no task; "
-                    f"run omphjc {stage_name} first"
-                )
-            if len(stage_tasks) > 1:
-                names = ", ".join(stage_task.name for stage_task in stage_tasks)
-                raise ValueError(
-                    f"The {stage_name} stage of {self.job.root_dir} has several "
-                    f"tasks ({names}), and {self.name} reads the events of one"
-                )
-            upstream_tasks[task_input.name] = stage_tasks[0]
-        return upstream_tasks
-
-    def input_events(self) -> dict[str, EventFileRecord]:
-        """Return the events that the task reads, by the name of the input.
-
-        The events of an input are those that its upstream task made
-        (:meth:`upstream_tasks`). A task without an input gives an empty
-        mapping.
+        It is the task that :attr:`upstream` names for the input. A task
+        without an input gives an empty mapping.
 
         Raises
         ------
         ValueError
-            As :meth:`upstream_tasks` and :attr:`events` refuse. If the events
-            of an input are in a format that the input does not state.
+            If a task that :attr:`upstream` names has no record, or is not of
+            the input's upstream class (:attr:`TaskInput.upstream_class`).
         """
-        return self._events_made_by(self.upstream_tasks())
+        return {
+            task_input.name: self._upstream_task(task_input)
+            for task_input in self.inputs
+        }
 
-    def _events_made_by(
-        self, upstream_tasks: Mapping[str, "Task"]
-    ) -> dict[str, EventFileRecord]:
-        """Return the events that `upstream_tasks` made, by the name of the input.
+    def input_files(
+        self, upstream_tasks: Mapping[str, "Task"] | None = None
+    ) -> dict[str, FileRecord]:
+        """Return the files that the task reads, by the name of the input.
+
+        The file of an input is the output of its upstream task that the input
+        reads (:attr:`TaskInput.upstream_output`), in the format that the
+        upstream class declares for it. A task without an input gives an
+        empty mapping.
+
+        Parameters
+        ----------
+        upstream_tasks : Mapping[str, Task] or None, optional
+            The tasks of :meth:`upstream_tasks`, when the caller has them.
 
         Raises
         ------
         ValueError
-            As :attr:`events` refuses. If the events of an input are in a
-            format that the input does not state.
+            As :meth:`upstream_tasks` refuses. If an upstream task is not
+            done (:meth:`require_done`). If it made no file under the output
+            that the input reads, or one in another format.
         """
-        input_events = {}
+        if upstream_tasks is None:
+            upstream_tasks = self.upstream_tasks()
+        input_files = {}
         for task_input in self.inputs:
             upstream_task = upstream_tasks[task_input.name]
-            events = upstream_task.events
-            if events.format not in task_input.formats:
-                readable_formats = sorted(
-                    event_format.value for event_format in task_input.formats
-                )
+            upstream_outputs = upstream_task.require_done().outputs
+            input_file = upstream_outputs.get(task_input.upstream_output)
+            reads = (
+                f"{self.name} reads the {task_input.upstream_output} output of the "
+                f"{upstream_task.name} task of {self.job.root_dir}"
+            )
+            if input_file is None:
+                raise ValueError(f"{reads}, but that task made no file of that name")
+            if input_file.file_format != task_input.file_format:
                 raise ValueError(
-                    f"{self.name} reads {', '.join(readable_formats)} files, but "
-                    f"the {upstream_task.name} task of {self.job.root_dir} made a "
-                    f"{events.format.value} file"
+                    f"{reads} as a {task_input.file_format} file, but that task "
+                    f"made {_format_phrase(input_file.file_format)}"
                 )
-            input_events[task_input.name] = events
-        return input_events
+            input_files[task_input.name] = input_file
+        return input_files
 
     def require_done(self) -> TaskRecord:
         """Return the record of the task, which must be done with its outputs intact.
@@ -1093,10 +1174,10 @@ class Task(ABC):
 
         A request is compared with the record of the task in two parts: the
         parameters of the task (:meth:`parameters`), and the fingerprint of
-        the events of each input that it reads. A run is recorded with both,
+        the file of each input that it reads. A run is recorded with both,
         with the task that made each input and with the settings of the task.
 
-        The events that the task reads are found once, before anything else,
+        The files that the task reads are found once, before anything else,
         and given to :meth:`parameters` and to :meth:`execute`.
 
         **A task recorded as done.**
@@ -1107,11 +1188,11 @@ class Task(ABC):
           output has another size than recorded. `force` overrides the
           refusal.
         - With `accept_input`, it is also kept when its outputs are present
-          and only the inputs differ. Each input whose events changed then
-          records the fingerprint of the current events and the time as
+          and only the inputs differ. Each input whose file changed then
+          records the fingerprint of the current file and the time as
           ``accepted``, which replaces an earlier acceptance of that input.
           The fingerprints that the task read stay, and the record gains no
-          run. From then on the task is kept for the events it read and for
+          run. From then on the task is kept for the files it read and for
           the accepted ones, without `accept_input` too.
 
         **A task that is not kept.** A task without a record runs. A task
@@ -1162,8 +1243,8 @@ class Task(ABC):
             task of the job cannot be read as a record. If `accept_input` and
             `force` are both set. If the record that a new one replaces lists
             a run whose ID is not a plain name; the record is then left as it
-            was. If the events that the task reads cannot be given
-            (:meth:`input_events`).
+            was. If the files that the task reads cannot be given
+            (:meth:`input_files`), or one of them has no fingerprint.
         FileNotFoundError
             If the ``job.json`` of the directory was removed while the task
             ran. The task is then not recorded.
@@ -1178,15 +1259,12 @@ class Task(ABC):
         if accept_input and force:
             raise ValueError("accept_input and force cannot both be set")
         upstream_tasks = self.upstream_tasks()
-        input_events = self._events_made_by(upstream_tasks)
-        parameters = self.parameters(input_events)
+        input_files = self.input_files(upstream_tasks)
+        parameters = self.parameters(input_files)
+        inputs = self._input_records(upstream_tasks, input_files)
         input_fingerprints = {
-            input_name: events.fingerprint
-            for input_name, events in input_events.items()
-        }
-        inputs = {
-            input_name: InputRecord(upstream_tasks[input_name].name, fingerprint)
-            for input_name, fingerprint in input_fingerprints.items()
+            input_name: input_record.fingerprint
+            for input_name, input_record in inputs.items()
         }
         previous_record = self.record
         if not force:
@@ -1225,7 +1303,8 @@ class Task(ABC):
         try:
             self.remove_logs(dropped_logs)
             log_path.parent.mkdir(exist_ok=True)
-            outcome = self.execute(input_events, overwrite, log_path)
+            outcome = self.execute(input_files, overwrite, log_path)
+            self._validate_outputs(outcome.result)
         except BaseException as error:
             message = str(error) or type(error).__name__
             if isinstance(error, _INTERRUPTIONS):
@@ -1238,6 +1317,91 @@ class Task(ABC):
         )
         self._write_run_end(record)
         return record
+
+    def _upstream_task(self, task_input: TaskInput) -> "Task":
+        """Return the task that :attr:`upstream` names for the input `task_input`."""
+        upstream_class = task_input.upstream_class
+        upstream_name = self.upstream[task_input.name]
+        upstream_task = self.job.get_task(upstream_name)
+        if not isinstance(upstream_task, upstream_class):
+            raise ValueError(
+                f"{self.name} reads its {task_input.name} input from a "
+                f"{upstream_class.__name__} task, but its upstream names "
+                f"{upstream_name}, a {type(upstream_task).__name__} task. Name a "
+                f"{upstream_class.__name__} task instead."
+            )
+        return upstream_task
+
+    def _only_task_of(self, task_input: TaskInput) -> "Task":
+        """Return the only task of the job of the upstream class of `task_input`."""
+        upstream_class = task_input.upstream_class
+        reads = (
+            f"{self.name} reads its {task_input.name} input from a "
+            f"{upstream_class.__name__} task"
+        )
+        stage_name = upstream_class.stage.name
+        candidates = [
+            stage_task
+            for stage_task in self.job.tasks(stage_name)
+            if isinstance(stage_task, upstream_class)
+        ]
+        if not candidates:
+            raise ValueError(
+                f"{reads}, and {self.job.root_dir} has none; run omphjc "
+                f"{stage_name} first"
+            )
+        if len(candidates) > 1:
+            names = ", ".join(candidate.name for candidate in candidates)
+            raise ValueError(
+                f"{reads}, and {self.job.root_dir} has several ({names}). Name "
+                "the one to read in upstream, such as "
+                f"upstream={{{task_input.name!r}: {candidates[0].name!r}}}."
+            )
+        return candidates[0]
+
+    def _input_records(
+        self,
+        upstream_tasks: Mapping[str, "Task"],
+        input_files: Mapping[str, FileRecord],
+    ) -> dict[str, InputRecord]:
+        """Name the task that made each file the task reads, and its fingerprint.
+
+        Raises
+        ------
+        ValueError
+            If a file is recorded without a fingerprint, so that a change to
+            it could not be told.
+        """
+        input_records = {}
+        for input_name, input_file in input_files.items():
+            if input_file.fingerprint is None:
+                raise ValueError(
+                    f"{self.name} reads {input_file.path} as its {input_name} "
+                    "input, but the file is recorded without a fingerprint, so a "
+                    "change to it could not be told. Record it with "
+                    "DataFile.record_file, which reads it."
+                )
+            upstream_name = upstream_tasks[input_name].name
+            input_records[input_name] = InputRecord(
+                upstream_name, input_file.fingerprint
+            )
+        return input_records
+
+    def _validate_outputs(self, result: RunResult) -> None:
+        """Refuse a result that does not hold each declared output in its format."""
+        for declared in self.outputs:
+            output = result.outputs.get(declared.name)
+            if output is None:
+                raise ValueError(
+                    f"{self.name} declares the output {declared.name}, but its "
+                    "run made none"
+                )
+            if output.file_format != declared.file_format:
+                raise ValueError(
+                    f"{self.name} declares the output {declared.name} as a "
+                    f"{declared.file_format} file, but its run made "
+                    f"{_format_phrase(output.file_format)}"
+                )
 
     def _kept_record(
         self,
@@ -1374,6 +1538,13 @@ class Task(ABC):
         self.record_path.parent.mkdir(exist_ok=True)
         record.write(self.record_path, root_dir=self.job.root_dir)
         self.job.write_manifest(record)
+
+
+def _format_phrase(file_format: str | None) -> str:
+    """Name a file by its format in a message, or say that it has none."""
+    if file_format is None:
+        return "a file recorded without its format"
+    return f"a {file_format} file"
 
 
 class TaskRegistry:

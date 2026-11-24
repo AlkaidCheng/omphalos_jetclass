@@ -7,17 +7,16 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from omphjc.data_files import FileRecord
-from omphjc.events.formats import EventFileRecord
-from omphjc.jobs.task import TASK_REGISTRY, Task, TaskOutcome
+from omphjc.jobs.task import TASK_REGISTRY, TaskOutcome
 from omphjc.runs import EVENTS_OUTPUT, RunResult
-from omphjc.stages import GenerateStage, Stage
+from omphjc.tasks.families import GenerationTask
 from omphjc.tools.madgraph.driver import generate_events
 from omphjc.tools.madgraph.lhe_file import LHEFile
 
 
 @TASK_REGISTRY.register
 @dataclass(frozen=True, kw_only=True)
-class MadGraphGeneration(Task):
+class MadGraphGeneration(GenerationTask):
     """The task that generates the parton-level events of a job with MadGraph.
 
     It runs :func:`omphjc.tools.madgraph.driver.generate_events` in its
@@ -52,7 +51,6 @@ class MadGraphGeneration(Task):
     `program_path` is MadGraph's ``bin/mg5_aMC``.
     """
 
-    stage: ClassVar[Stage] = GenerateStage()
     tool: ClassVar[str] = "madgraph"
 
     card_copies_dir_name: ClassVar[str] = "cards"
@@ -60,13 +58,13 @@ class MadGraphGeneration(Task):
     n_events: int
     n_cores: int | None = None
 
-    def parameters(self, input_events: Mapping[str, EventFileRecord]) -> dict[str, Any]:
+    def parameters(self, input_files: Mapping[str, FileRecord]) -> dict[str, Any]:
         """Return the event count and the seed of the job."""
         return {"n_events": self.n_events, "seed": self.job.seed}
 
     def execute(
         self,
-        input_events: Mapping[str, EventFileRecord],
+        input_files: Mapping[str, FileRecord],
         overwrite: bool,
         log_path: Path,
     ) -> TaskOutcome:
