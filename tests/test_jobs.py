@@ -26,6 +26,7 @@ from omphjc.jobs import (
     AcceptedInput,
     InputRecord,
     Job,
+    JobFileError,
     JobIdentity,
     Manifest,
     ReplacedRunError,
@@ -35,6 +36,7 @@ from omphjc.jobs import (
     TaskOutcome,
     TaskOutput,
     TaskRecord,
+    TaskRecordError,
     TaskRegistry,
     TaskRun,
     TaskStatus,
@@ -408,7 +410,7 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="no schema"):
         TaskRecord.read(path, root_dir=tmp_path)
     path.write_text("not json")
-    with pytest.raises(ValueError, match="task.json is not valid JSON"):
+    with pytest.raises(TaskRecordError, match="task.json is not valid JSON"):
         TaskRecord.read(path, root_dir=tmp_path)
 
 
@@ -416,16 +418,16 @@ def test_a_task_record_needs_a_run_and_a_result_that_fits_its_status(
     tmp_path: Path,
 ) -> None:
     done = _run("done")
-    with pytest.raises(ValueError, match="the record has no runs"):
+    with pytest.raises(ValueError, match="the record lists no run"):
         TaskRecord(TASK_X, settings={}, parameters={}, runs=())
-    with pytest.raises(
-        ValueError, match="has status 'done' but the record has no result"
-    ):
+    no_result = (
+        "the latest run is 'done', so the record should hold the result of that "
+        "run, but it holds none"
+    )
+    with pytest.raises(ValueError, match=no_result):
         TaskRecord(TASK_X, settings={}, parameters={}, runs=(done,))
     failed = _run("failed", error="boom")
-    with pytest.raises(
-        ValueError, match="has status 'failed' but the record has a result"
-    ):
+    with pytest.raises(ValueError, match="should hold no result, but it holds one"):
         TaskRecord(
             TASK_X, settings={}, parameters={}, runs=(failed,), result=RunResult()
         )
@@ -433,10 +435,21 @@ def test_a_task_record_needs_a_run_and_a_result_that_fits_its_status(
         _run("paused")
     path = tmp_path / "x-fake" / "task.json"
     path.parent.mkdir()
-    without_runs = {"schema": 1, "settings": {}, "parameters": {}, "result": None}
+    TaskRecord(
+        TASK_X, settings={}, parameters={}, runs=(done,), result=RunResult()
+    ).write(path, root_dir=tmp_path)
+    without_runs = json.loads(path.read_text())
+    del without_runs["runs"]
     path.write_text(json.dumps(without_runs))
-    with pytest.raises(ValueError, match="invalid content: the record has no runs"):
+    with pytest.raises(TaskRecordError) as refusal:
         TaskRecord.read(path, root_dir=tmp_path)
+    assert refusal.value.path == path
+    assert str(refusal.value) == (
+        f"{path} has invalid content: the record lists no run, and a task record "
+        "lists at least the run that made it.\n"
+        "The file was changed after omphjc wrote it, or another version of omphjc "
+        "wrote it. Restore the file, or remove it and run the task again."
+    )
 
 
 def test_a_record_gives_its_outputs_only_when_its_latest_run_is_done(
@@ -1385,8 +1398,18 @@ def test_accept_input_changes_nothing_for_a_task_that_is_not_done(
 
 def test_a_record_holds_an_accepted_input_only_when_its_latest_run_is_done() -> None:
     accepted = InputRecord("y-events", "v1:original", AcceptedInput("v1:changed", "t"))
-    with pytest.raises(ValueError, match="has an accepted input"):
+    acceptance = "so no input should hold an acceptance, but 'events' holds one"
+    with pytest.raises(ValueError, match=acceptance):
         TaskRecord(TASK_READER, {}, {}, (_run("failed"),), inputs={"events": accepted})
+    both = "but 'events' and 'pileup' hold one"
+    with pytest.raises(ValueError, match=both):
+        TaskRecord(
+            TASK_READER,
+            {},
+            {},
+            (_run("failed"),),
+            inputs={"events": accepted, "pileup": accepted},
+        )
 
 
 def test_a_task_that_lost_an_output_runs_again_only_on_the_inputs_it_ran_on(
@@ -1498,8 +1521,8 @@ def test_a_record_in_a_directory_of_another_name_is_refused(
     job = Job(specs["HToBB"], tmp_path, 1)
     _run_task(job, TASK_X, {}, lambda overwrite, log_path: _make_output(job))
     job.task_dir(TASK_X).rename(job.root_dir / "renamed")
-    renamed = "its directory is named renamed. Name the directory x-fake again"
-    with pytest.raises(ValueError, match=renamed):
+    renamed = "its directory is named renamed.\nName the directory x-fake again"
+    with pytest.raises(TaskRecordError, match=renamed):
         job.tasks()
 
 
@@ -1544,6 +1567,8 @@ def test_a_task_record_that_cannot_be_read_stops_every_task_of_the_job(
     record_path = _task(job, TASK_X).record_path
     record_path.write_text("{")
     unreadable = re.escape(f"{record_path} is not valid JSON")
+    with pytest.raises(ValueError, match="Restore the file, or remove it"):
+        _ = _task(job, TASK_X).record
     with pytest.raises(ValueError, match=unreadable):
         _ = _task(job, TASK_X).record
     with pytest.raises(ValueError, match=unreadable):
@@ -1676,8 +1701,9 @@ def test_an_identity_file_that_cannot_be_read_is_refused(
     with pytest.raises(ValueError, match="schema 99; .* reads schema 1"):
         Job(specs["HToBB"], tmp_path, 1)
     job.identity_path.write_text('{"schema": 1, "process": "HToBB"}')
-    with pytest.raises(ValueError, match="job.json has invalid content"):
+    with pytest.raises(JobFileError, match="job.json has invalid content") as refusal:
         Job(specs["HToBB"], tmp_path, 1)
+    assert refusal.value.remedy is None
     job.identity_path.write_text("not json")
     with pytest.raises(ValueError, match="job.json is not valid JSON"):
         _run_task(job, TASK_X, {}, lambda overwrite, log_path: _make_output(job))

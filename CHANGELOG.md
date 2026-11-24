@@ -251,6 +251,9 @@
 - `omphjc.jobs.Task.input_files` gives a task the files it reads, in any
   format, in place of `Task.input_events`, and `parameters` and `execute` take
   them. (#99)
+- A job file that cannot be read raises `omphjc.jobs.JobFileError`; for a
+  `task.json` it is a `TaskRecordError`, which adds the likely cause and the ways
+  to go on. (#100)
 
 ### Fixed
 

@@ -16,13 +16,15 @@ The modules, by what they hold::
     task.py         Task, the base class of a task, which runs the task and
                     writes its record; TaskRegistry and TASK_REGISTRY, the
                     registry of the task classes; TaskRecord, the content
-                    of task.json, with a TaskRun for each run; TaskOutcome,
-                    what a run made
+                    of task.json, with a TaskRun for each run, and
+                    TaskRecordError, the refusal of a task.json that cannot
+                    be read; TaskOutcome, what a run made
     identity.py     JobIdentity, the content of job.json, and TaskIdentity, the
                     stage, the tool and the tag of a task
     manifest.py     Manifest, the content of manifest.json, which lists a
                     TaskSummary of each task's record
-    job_file.py     JobFile, the base class of the job's JSON files
+    job_file.py     JobFile, the base class of the job's JSON files, and
+                    JobFileError, the refusal of a file that cannot be read
 
 The classes of the tasks are in :mod:`omphjc.tasks`.
 
@@ -48,6 +50,7 @@ How a task is recorded:
 
 from omphjc.jobs.identity import JobIdentity, TaskIdentity
 from omphjc.jobs.job import Job, exception_on_termination, job_seed
+from omphjc.jobs.job_file import JobFileError
 from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.stages import GENERATE_TASK, SHOWER_TASK, generate, shower, simulate
 from omphjc.jobs.task import (
@@ -65,6 +68,7 @@ from omphjc.jobs.task import (
     TaskOutcome,
     TaskOutput,
     TaskRecord,
+    TaskRecordError,
     TaskRegistry,
     TaskRun,
     TaskStatus,
@@ -83,6 +87,7 @@ __all__ = [
     "AcceptedInput",
     "InputRecord",
     "Job",
+    "JobFileError",
     "JobIdentity",
     "Manifest",
     "ReplacedRunError",
@@ -92,6 +97,7 @@ __all__ = [
     "TaskOutput",
     "TaskOutcome",
     "TaskRecord",
+    "TaskRecordError",
     "TaskRegistry",
     "TaskRun",
     "TaskStatus",
