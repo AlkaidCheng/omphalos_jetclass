@@ -1465,11 +1465,14 @@ class Task(ABC):
             if is_intact and record.is_kept_for(input_fingerprints):
                 return record
             same_inputs = input_fingerprints.keys() == record.inputs.keys()
-            if is_intact and accept_input and same_inputs:
+            can_accept_input = is_intact and same_inputs
+            if accept_input and can_accept_input:
                 record = record.with_accepted_inputs(input_fingerprints)
                 self._write_record(record)
                 return record
-            raise self._changed_inputs_error(record, input_fingerprints)
+            raise self._changed_inputs_error(
+                record, input_fingerprints, can_accept_input=can_accept_input
+            )
         if is_intact:
             return record
         if status is TaskStatus.CHANGED:
@@ -1496,20 +1499,35 @@ class Task(ABC):
         )
 
     def _changed_inputs_error(
-        self, record: TaskRecord, input_fingerprints: dict[str, str]
+        self,
+        record: TaskRecord,
+        input_fingerprints: dict[str, str],
+        *,
+        can_accept_input: bool,
     ) -> ValueError:
         """Return the error of a request whose inputs are not those the task read.
 
         The message names each input whose fingerprint differs. The
         fingerprint of the input that the task read is shown as the expected
         one.
+
+        The message names ``--accept-input`` only when the option would keep
+        the result (`can_accept_input`): the outputs of the task are present,
+        and the task reads inputs of the same names as before.
         """
+        command = self.identity.command
+        if can_accept_input:
+            fix = (
+                f"Run {command} with --accept-input to keep its result for "
+                "the current inputs, or with --force to replace it."
+            )
+        else:
+            fix = f"Run {command} with --force to replace its result."
         differences = Difference.between_mappings(
             input_fingerprints,
             record.input_fingerprints,
             name=lambda input_name: f"fingerprint of {input_name}",
         )
-        fix = f"Run {self.identity.command} with --force to replace its result."
         return self._inconsistency_error("inputs", differences, fix)
 
     def _inconsistency_error(

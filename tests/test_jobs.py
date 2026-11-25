@@ -1286,7 +1286,7 @@ def test_a_task_records_each_input_apart_from_its_parameters(
     ]
 
 
-def test_a_done_task_whose_inputs_changed_is_refused_unless_forced(
+def test_a_done_task_whose_inputs_changed_is_refused_with_the_ways_out(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
@@ -1296,12 +1296,28 @@ def test_a_done_task_whose_inputs_changed_is_refused_unless_forced(
     assert str(refusal.value) == (
         "The current inputs are inconsistent with those of the existing "
         f"x-reader task in {job.root_dir} (x-reader/task.json):\n" + CHANGED_INPUT + ""
-        "Run omphjc x with --force to replace its result."
+        "Run omphjc x with --accept-input to keep its result for the current "
+        "inputs, or with --force to replace it."
     )
     assert _task(job, TASK_READER).record == done_record
     forced = _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS, force=True)
     assert forced.input_fingerprints == CHANGED_INPUT_FINGERPRINTS
     assert len(forced.runs) == 1
+
+
+def test_a_done_task_that_reads_other_inputs_is_told_to_use_force(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    done_record = _run_on_inputs(job, INPUT_FINGERPRINTS)
+    events_only = {EVENTS_INPUT: INPUT_FINGERPRINTS[EVENTS_INPUT]}
+    for accept_input in (False, True):
+        with pytest.raises(ValueError) as refusal:
+            _run_on_inputs(job, events_only, accept_input=accept_input)
+        assert str(refusal.value).splitlines()[-1] == (
+            "Run omphjc x with --force to replace its result."
+        )
+    assert _task(job, TASK_READER).record == done_record
 
 
 def test_an_accepted_input_keeps_a_done_task_without_a_run(
