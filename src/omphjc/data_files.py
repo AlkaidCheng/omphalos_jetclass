@@ -71,6 +71,20 @@ class FileRecord:
         values = {field.name: record[field.name] for field in fields(cls)}
         return cls(**{**values, "path": root_dir / values["path"]})
 
+    @property
+    def file_format(self) -> str | None:
+        """The format of the file: the name that the fingerprint of its content holds.
+
+        It is the :attr:`DataFile.format_name` of the class that read the
+        file, as :meth:`DataFile.fingerprint` writes it, such as ``"lhe"``. It
+        is ``None`` for a file recorded without being read.
+        """
+        if self.fingerprint is None:
+            return None
+        head, _, _ = self.fingerprint.partition(":")
+        format_name, separator, version = head.rpartition("-v")
+        return format_name if separator and version.isdigit() else None
+
 
 class DataFile(ABC):
     """The parsed content of a file in one format.

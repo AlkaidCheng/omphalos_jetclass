@@ -5,23 +5,24 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
-from omphjc.events.formats import EventFileRecord, EventFormat
-from omphjc.jobs.task import EVENTS_INPUT, TASK_REGISTRY, Task, TaskInput, TaskOutcome
+from omphjc.data_files import FileRecord
+from omphjc.events.formats import EventFileRecord
+from omphjc.jobs.task import EVENTS_INPUT, TASK_REGISTRY, TaskOutcome
 from omphjc.processes.catalogue import SettingValue
 from omphjc.runs import EVENTS_OUTPUT, RunResult
-from omphjc.stages import GenerateStage, ShowerStage, Stage
+from omphjc.tasks.families import ShowerTask
 from omphjc.tools.pythia.driver import shower_events
 
 
 @TASK_REGISTRY.register
 @dataclass(frozen=True, kw_only=True)
-class PythiaShower(Task):
+class PythiaShower(ShowerTask):
     """The task that showers the generated events of a job with Pythia 8.
 
     It runs :func:`omphjc.tools.pythia.driver.shower_events` in its
-    directory, ``shower-pythia/``. It reads the event file that the task of
-    the generate stage made, and uses the seed of the job and the event count
-    that task recorded.
+    directory, ``shower-pythia/``. It reads the LHE file of the generation
+    of its job (:class:`~omphjc.tasks.families.ShowerTask`), and uses the seed
+    of the job and the event count that file holds.
 
     Its parameters are the event count, the seed and the Pythia overrides.
     Its record also holds the fingerprint of the event file it reads, so a
@@ -49,17 +50,13 @@ class PythiaShower(Task):
     `program_path` is Delphes's ``DelphesPythia8``.
     """
 
-    stage: ClassVar[Stage] = ShowerStage()
     tool: ClassVar[str] = "pythia"
-    inputs: ClassVar[tuple[TaskInput, ...]] = (
-        TaskInput(EVENTS_INPUT, frozenset({EventFormat.LHE}), GenerateStage()),
-    )
 
     overrides: Mapping[str, SettingValue] = field(default_factory=dict)
 
-    def parameters(self, input_events: Mapping[str, EventFileRecord]) -> dict[str, Any]:
+    def parameters(self, input_files: Mapping[str, FileRecord]) -> dict[str, Any]:
         """Return the event count of the input, the job's seed and the overrides."""
-        events = input_events[EVENTS_INPUT]
+        events = self._input_events(input_files)
         return {
             "n_events": events.n_events,
             "seed": self.job.seed,
@@ -68,7 +65,7 @@ class PythiaShower(Task):
 
     def execute(
         self,
-        input_events: Mapping[str, EventFileRecord],
+        input_files: Mapping[str, FileRecord],
         overwrite: bool,
         log_path: Path,
     ) -> TaskOutcome:
@@ -81,7 +78,7 @@ class PythiaShower(Task):
         # imported here and not when a command starts.
         from omphjc.events.delphes_root import DelphesROOTFile
 
-        events = input_events[EVENTS_INPUT]
+        events = self._input_events(input_files)
         run = shower_events(
             self.job.spec,
             lhe_path=events.path,
@@ -112,3 +109,20 @@ class PythiaShower(Task):
             usage=run.usage.as_record(),
             set_aside_dir=run.set_aside,
         )
+
+    def _input_events(self, input_files: Mapping[str, FileRecord]) -> EventFileRecord:
+        """Return the record of the events that the shower reads, with their count.
+
+        Raises
+        ------
+        ValueError
+            If the record of the file holds no event count.
+        """
+        events = input_files[EVENTS_INPUT]
+        if not isinstance(events, EventFileRecord):
+            raise ValueError(
+                f"{self.name} reads the number of events in {events.path} from "
+                "its record, but the record holds none. Run the task that made "
+                "the file again."
+            )
+        return events

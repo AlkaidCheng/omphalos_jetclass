@@ -137,7 +137,7 @@ class Job:
         A task has a record when its directory holds a ``task.json``. Only the
         directories directly inside the job directory are looked at.
 
-        Each task is made from its record (:meth:`task_from_record`).
+        Each task is made from its record (:meth:`get_task`).
 
         Parameters
         ----------
@@ -157,24 +157,46 @@ class Job:
             for record_path in self._task_record_paths().values()
         ]
         return [
-            self.task_from_record(record)
+            self.get_task(record)
             for record in records
             if stage is None or record.identity.stage == stage
         ]
 
-    def task_from_record(self, record: TaskRecord) -> Task:
-        """Return the task of this job that `record` describes.
+    def get_task(self, key: str | TaskRecord) -> Task:
+        """Return a task of the job, as an object of its class.
 
-        The task is an object of the class registered for the stage and the
-        tool in the record (:data:`~omphjc.jobs.task.TASK_REGISTRY`,
-        :meth:`Task.from_record`).
+        Parameters
+        ----------
+        key : str or TaskRecord
+            The name of the task, whose record is then read from its
+            directory, or a record of the job already read.
+
+        Returns
+        -------
+        Task
+            The task, an object of the class registered for the stage and the
+            tool in its record (:data:`~omphjc.jobs.task.TASK_REGISTRY`,
+            :meth:`Task.from_record`).
 
         Raises
         ------
         ValueError
-            If no class is registered for the stage and the tool in the
-            record. If the settings in the record are not those of the class.
+            If the name is not a plain name, or the job holds no record of a
+            task of that name. As :meth:`tasks` refuses a record. If no class
+            is registered for the stage and the tool in the record, or the
+            settings in the record are not those of the class.
         """
+        if isinstance(key, TaskRecord):
+            record = key
+        else:
+            record_path = inside(self.root_dir, key, TaskRecord.file_name)
+            if not record_path.is_file():
+                raise ValueError(
+                    f"{self.root_dir} has no task named {key}: there is no "
+                    f"{TaskRecord.file_name} in {record_path.parent}. Run that "
+                    "task first, or name another."
+                )
+            record = TaskRecord.read(record_path, root_dir=self.root_dir)
         task_class = TASK_REGISTRY.get(record.identity)
         return task_class.from_record(self, record)
 

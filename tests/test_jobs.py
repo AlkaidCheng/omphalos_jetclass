@@ -33,6 +33,7 @@ from omphjc.jobs import (
     TaskIdentity,
     TaskInput,
     TaskOutcome,
+    TaskOutput,
     TaskRecord,
     TaskRegistry,
     TaskRun,
@@ -50,7 +51,13 @@ from omphjc.programs import ProgramError, available_cores
 from omphjc.runs import EVENTS_OUTPUT, RunResult
 from omphjc.stages import GenerateStage, ShowerStage, SimulateStage, Stage
 from omphjc.stamps import COMPACT_UTC_FORMAT, read_stamp
-from omphjc.tasks import DelphesSimulation, MadGraphGeneration, PythiaShower
+from omphjc.tasks import (
+    DelphesSimulation,
+    GenerationTask,
+    MadGraphGeneration,
+    PythiaShower,
+    ShowerTask,
+)
 from omphjc.tools.delphes.adapter import DelphesSimulator
 from omphjc.tools.delphes.card import DetectorCard, ParticlesCard
 from omphjc.tools.madgraph.lhe_file import LHEFile
@@ -87,12 +94,12 @@ class FakeTask(Task):
     given_parameters: dict[str, Any] = field(default_factory=dict)
     body: TaskBody | None = None
 
-    def parameters(self, input_events: Mapping[str, EventFileRecord]) -> dict[str, Any]:
+    def parameters(self, input_files: Mapping[str, FileRecord]) -> dict[str, Any]:
         return dict(self.given_parameters)
 
     def execute(
         self,
-        input_events: Mapping[str, EventFileRecord],
+        input_files: Mapping[str, FileRecord],
         overwrite: bool,
         log_path: Path,
     ) -> TaskOutcome:
@@ -138,6 +145,9 @@ class FakeShower(FakeTask):
     """A task of the shower stage, whose events the simulation tasks read."""
 
     stage: ClassVar[Stage] = ShowerStage()
+    outputs: ClassVar[tuple[TaskOutput, ...]] = (
+        TaskOutput(EVENTS_OUTPUT, DelphesROOTFile.format_name),
+    )
 
 
 @dataclass(frozen=True)
@@ -156,11 +166,14 @@ class FakeReader(FakeTask):
     stage: ClassVar[Stage] = XStage()
     tool: ClassVar[str] = "reader"
     inputs: ClassVar[tuple[TaskInput, ...]] = (
-        TaskInput(EVENTS_INPUT, frozenset({EventFormat.LHE}), YStage()),
-        TaskInput("pileup", frozenset({EventFormat.LHE}), YStage()),
+        TaskInput(EVENTS_INPUT, FakeShower),
+        TaskInput("pileup", FakeShower),
     )
 
-    given_input_fingerprints: dict[str, str] = field(default_factory=dict)
+    upstream: Mapping[str, str] = field(
+        default_factory=lambda: {EVENTS_INPUT: "y-events", "pileup": "y-pileup"}
+    )
+    given_input_fingerprints: dict[str, str | None] = field(default_factory=dict)
 
     def upstream_tasks(self) -> dict[str, Task]:
         return {
@@ -169,6 +182,16 @@ class FakeReader(FakeTask):
                 EventFileRecord(Path(input_name), 0, fingerprint, EventFormat.LHE, 0),
             )
             for input_name, fingerprint in self.given_input_fingerprints.items()
+        }
+
+    def input_files(
+        self, upstream_tasks: Mapping[str, Task] | None = None
+    ) -> dict[str, FileRecord]:
+        if upstream_tasks is None:
+            upstream_tasks = self.upstream_tasks()
+        return {
+            input_name: upstream_task.events
+            for input_name, upstream_task in upstream_tasks.items()
         }
 
     def settings(self) -> dict[str, Any]:
@@ -876,8 +899,11 @@ def test_the_task_classes_state_their_stage_tool_and_input(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    tasks = [MadGraphGeneration(job, n_events=10), PythiaShower(job)]
-    tasks.append(DelphesSimulation(job))
+    tasks = [
+        MadGraphGeneration(job, n_events=10),
+        PythiaShower(job, upstream={EVENTS_INPUT: "generate-madgraph"}),
+        DelphesSimulation(job, upstream={EVENTS_INPUT: "shower-pythia"}),
+    ]
     assert [task.name for task in tasks] == [
         "generate-madgraph",
         "shower-pythia",
@@ -893,12 +919,14 @@ def test_the_task_classes_state_their_stage_tool_and_input(
         PythiaShower,
         DelphesSimulation,
     ]
-    upstream_stages = [
-        task_input.upstream_stage for task in tasks for task_input in task.inputs
+    upstream_classes = [
+        task_input.upstream_class for task in tasks for task_input in task.inputs
     ]
-    assert upstream_stages == [
-        GenerateStage(),
-        ShowerStage(),
+    assert upstream_classes == [GenerationTask, ShowerTask]
+    assert [task.outputs for task in tasks] == [
+        (TaskOutput(EVENTS_OUTPUT, LHEFile.format_name),),
+        (TaskOutput(EVENTS_OUTPUT, DelphesROOTFile.format_name),),
+        (TaskOutput(EVENTS_OUTPUT, DelphesROOTFile.format_name),),
     ]
 
 
@@ -919,7 +947,8 @@ def test_a_task_records_its_settings_and_is_made_again_from_them(
     assert json.loads(task.record_path.read_text())["settings"] == settings
     reopened_job = Job(specs["HToBB"], tmp_path, 1)
     assert reopened_job.tasks() == [task]
-    assert reopened_job.task_from_record(record) == task
+    assert reopened_job.get_task(record) == task
+    assert reopened_job.get_task(task.name) == task
     assert MadGraphGeneration.from_record(reopened_job, record) == task
     refusal = (
         "PythiaShower expects the record of a task with stage 'shower' and tool "
@@ -1180,7 +1209,7 @@ CHANGED_INPUT = "  fingerprint of events: expected v1:original, got v1:changed\n
 
 def _run_on_inputs(
     job: Job,
-    input_fingerprints: dict[str, str],
+    input_fingerprints: dict[str, str | None],
     *,
     parameters: Mapping[str, Any] = PARAMETERS,
     body: TaskBody | None = None,
@@ -1199,6 +1228,19 @@ def _run_on_inputs(
         body=body or (lambda overwrite, log_path: _make_output(job, TASK_READER)),
     )
     return task.run(**options)
+
+
+def test_a_task_refuses_an_input_file_recorded_without_a_fingerprint(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    refusal = (
+        "x-reader reads events as its events input, but the file is recorded "
+        "without a fingerprint"
+    )
+    with pytest.raises(ValueError, match=refusal):
+        _run_on_inputs(job, {EVENTS_INPUT: None, "pileup": "pileup-v1:a"})
+    assert not _task(job, TASK_READER).record_path.exists()
 
 
 def _acceptances(record: TaskRecord) -> dict[str, str | None]:
@@ -1925,20 +1967,18 @@ class FakeSimulation(Task):
 
     stage: ClassVar[Stage] = SimulateStage()
     tool: ClassVar[str] = "fake-simulator"
-    inputs: ClassVar[tuple[TaskInput, ...]] = (
-        TaskInput(EVENTS_INPUT, frozenset({EventFormat.DELPHES_ROOT}), ShowerStage()),
-    )
+    inputs: ClassVar[tuple[TaskInput, ...]] = (TaskInput(EVENTS_INPUT, FakeShower),)
 
-    def parameters(self, input_events: Mapping[str, EventFileRecord]) -> dict[str, Any]:
+    def parameters(self, input_files: Mapping[str, FileRecord]) -> dict[str, Any]:
         return {"seed": self.job.seed}
 
     def execute(
         self,
-        input_events: Mapping[str, EventFileRecord],
+        input_files: Mapping[str, FileRecord],
         overwrite: bool,
         log_path: Path,
     ) -> TaskOutcome:
-        events = input_events[EVENTS_INPUT]
+        events = input_files[EVENTS_INPUT]
         self.directory.mkdir(parents=True, exist_ok=True)
         output_path = self.directory / "simulated.txt"
         output_path.write_text(f"{events.path.name} {self.job.seed}")
@@ -1947,22 +1987,26 @@ class FakeSimulation(Task):
         return TaskOutcome(
             RunResult(
                 outputs={"out": output},
-                metadata={"input_format": events.format.value},
+                metadata={"input_format": events.file_format},
             )
         )
 
 
 def _record_showered_events(
-    job: Job, event_format: EventFormat, tag: str | None = None
+    job: Job, tag: str | None = None, tool: str = "fake"
 ) -> EventFileRecord:
-    """Record a done task of the shower stage of `job` with events in `event_format`."""
-    identity = TaskIdentity("shower", "fake", tag)
+    """Record a done task of the shower stage of `job`, in the format of its class."""
+    identity = TaskIdentity("shower", tool, tag)
+    (output,) = TASK_REGISTRY.get(identity).outputs
     events_path = job.task_dir(identity) / "events.dat"
 
     def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         events_path.parent.mkdir(parents=True, exist_ok=True)
         events_path.write_text("events")
-        events = EventFileRecord(events_path, 6, "fake-v1:abc", event_format, 1)
+        fingerprint = f"{output.file_format}-v1:abc"
+        events = EventFileRecord(
+            events_path, 6, fingerprint, EventFormat.DELPHES_ROOT, 1
+        )
         return TaskOutcome(RunResult(outputs={EVENTS_OUTPUT: events}))
 
     record = _run_task(job, identity, {}, body)
@@ -1970,25 +2014,26 @@ def _record_showered_events(
     return record.events
 
 
-def test_a_task_runs_on_the_events_of_the_task_of_its_input_stage(
+def test_a_task_reads_the_only_task_of_the_class_of_its_input(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    events = _record_showered_events(job, EventFormat.DELPHES_ROOT)
+    events = _record_showered_events(job)
     task = FakeSimulation(job)
+    assert task.upstream == {EVENTS_INPUT: "shower-fake"}
     upstream_identities = {
         name: upstream_task.identity
         for name, upstream_task in task.upstream_tasks().items()
     }
     assert upstream_identities == {EVENTS_INPUT: TASK_FAKE_SHOWER}
-    assert task.input_events() == {EVENTS_INPUT: events}
+    assert task.input_files() == {EVENTS_INPUT: events}
     record = task.run()
     assert record.is_done
     assert record.parameters == {"seed": job.seed}
     assert record.inputs == {
         EVENTS_INPUT: InputRecord("shower-fake", events.fingerprint)
     }
-    assert record.metadata == {"input_format": "delphes-root"}
+    assert record.metadata == {"input_format": "delphes_root"}
     assert record.identity == TaskIdentity("simulate", "fake-simulator")
     assert task.directory == job.root_dir / "simulate-fake-simulator"
     assert (task.directory / "simulated.txt").read_text() == f"events.dat {job.seed}"
@@ -1996,39 +2041,153 @@ def test_a_task_runs_on_the_events_of_the_task_of_its_input_stage(
     assert FakeSimulation(job).run() == record
 
 
+@TASK_REGISTRY.register
+@dataclass(frozen=True, kw_only=True)
+class FakeLHEShower(FakeShower):
+    """A shower task whose events are LHE files, not the files of its class."""
+
+    tool: ClassVar[str] = "fake-lhe"
+    outputs: ClassVar[tuple[TaskOutput, ...]] = (
+        TaskOutput(EVENTS_OUTPUT, LHEFile.format_name),
+    )
+
+
+def test_a_shower_reads_the_event_count_of_its_input_from_its_record(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    shower = PythiaShower(job, upstream={EVENTS_INPUT: "generate-madgraph"})
+    lhe_path = tmp_path / "events.lhe"
+    events = EventFileRecord(lhe_path, 6, "lhe-v1:a", EventFormat.LHE, 25)
+    assert shower.parameters({EVENTS_INPUT: events})["n_events"] == 25
+    refusal = (
+        f"shower-pythia reads the number of events in {lhe_path} from its record, "
+        "but the record holds none. Run the task that made the file again."
+    )
+    with pytest.raises(ValueError, match=re.escape(refusal)):
+        shower.parameters({EVENTS_INPUT: FileRecord(lhe_path, 6, "lhe-v1:a")})
+
+
 def test_a_task_refuses_events_in_a_format_it_does_not_read(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    _record_showered_events(job, EventFormat.LHE)
+    _record_showered_events(job, tool="fake-lhe")
     refusal = (
-        "simulate-fake-simulator reads delphes-root files, but the shower-fake task "
-        f"of {job.root_dir} made a lhe file"
+        "simulate-fake-simulator reads the events output of the shower-fake-lhe "
+        f"task of {job.root_dir} as a delphes_root file, but that task made a lhe "
+        "file"
     )
     with pytest.raises(ValueError, match=re.escape(refusal)):
         FakeSimulation(job).run()
     assert job.tasks("simulate") == []
 
 
-def test_a_task_needs_exactly_one_task_of_its_input_stage(
+def test_a_task_reads_the_task_its_upstream_names_when_its_class_has_several(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
-    task = FakeSimulation(job)
-    no_task_refusal = (
-        f"The shower stage of {job.root_dir} has no task; run omphjc shower first"
-    )
-    with pytest.raises(ValueError, match=re.escape(no_task_refusal)):
-        task.run()
+    reads = "simulate-fake-simulator reads its events input from a FakeShower task"
+    no_task = f"{reads}, and {job.root_dir} has none; run omphjc shower first"
+    with pytest.raises(ValueError, match=re.escape(no_task)):
+        FakeSimulation(job)
     assert not job.root_dir.exists()
-    _record_showered_events(job, EventFormat.DELPHES_ROOT)
-    _record_showered_events(job, EventFormat.DELPHES_ROOT, tag="tuneA")
-    several_tasks_refusal = (
-        f"The shower stage of {job.root_dir} has several tasks (shower-fake, "
-        "shower-fake-tuneA), and simulate-fake-simulator reads the events of one"
+    _record_showered_events(job)
+    tuned_events = _record_showered_events(job, tag="tuneA")
+    several = (
+        f"{reads}, and {job.root_dir} has several (shower-fake, shower-fake-tuneA). "
+        "Name the one to read in upstream, such as upstream={'events': 'shower-fake'}."
     )
-    with pytest.raises(ValueError, match=re.escape(several_tasks_refusal)):
-        task.run()
+    with pytest.raises(ValueError, match=re.escape(several)):
+        FakeSimulation(job)
+    named = FakeSimulation(job, upstream={EVENTS_INPUT: "shower-fake-tuneA"})
+    record = named.run()
+    assert record.inputs == {
+        EVENTS_INPUT: InputRecord("shower-fake-tuneA", tuned_events.fingerprint)
+    }
+    assert job.tasks("simulate") == [named]
+
+
+def test_an_input_names_an_output_that_its_upstream_class_declares() -> None:
+    with pytest.raises(ValueError) as refusal:
+        TaskInput(EVENTS_INPUT, FakeShower, upstream_output="summary")
+    assert str(refusal.value) == (
+        "The events input reads the summary output of a FakeShower task, but "
+        "FakeShower declares the outputs ['events']. Name one of them in "
+        "upstream_output, or declare the output on the class."
+    )
+    with pytest.raises(ValueError, match="FakeY declares no output. Declare"):
+        TaskInput(EVENTS_INPUT, FakeY)
+    reads_lhe = TaskInput(EVENTS_INPUT, GenerationTask)  # type: ignore[type-abstract]
+    assert reads_lhe.file_format == LHEFile.format_name
+
+
+@TASK_REGISTRY.register
+@dataclass(frozen=True, kw_only=True)
+class FakeGenerator(FakeTask):
+    """A task of stage ``z`` that declares LHE events as its output."""
+
+    stage: ClassVar[Stage] = ZStage()
+    tool: ClassVar[str] = "fake-generator"
+    outputs: ClassVar[tuple[TaskOutput, ...]] = (
+        TaskOutput(EVENTS_OUTPUT, LHEFile.format_name),
+    )
+
+
+def test_a_run_must_make_the_outputs_that_its_class_declares(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    without_events = "shower-fake declares the output events, but its run made none"
+    with pytest.raises(ValueError, match=without_events):
+        _run_task(job, TASK_FAKE_SHOWER, {}, lambda *_: _make_output(job))
+    assert _task(job, TASK_FAKE_SHOWER).record.latest_run.status == "failed"
+    generator = TaskIdentity("z", "fake-generator")
+    events_path = job.task_dir(generator) / "events.root"
+
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
+        events_path.parent.mkdir(parents=True, exist_ok=True)
+        events_path.write_text("events")
+        fingerprint = "delphes_root-v1:a"
+        events = EventFileRecord(
+            events_path, 6, fingerprint, EventFormat.DELPHES_ROOT, 1
+        )
+        return TaskOutcome(RunResult(outputs={EVENTS_OUTPUT: events}))
+
+    other_format = (
+        "z-fake-generator declares the output events as a lhe file, but its run "
+        "made a delphes_root file"
+    )
+    with pytest.raises(ValueError, match=other_format):
+        _run_task(job, generator, {}, body)
+
+
+def test_a_task_refuses_an_upstream_that_does_not_fit_its_inputs(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path
+) -> None:
+    job = Job(specs["HToBB"], tmp_path, 1)
+    _record_showered_events(job)
+    _run_task(job, TASK_X, {}, lambda overwrite, log_path: _make_output(job))
+    other_class = FakeSimulation(job, upstream={EVENTS_INPUT: "x-fake"})
+    with pytest.raises(ValueError) as refusal:
+        other_class.run()
+    assert str(refusal.value) == (
+        "simulate-fake-simulator reads its events input from a FakeShower task, but "
+        "its upstream names x-fake, a FakeX task. Name a FakeShower task instead."
+    )
+    missing = FakeSimulation(job, upstream={EVENTS_INPUT: "shower-other"})
+    with pytest.raises(
+        ValueError, match=f"{job.root_dir} has no task named shower-other"
+    ):
+        missing.run()
+    with pytest.raises(ValueError) as refusal:
+        FakeSimulation(job, upstream={"pileup": "shower-fake"})
+    assert str(refusal.value) == (
+        "The simulate-fake-simulator task reads the inputs ['events'], but its "
+        "upstream names a task for ['pileup']. Leave those out of upstream."
+    )
+    with pytest.raises(ValueError, match="The x-fake task reads no input"):
+        FakeX(job, upstream={EVENTS_INPUT: "shower-fake"})
     assert job.tasks("simulate") == []
 
 
@@ -2278,10 +2437,19 @@ def test_a_forced_rerun_of_each_program_leaves_the_record_of_its_task(
     tmp_path: Path,
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
+    # Made before any of them ran, so the tasks they read are named.
     tasks: list[Task] = [
         MadGraphGeneration(job, n_events=10, program_path=mg5_path),
-        PythiaShower(job, program_path=delphes_pythia8_path),
-        DelphesSimulation(job, program_path=delphes_root_path),
+        PythiaShower(
+            job,
+            upstream={EVENTS_INPUT: "generate-madgraph"},
+            program_path=delphes_pythia8_path,
+        ),
+        DelphesSimulation(
+            job,
+            upstream={EVENTS_INPUT: "shower-pythia"},
+            program_path=delphes_root_path,
+        ),
     ]
     for task in tasks:
         task.run()

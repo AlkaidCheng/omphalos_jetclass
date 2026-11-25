@@ -110,7 +110,7 @@ def generate_job(
 def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the generation task of `job` ran with and what it made."""
     metadata = record.metadata
-    task = job.task_from_record(record)
+    task = job.get_task(record)
     events = task.events
     yield f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
     yield format_row("events requested", record.parameters["n_events"])
@@ -184,7 +184,7 @@ def shower_job(
 def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the shower task of `job` ran with and what it made."""
     metadata = record.metadata
-    task = job.task_from_record(record)
+    task = job.get_task(record)
     events = task.events
     yield f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
     yield format_row("events read", metadata["events_read"])
@@ -260,7 +260,7 @@ def simulate_job(
 
 def _simulation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     """Yield what the simulation task of `job` ran with and what it made."""
-    task = job.task_from_record(record)
+    task = job.get_task(record)
     events = task.events
     yield format_row("card", _format_card_paths(job, record))
     yield format_row("seed", record.parameters["seed"])
@@ -329,15 +329,15 @@ def _report_accepted_input(job: Job, record: TaskRecord) -> None:
     """Print the ``input`` rows of a task that was kept for other inputs.
 
     One row is printed for each input that holds an acceptance and whose
-    events differ from those the task read.
+    file differs from the one the task read.
     """
     if all(input_record.accepted is None for input_record in record.inputs.values()):
         return
-    task = job.task_from_record(record)
-    for input_name, events in task.input_events().items():
+    task = job.get_task(record)
+    for input_name, input_file in task.input_files().items():
         input_record = record.inputs[input_name]
         accepted = input_record.accepted
-        if accepted is None or events.fingerprint == input_record.fingerprint:
+        if accepted is None or input_file.fingerprint == input_record.fingerprint:
             continue
         acceptance = (
             f"accepted (ran on {format_fingerprint(input_record.fingerprint)}, "

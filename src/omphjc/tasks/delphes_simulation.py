@@ -6,21 +6,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
-from omphjc.events.formats import EventFileRecord, EventFormat
-from omphjc.jobs.task import EVENTS_INPUT, TASK_REGISTRY, Task, TaskInput, TaskOutcome
+from omphjc.data_files import FileRecord
+from omphjc.jobs.task import EVENTS_INPUT, TASK_REGISTRY, TaskOutcome
 from omphjc.runs import EVENTS_OUTPUT, RunResult
-from omphjc.stages import ShowerStage, SimulateStage, Stage
+from omphjc.tasks.families import SimulationTask
 from omphjc.tools.delphes.driver import detector_card_text, simulate_events
 
 
 @TASK_REGISTRY.register
 @dataclass(frozen=True, kw_only=True)
-class DelphesSimulation(Task):
+class DelphesSimulation(SimulationTask):
     """The task that simulates the detector on the showered events with Delphes.
 
     It runs :func:`omphjc.tools.delphes.driver.simulate_events` in its
-    directory, ``simulate-delphes/``, on the event file that the task of the
-    shower stage made, with the seed of the job.
+    directory, ``simulate-delphes/``, on the event file of the shower of its
+    job (:class:`~omphjc.tasks.families.SimulationTask`), with the seed of the
+    job.
 
     Its parameters are the seed and the SHA-256 of the detector card. Its
     record also holds the fingerprint of the event file it reads, so a shower
@@ -42,15 +43,11 @@ class DelphesSimulation(Task):
     `program_path` is Delphes's ``DelphesROOT``.
     """
 
-    stage: ClassVar[Stage] = SimulateStage()
     tool: ClassVar[str] = "delphes"
-    inputs: ClassVar[tuple[TaskInput, ...]] = (
-        TaskInput(EVENTS_INPUT, frozenset({EventFormat.DELPHES_ROOT}), ShowerStage()),
-    )
 
     detector_card_path: Path | None = None
 
-    def parameters(self, input_events: Mapping[str, EventFileRecord]) -> dict[str, Any]:
+    def parameters(self, input_files: Mapping[str, FileRecord]) -> dict[str, Any]:
         """Return the seed of the job and the SHA-256 of the chosen detector card.
 
         Raises
@@ -64,7 +61,7 @@ class DelphesSimulation(Task):
 
     def execute(
         self,
-        input_events: Mapping[str, EventFileRecord],
+        input_files: Mapping[str, FileRecord],
         overwrite: bool,
         log_path: Path,
     ) -> TaskOutcome:
@@ -77,7 +74,7 @@ class DelphesSimulation(Task):
         # imported here and not when a command starts.
         from omphjc.events.delphes_root import DelphesROOTFile
 
-        events = input_events[EVENTS_INPUT]
+        events = input_files[EVENTS_INPUT]
         run = simulate_events(
             self.job.spec,
             events_path=events.path,
