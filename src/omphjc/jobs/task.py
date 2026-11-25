@@ -209,7 +209,7 @@ from omphjc.comparison import Difference
 from omphjc.data_files import FileRecord
 from omphjc.events.formats import EventFileRecord
 from omphjc.jobs.identity import TaskIdentity
-from omphjc.jobs.job_file import JobFile
+from omphjc.jobs.job_file import JobFile, JobFileError
 from omphjc.runs import EVENTS_OUTPUT, RunResult
 from omphjc.safe_paths import inside, remove_inside
 from omphjc.stages import Stage
@@ -345,6 +345,27 @@ class InputRecord:
         )
 
 
+class TaskRecordError(JobFileError):
+    """A ``task.json`` that cannot be read as the record of its task.
+
+    Unless the error is given another remedy, the message ends with the likely
+    cause and the ways to go on:
+
+    - The cause: the file was changed after omphjc wrote it, or another version
+      of omphjc wrote it.
+    - The ways to go on: restore the file, or remove it and run the task again.
+    """
+
+    def __init__(self, path: Path, problem: str, remedy: str | None = None) -> None:
+        if remedy is None:
+            remedy = (
+                "The file was changed after omphjc wrote it, or another version "
+                "of omphjc wrote it. Restore the file, or remove it and run the "
+                "task again."
+            )
+        super().__init__(path, problem, remedy)
+
+
 @dataclass(frozen=True)
 class TaskRecord(JobFile):
     """What one task did; the module docstring describes the fields.
@@ -358,6 +379,7 @@ class TaskRecord(JobFile):
     """
 
     file_name: ClassVar[str] = "task.json"
+    read_error: ClassVar[type[JobFileError]] = TaskRecordError
 
     identity: TaskIdentity
     settings: dict[str, Any]
@@ -368,22 +390,31 @@ class TaskRecord(JobFile):
 
     def __post_init__(self) -> None:
         if not self.runs:
-            raise ValueError("the record has no runs")
+            raise ValueError(
+                "the record lists no run, and a task record lists at least the run "
+                "that made it"
+            )
         status = self.latest_run.status
         if self.is_done and self.result is None:
             raise ValueError(
-                f"the latest run has status {status!r} but the record has no result"
+                f"the latest run is {status!r}, so the record should hold the "
+                "result of that run, but it holds none"
             )
         if not self.is_done and self.result is not None:
             raise ValueError(
-                f"the latest run has status {status!r} but the record has a result"
+                f"the latest run is {status!r}, so the record should hold no "
+                "result, but it holds one"
             )
-        if not self.is_done and any(
-            input_record.accepted is not None for input_record in self.inputs.values()
-        ):
+        accepted_names = [
+            repr(input_name)
+            for input_name, input_record in self.inputs.items()
+            if input_record.accepted is not None
+        ]
+        if not self.is_done and accepted_names:
             raise ValueError(
-                f"the latest run has status {status!r} but the record has an "
-                "accepted input"
+                f"the latest run is {status!r}, so no input should hold an "
+                f"acceptance, but {' and '.join(accepted_names)} "
+                f"{'holds' if len(accepted_names) == 1 else 'hold'} one"
             )
 
     @property
@@ -472,11 +503,9 @@ class TaskRecord(JobFile):
         A path in the result becomes an absolute path under `root_dir`. A
         record without runs is refused.
         """
-        if "runs" not in record:
-            raise ValueError("the record has no runs")
         values = dict(record)
         identity = TaskIdentity(**values.pop("identity"))
-        runs = tuple(TaskRun(**run) for run in values.pop("runs"))
+        runs = tuple(TaskRun(**run) for run in values.pop("runs", ()))
         result = values.pop("result")
         inputs = {
             input_name: InputRecord.from_record(input_record)
@@ -496,17 +525,18 @@ class TaskRecord(JobFile):
 
         Raises
         ------
-        ValueError
-            As :meth:`omphjc.jobs.job_file.JobFile.read` refuses a file. If
-            the directory of `path` is not named after the task that the
+        TaskRecordError
+            If :meth:`omphjc.jobs.job_file.JobFile.read` refuses the file, or
+            if the directory of `path` is not named after the task that the
             record identifies.
         """
         record = super().read(path, root_dir=root_dir)
         if record.identity.name != path.parent.name:
-            raise ValueError(
-                f"{path} is the record of the task {record.identity.name}, "
-                f"but its directory is named {path.parent.name}. Name the "
-                f"directory {record.identity.name} again, or remove it."
+            raise TaskRecordError(
+                path,
+                f"is the record of the task {record.identity.name}, but its "
+                f"directory is named {path.parent.name}",
+                f"Name the directory {record.identity.name} again, or remove it.",
             )
         return record
 

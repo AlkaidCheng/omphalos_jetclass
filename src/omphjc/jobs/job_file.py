@@ -9,6 +9,10 @@ kind of file.
 
 Every file holds the field ``schema``, which numbers the layout of the job
 files. A file of another schema is refused.
+
+A file that cannot be read is refused with a :class:`JobFileError`, which
+names the file and what is wrong with it. A class of file may refuse its files
+with a subclass that also says how to go on.
 """
 
 import json
@@ -23,6 +27,33 @@ SCHEMA_VERSION = 1
 _JobFileT = TypeVar("_JobFileT", bound="JobFile")
 
 
+class JobFileError(ValueError):
+    """A file of a job that cannot be read as the content of its class.
+
+    The message names the file and says what is wrong with it. When the error
+    knows how to go on, the message ends with that.
+
+    Parameters
+    ----------
+    path : Path
+        The file.
+    problem : str
+        What is wrong with the file, said of it, such as ``"has no schema field"``.
+    remedy : str, optional
+        The likely cause and the ways to go on.
+    """
+
+    def __init__(self, path: Path, problem: str, remedy: str | None = None) -> None:
+        super().__init__(path, problem, remedy)
+        self.path = path
+        self.problem = problem
+        self.remedy = remedy
+
+    def __str__(self) -> str:
+        message = f"{self.path} {self.problem}"
+        return message if self.remedy is None else f"{message}.\n{self.remedy}"
+
+
 class JobFile(ABC):
     """The content of one JSON file of a job.
 
@@ -30,9 +61,13 @@ class JobFile(ABC):
     ----------
     file_name : str
         The name of the file, such as ``"manifest.json"``.
+    read_error : type
+        The :class:`JobFileError` class with which :meth:`read` refuses a file
+        of this class.
     """
 
     file_name: ClassVar[str]
+    read_error: ClassVar[type[JobFileError]] = JobFileError
 
     @abstractmethod
     def as_record(self) -> dict[str, Any]:
@@ -113,28 +148,30 @@ class JobFile(ABC):
 
         Raises
         ------
-        ValueError
+        JobFileError
             If the file is not JSON, has no ``schema`` field, was written
             with another schema, or does not hold the fields of this class.
+            The error is a :attr:`read_error`.
         """
         try:
             record: Any = json.loads(path.read_text(encoding="utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError(f"{path} is not valid JSON: {error}") from None
+            raise cls.read_error(path, f"is not valid JSON: {error}") from None
         if not isinstance(record, dict) or "schema" not in record:
-            raise ValueError(f"{path} has no schema field")
+            raise cls.read_error(path, "has no schema field")
         schema = record.pop("schema")
         if schema != SCHEMA_VERSION:
-            raise ValueError(
-                f"{path} was written with schema {schema}; this version of "
-                f"omphjc reads schema {SCHEMA_VERSION}"
+            raise cls.read_error(
+                path,
+                f"was written with schema {schema}; this version of omphjc reads "
+                f"schema {SCHEMA_VERSION}",
             )
         try:
             return cls.from_record(
                 record, path.parent if root_dir is None else root_dir
             )
         except (KeyError, TypeError, ValueError) as error:
-            raise ValueError(f"{path} has invalid content: {error}") from None
+            raise cls.read_error(path, f"has invalid content: {error}") from None
 
     def _json_text(self, root_dir: Path) -> str:
         """Return the text of the file, with each path relative to `root_dir`."""
