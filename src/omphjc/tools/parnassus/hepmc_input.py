@@ -297,7 +297,7 @@ def _columns(particles: ak.Array) -> _Columns:
     numbers stay float32 when every one of them is float32, and are passed as
     float64 otherwise.
     """
-    _check_fields(particles.fields)
+    _validate_fields(particles.fields)
     particle_counts = ak.to_numpy(ak.num(particles["part_pid"], axis=1)).astype(
         np.int64
     )
@@ -335,7 +335,7 @@ def _columns(particles: ak.Array) -> _Columns:
     )
 
 
-def _check_fields(fields: Sequence[str]) -> None:
+def _validate_fields(fields: Sequence[str]) -> None:
     """Refuse a record that lacks a field the input is made of."""
     missing = [name for name in (EVENT_COLUMN, *PARTICLE_COLUMNS) if name not in fields]
     if missing:

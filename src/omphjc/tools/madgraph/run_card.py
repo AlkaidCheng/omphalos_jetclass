@@ -170,22 +170,22 @@ class RunCard(InputCard):
             self.settings, reference.settings, equal=values_equal, text=format_value
         )
 
-    def checked_differences(self, reference: "RunCard") -> list[Difference]:
-        """Return the differences from `reference` that a check reports.
+    def differences_from_official(self, official: "RunCard") -> list[Difference]:
+        """Return the differences of this card from `official`, an official card.
 
         The catalogue lists only the settings that carry physics. A setting
-        that only `reference` holds is therefore reported when it is one of
-        :data:`TRACKED_PARAMETERS` and `reference` does not leave it at its
+        that only `official` holds is therefore reported when it is one of
+        :data:`TRACKED_PARAMETERS` and `official` does not leave it at its
         value in :data:`DISABLED_DEFAULTS`.
         """
         differences = []
-        for difference in self.differences(reference):
+        for difference in self.differences(official):
             name = difference.item
             if difference.actual is None:
                 if name not in TRACKED_PARAMETERS:
                     continue
                 if name in DISABLED_DEFAULTS and values_equal(
-                    reference.settings[name], DISABLED_DEFAULTS[name]
+                    official.settings[name], DISABLED_DEFAULTS[name]
                 ):
                     continue
             differences.append(difference)

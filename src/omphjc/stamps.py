@@ -159,7 +159,7 @@ def require_stamp(
     stamp = read_stamp(directory)
     if stamp is None:
         raise StampError(f"{directory} has no omphjc stamp")
-    _check_stamp(stamp, directory, purpose, details or {})
+    _validate_stamp(stamp, directory, purpose, details or {})
     return stamp
 
 
@@ -218,7 +218,7 @@ def clear_artifacts(
     On Windows a change cannot be seen, so every artifact that is present is
     moved into this folder.
 
-    Every check is made before anything is moved or deleted. The stamp drops
+    Everything is validated before anything is moved or deleted. The stamp drops
     the cleared artifacts from its record.
 
     Parameters
@@ -269,7 +269,7 @@ def clear_artifacts(
                 "nothing is changed"
             )
         return None
-    _check_stamp(stamp, directory, purpose, details or {})
+    _validate_stamp(stamp, directory, purpose, details or {})
     unconfirmed_names = set(unconfirmed)
     confirmed = {
         name: path
@@ -292,7 +292,7 @@ def clear_artifacts(
     return set_aside
 
 
-def _check_stamp(
+def _validate_stamp(
     stamp: Stamp, directory: Path, purpose: str, details: Mapping[str, str]
 ) -> None:
     if stamp.purpose != purpose:

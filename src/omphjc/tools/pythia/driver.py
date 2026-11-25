@@ -193,7 +193,7 @@ def shower_events(
         By default an existing output is an error, so a run never deletes
         results by accident.
 
-        The output is replaced only after every other check has passed. It is
+        The output is replaced only after every other validation has passed. It is
         deleted when the earlier run sealed it and nothing in it has changed
         since. Otherwise it is moved aside (see `ShowerRun.set_aside`).
     log_path : Path or None, optional

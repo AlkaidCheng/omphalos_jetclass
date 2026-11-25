@@ -79,7 +79,7 @@ def test_anything_else_in_a_stamps_place_is_refused(
         read_stamp(tmp_path)
 
 
-def test_require_stamp_checks_purpose_and_details(run: Path, tmp_path: Path) -> None:
+def test_require_stamp_validates_purpose_and_details(run: Path, tmp_path: Path) -> None:
     assert require_stamp(run, "testing", {"process": "HToBB"}).purpose == "testing"
     with pytest.raises(StampError, match="no omphjc stamp"):
         require_stamp(tmp_path / "missing", "testing")

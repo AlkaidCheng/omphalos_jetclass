@@ -271,7 +271,7 @@ def test_the_delphes_card_is_named_once_for_every_process(
     assert {spec.delphes_card for spec in specs.values()} == {card}
 
 
-def test_load_catalogue_checks_the_common_block(tmp_path: Path) -> None:
+def test_load_catalogue_validates_the_common_block(tmp_path: Path) -> None:
     entry = (
         "processes:\n  X:\n    label: X\n    description: d\n    model: sm\n"
         "    processes: ['p p > z']\n    run_card: {}\n"

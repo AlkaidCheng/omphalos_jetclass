@@ -168,7 +168,7 @@ class Workspace:
         stamp what the run made. A later run uses this record to tell whether
         a file has changed.
 
-        Entering the block deletes files of an earlier run. Check everything
+        Entering the block deletes files of an earlier run. Validate everything
         that could stop the run, such as an occupied output or an invalid
         request, before entering it.
 

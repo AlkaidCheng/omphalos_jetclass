@@ -167,7 +167,8 @@ def test_every_process_defines_the_multiparticles_of_its_official_card(
 ) -> None:
     for name, spec in specs.items():
         reference = ProcCard.reference(REFERENCES_DIR / name)
-        assert ProcCard.from_process(spec).checked_differences(reference) == [], name
+        card = ProcCard.from_process(spec)
+        assert card.differences_from_official(reference) == [], name
 
 
 def test_an_official_card_without_a_model_loads_the_standard_model(
@@ -178,7 +179,7 @@ def test_an_official_card_without_a_model_loads_the_standard_model(
     assert imports == ["import model sm"]
     card = ProcCard.from_process(specs["ZJetsToNuNu"])
     assert card.commands[0] == "import model sm"
-    assert card.checked_differences(reference) == []
+    assert card.differences_from_official(reference) == []
 
 
 @pytest.mark.parametrize(
@@ -198,7 +199,8 @@ def test_a_proton_is_compared_by_its_members(proton: str, members: str) -> None:
         f"import model sm-ckm\ndefine p = {proton}\ndefine j = {FIVE_FLAVOURS}\n"
         "generate p p > t t~\n"
     )
-    assert [str(difference) for difference in card.checked_differences(reference)] == (
+    differences = card.differences_from_official(reference)
+    assert [str(difference) for difference in differences] == (
         []
         if members == FIVE_FLAVOURS
         else [f"define p: expected {FIVE_FLAVOURS}, got {members}"]
@@ -211,11 +213,11 @@ def test_a_multiparticle_of_one_card_alone_is_reported(
     reference = ProcCard.reference(REFERENCES_DIR / "WToQQ")
     card = ProcCard.from_process(specs["WToQQ"])
     without = ProcCard(commands=tuple(c for c in card.commands if "wpm =" not in c))
-    assert [str(d) for d in without.checked_differences(reference)] == [
+    assert [str(d) for d in without.differences_from_official(reference)] == [
         "missing define wpm: w+ w-"
     ]
     extra = ProcCard(commands=(*card.commands[:-1], "define tops = t t~"))
-    assert [str(d) for d in extra.checked_differences(reference)] == [
+    assert [str(d) for d in extra.differences_from_official(reference)] == [
         "commands: expected import model sm-ckm | generate p p > ve ve~ wpm, "
         "wpm > j j, got import model sm-ckm",
         "unexpected define tops: t t~",
@@ -228,7 +230,8 @@ def test_the_other_commands_are_compared_in_their_order() -> None:
         f"import model sm\ndefine p = {FIVE_FLAVOURS}\ndefine j = p\n"
         "generate p p > ve ve~ j j @1\nadd process p p > ve ve~ j @0\n"
     )
-    assert [str(difference) for difference in card.checked_differences(reference)] == [
+    differences = card.differences_from_official(reference)
+    assert [str(difference) for difference in differences] == [
         "commands: expected import model sm | generate p p > ve ve~ j @0 | "
         "add process p p > ve ve~ j j @1, got import model sm | "
         "generate p p > ve ve~ j j @1 | add process p p > ve ve~ j @0"
@@ -239,10 +242,10 @@ def test_a_reference_without_the_leading_commands_is_compared_as_written() -> No
     reference = ProcCard.from_text(
         "import model sm\ndefine p = p b b~\ngenerate p p > t t~\n"
     )
-    assert reference.checked_differences(reference) == []
+    assert reference.differences_from_official(reference) == []
     named = ProcCard.from_text(
         f"import model sm\ndefine p = {FIVE_FLAVOURS}\ngenerate p p > t t~\n"
     )
-    assert [str(difference) for difference in named.checked_differences(reference)] == [
-        f"define p: expected p b b~, got {FIVE_FLAVOURS}"
-    ]
+    assert [
+        str(difference) for difference in named.differences_from_official(reference)
+    ] == [f"define p: expected p b b~, got {FIVE_FLAVOURS}"]

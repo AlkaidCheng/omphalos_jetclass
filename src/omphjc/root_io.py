@@ -2,7 +2,7 @@
 
 The module has these functions:
 
-- :func:`open_tree` opens a tree after checking that it has the branches that
+- :func:`open_tree` opens a tree after validating that it has the branches that
   a read takes.
 - :func:`count_entries` counts the entries of a tree.
 - :func:`read_branches` reads the entries of a tree.

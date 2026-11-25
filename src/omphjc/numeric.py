@@ -1,4 +1,4 @@
-"""Checks of the numbers that callers and configuration files pass."""
+"""Validation of the numbers that callers and configuration files pass."""
 
 import math
 from numbers import Integral, Real
@@ -36,7 +36,7 @@ def require_number(
     Parameters
     ----------
     value : object
-        The value to check.
+        The value to validate.
     what : str
         What the value is, for the error message, such as ``"ctau_min_mm"``.
     kind : {int, float}, optional

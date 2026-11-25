@@ -254,7 +254,7 @@ void format_event(const Chunk<Real>& chunk, const KeptParticles& kept, int preci
         } else {
           // The mother's decay vertex: status 0, the mother in by its particle
           // id (its index in kept.rows, plus 1), and this daughter's production
-          // point, which select() checked its siblings share.
+          // point, which select() requires all its siblings to share.
           out += " 0 [";
           append_int(out, mother + 1);
           out += "] @";

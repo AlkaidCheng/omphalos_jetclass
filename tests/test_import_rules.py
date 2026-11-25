@@ -1,4 +1,4 @@
-"""The import rules between omphjc's layers, checked module by module.
+"""The import rules between omphjc's layers, tested module by module.
 
 Every module is parsed and its ``omphjc`` imports, at any depth of its code,
 are compared with the rules below; the tables of accepted imports are exact, so
@@ -17,7 +17,7 @@ import omphjc
 PACKAGE_DIR = Path(omphjc.__file__).parent
 
 # Modules any layer may import: they run programs, guard paths, stamp outputs,
-# compare values, check numbers, read ROOT files and define the base classes of
+# compare values, validate numbers, read ROOT files and define the base classes of
 # the file formats, and know no catalogue, event format, tool, stage or command.
 SHARED_MODULES = (
     "omphjc.comparison",
@@ -59,7 +59,7 @@ CROSS_TOOL_IMPORTS = {
     ("omphjc.tools.pythia.driver", "omphjc.tools.delphes.card"),
 }
 
-# The one tool module the jobs layer imports: a job's seed is checked against
+# The one tool module the jobs layer imports: a job's seed is validated against
 # Pythia's limit.
 JOBS_TOOL_IMPORTS = {
     ("omphjc.jobs.job", "omphjc.tools.pythia.cmnd"),
