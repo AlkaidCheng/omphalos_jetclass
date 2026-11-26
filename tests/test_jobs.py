@@ -1614,6 +1614,31 @@ def test_a_later_task_keeps_the_identity_file(
     assert JobIdentity.read(job.identity_path).omphjc_version == "0.0.1"
 
 
+def test_a_job_reads_its_identity_file_once(
+    specs: Mapping[str, ProcessSpec], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def body(overwrite: bool, log_path: Path) -> TaskOutcome:
+        return TaskOutcome(RunResult())
+
+    _run_task(Job(specs["HToBB"], tmp_path, 1), TASK_X, {}, body)
+    read_paths = []
+    read = JobIdentity.read
+
+    def counted_read(path: Path, **options: Any) -> JobIdentity:
+        read_paths.append(path)
+        return read(path, **options)
+
+    monkeypatch.setattr(JobIdentity, "read", counted_read)
+    job = Job(specs["HToBB"], tmp_path, 1)
+    _run_task(job, TASK_Y, {}, body)
+    _run_task(job, TASK_Z, {}, body)
+    assert read_paths == [job.identity_path]
+    job.identity_path.unlink()
+    _run_task(job, TASK_Y, {}, body, force=True)
+    assert job.identity_path.exists()
+    assert read_paths == [job.identity_path]
+
+
 def test_a_directory_of_another_job_is_refused(
     specs: Mapping[str, ProcessSpec], tmp_path: Path
 ) -> None:
