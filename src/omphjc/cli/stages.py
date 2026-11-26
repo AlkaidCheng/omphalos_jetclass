@@ -1,4 +1,4 @@
-"""The stage commands: each runs one stage of a job and prints its report."""
+"""The stage commands: each runs the task of a stage of a job and prints its report."""
 
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
@@ -23,19 +23,19 @@ from omphjc.cli.options import (
     lookup_process,
     parse_assignment,
 )
+from omphjc.events.formats import EventFileRecord
 from omphjc.jobs import (
     Job,
     ReplacedRunError,
+    Task,
     TaskRecord,
     TerminationError,
     exception_on_termination,
-    generate,
-    shower,
-    simulate,
 )
 from omphjc.processes import ProcessSpec
 from omphjc.programs import ProgramError
 from omphjc.stamps import StampError
+from omphjc.tasks import DelphesSimulation, MadGraphGeneration, PythiaShower
 
 # The errors of a stage command that are reported as a message, not a traceback.
 _STAGE_ERRORS = (
@@ -87,31 +87,31 @@ def generate_job(
     """Generate the parton-level events of one job of a process with MadGraph."""
     spec = lookup_process(specs, name)
 
-    def run(job: Job) -> TaskRecord:
-        return generate(
+    def make_task(job: Job) -> Task:
+        return MadGraphGeneration(
             job,
             n_events=n_events,
             n_cores=n_cores,
-            timeout=timeout,
-            force=force,
-            mg5_path=mg5_path,
+            timeout_seconds=timeout,
+            program_path=mg5_path,
         )
 
     _run_stage_command(
         spec,
         job_id,
         outdir,
-        run=run,
+        make_task=make_task,
         title="MadGraph generation",
         lines=_generation_lines,
+        force=force,
     )
 
 
-def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
-    """Yield what the generation task of `job` ran with and what it made."""
+def _generation_lines(task: Task, record: TaskRecord) -> Iterator[str]:
+    """Yield what the generation `task` ran with and what it made."""
+    job = task.job
     metadata = record.metadata
-    task = job.get_task(record)
-    events = task.events
+    events = _recorded_events(record)
     yield f"  MadGraph {metadata['madgraph_version']}, seed {record.parameters['seed']}"
     yield format_row("events requested", record.parameters["n_events"])
     yield format_row("events generated", events.n_events)
@@ -121,10 +121,9 @@ def _generation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
     )
     yield format_row("cross section", cross_section)
     yield format_row("event file", job.relative_path(events.path))
-    yield format_row("log", job.relative_path(task.latest_log))
-    yield format_row(
-        "cards", f"{job.relative_path(job.task_dir(record.identity))}/cards/"
-    )
+    log_path = task.log_path(record.latest_run.run_id)
+    yield format_row("log", job.relative_path(log_path))
+    yield format_row("cards", f"{job.relative_path(task.directory)}/cards/")
 
 
 @click.command("shower")
@@ -161,38 +160,39 @@ def shower_job(
     spec = lookup_process(specs, name)
     overrides = dict(parse_assignment(item) for item in assignments)
 
-    def run(job: Job) -> TaskRecord:
-        return shower(
+    def make_task(job: Job) -> Task:
+        return PythiaShower(
             job,
             overrides=overrides,
-            timeout=timeout,
-            accept_input=accept_input,
-            force=force,
-            delphes_pythia8_path=delphes_pythia8_path,
+            timeout_seconds=timeout,
+            program_path=delphes_pythia8_path,
         )
 
     _run_stage_command(
         spec,
         job_id,
         outdir,
-        run=run,
+        make_task=make_task,
         title="Pythia shower",
         lines=_shower_lines,
+        accept_input=accept_input,
+        force=force,
     )
 
 
-def _shower_lines(job: Job, record: TaskRecord) -> Iterator[str]:
-    """Yield what the shower task of `job` ran with and what it made."""
+def _shower_lines(task: Task, record: TaskRecord) -> Iterator[str]:
+    """Yield what the shower `task` ran with and what it made."""
+    job = task.job
     metadata = record.metadata
-    task = job.get_task(record)
-    events = task.events
+    events = _recorded_events(record)
     yield f"  Pythia {metadata['pythia_version']}, seed {record.parameters['seed']}"
     yield format_row("events read", metadata["events_read"])
     yield format_row("events kept", events.n_events)
     if "matching_efficiency" in metadata:
         yield format_row("kept by matching", f"{metadata['matching_efficiency']:.1%}")
     yield format_row("output", job.relative_path(events.path))
-    yield format_row("log", job.relative_path(task.latest_log))
+    log_path = task.log_path(record.latest_run.run_id)
+    yield format_row("log", job.relative_path(log_path))
     yield format_row("settings", _format_card_paths(job, record))
 
 
@@ -235,38 +235,46 @@ def simulate_job(
     _refuse_accept_input_with_force(accept_input, force)
     spec = lookup_process(specs, name)
 
-    def run(job: Job) -> TaskRecord:
-        # The adapter loads the array libraries, so it is imported here and
-        # not when a command starts.
-        from omphjc.tools.delphes.adapter import DelphesSimulator
-
-        simulator = DelphesSimulator(
-            spec,
+    def make_task(job: Job) -> Task:
+        return DelphesSimulation(
+            job,
             detector_card_path=detector_card_path,
             timeout_seconds=timeout,
-            delphes_root_path=delphes_root_path,
+            program_path=delphes_root_path,
         )
-        return simulate(job, simulator, accept_input=accept_input, force=force)
 
     _run_stage_command(
         spec,
         job_id,
         outdir,
-        run=run,
+        make_task=make_task,
         title="Delphes simulation",
         lines=_simulation_lines,
+        accept_input=accept_input,
+        force=force,
     )
 
 
-def _simulation_lines(job: Job, record: TaskRecord) -> Iterator[str]:
-    """Yield what the simulation task of `job` ran with and what it made."""
-    task = job.get_task(record)
-    events = task.events
+def _simulation_lines(task: Task, record: TaskRecord) -> Iterator[str]:
+    """Yield what the simulation `task` ran with and what it made."""
+    job = task.job
+    events = _recorded_events(record)
     yield format_row("card", _format_card_paths(job, record))
     yield format_row("seed", record.parameters["seed"])
     yield format_row("events", events.n_events)
     yield format_row("output", job.relative_path(events.path))
-    yield format_row("log", job.relative_path(task.latest_log))
+    log_path = task.log_path(record.latest_run.run_id)
+    yield format_row("log", job.relative_path(log_path))
+
+
+def _recorded_events(record: TaskRecord) -> EventFileRecord:
+    """Return the events in `record`, the record of a task that is done."""
+    events = record.events
+    if events is None:
+        raise click.ClickException(
+            f"The {record.identity.name} task made no event file"
+        )
+    return events
 
 
 def _format_card_paths(job: Job, record: TaskRecord) -> str:
@@ -282,11 +290,13 @@ def _run_stage_command(
     job_id: int,
     outdir: Path,
     *,
-    run: Callable[[Job], TaskRecord],
+    make_task: Callable[[Job], Task],
     title: str,
-    lines: Callable[[Job, TaskRecord], Iterable[str]],
+    lines: Callable[[Task, TaskRecord], Iterable[str]],
+    accept_input: bool = False,
+    force: bool = False,
 ) -> None:
-    """Run a task of one job of `spec` through `run` and print its report.
+    """Run the task that `make_task` makes for one job of `spec`; print its report.
 
     The report holds, in order:
 
@@ -304,20 +314,20 @@ def _run_stage_command(
     """
     try:
         job = Job(spec, outdir, job_id)
-        previous_records = {task.name: task.record for task in job.tasks()}
+        task = make_task(job)
+        previous_record = task.record
         with exception_on_termination():
-            record = run(job)
+            record = task.run(accept_input=accept_input, force=force)
     except _STAGE_ERRORS as error:
         raise click.ClickException(str(error)) from error
-    previous_record = previous_records.get(record.identity.name)
     kept = previous_record is not None and record.runs == previous_record.runs
     outcome = "done, kept from an earlier run" if kept else "done"
     click.echo(format_job_line(job.spec.name, job.job_id, job.root_dir))
     click.echo(f"{title}: {outcome}")
     click.echo(format_row("run ID", record.latest_run.run_id))
-    for line in lines(job, record):
+    for line in lines(task, record):
         click.echo(line)
-    _report_accepted_input(job, record)
+    _report_accepted_input(task, record)
     if len(record.runs) > 1:
         statuses = ", ".join(run.status for run in record.runs)
         click.echo(format_row("runs", f"{len(record.runs)} ({statuses})"))
@@ -325,15 +335,14 @@ def _run_stage_command(
     _report_set_aside(job)
 
 
-def _report_accepted_input(job: Job, record: TaskRecord) -> None:
+def _report_accepted_input(task: Task, record: TaskRecord) -> None:
     """Print the ``input`` rows of a task that was kept for other inputs.
 
     One row is printed for each input that holds an acceptance and whose
-    file differs from the one the task read.
+    file differs from the one `task` read.
     """
     if all(input_record.accepted is None for input_record in record.inputs.values()):
         return
-    task = job.get_task(record)
     for input_name, input_file in task.input_files().items():
         input_record = record.inputs[input_name]
         accepted = input_record.accepted
