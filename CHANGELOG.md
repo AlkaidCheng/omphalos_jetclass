@@ -264,6 +264,8 @@
 - `omphjc.processes.input_card.InputCard.differences_from_official` returns
   the differences of a card from its official card, in place of
   `checked_differences`. (#106)
+- The `input` row that a stage report prints for an accepted input names each
+  fingerprint it shows, as `ran on fingerprint "lhe-v1:3f2a9c1e..."`. (#107)
 
 ### Fixed
 

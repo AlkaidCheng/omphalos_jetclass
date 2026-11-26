@@ -48,11 +48,16 @@ def format_count(number: int, noun: str) -> str:
 
 
 def format_fingerprint(fingerprint: str) -> str:
-    """Return `fingerprint` with its hash cut to eight digits, as ``lhe-v1:3f2a9c1e...``."""
+    """Return `fingerprint` as a report shows it: labelled, quoted and shortened.
+
+    A hash longer than eight digits is cut to its first eight, as in
+    ``fingerprint "lhe-v1:3f2a9c1e..."``.
+    """
     prefix, separator, content_hash = fingerprint.partition(":")
-    if len(content_hash) <= _SHOWN_HASH_DIGITS:
-        return fingerprint
-    return f"{prefix}{separator}{content_hash[:_SHOWN_HASH_DIGITS]}..."
+    shown = fingerprint
+    if len(content_hash) > _SHOWN_HASH_DIGITS:
+        shown = f"{prefix}{separator}{content_hash[:_SHOWN_HASH_DIGITS]}..."
+    return f'fingerprint "{shown}"'
 
 
 def format_row(label: str, value: object) -> str:

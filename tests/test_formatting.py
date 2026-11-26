@@ -28,11 +28,11 @@ def test_sizes_use_binary_units() -> None:
     assert format_size(2**41) == "2.0 TiB"
 
 
-def test_a_fingerprint_shows_the_first_digits_of_its_hash() -> None:
+def test_a_fingerprint_is_named_and_shows_the_first_digits_of_its_hash() -> None:
     fingerprint = "lhe-v1:3f2a9c1e4b7d0000"
-    assert format_fingerprint(fingerprint) == "lhe-v1:3f2a9c1e..."
-    assert format_fingerprint("lhe-v1:3f2a9c1e") == "lhe-v1:3f2a9c1e"
-    assert format_fingerprint("abc") == "abc"
+    assert format_fingerprint(fingerprint) == 'fingerprint "lhe-v1:3f2a9c1e..."'
+    assert format_fingerprint("lhe-v1:3f2a9c1e") == 'fingerprint "lhe-v1:3f2a9c1e"'
+    assert format_fingerprint("abc") == 'fingerprint "abc"'
 
 
 def test_counts_take_the_plural() -> None:
