@@ -87,6 +87,9 @@
 - `omphjc.file_content` reads the files that no tool's class reads as
   `JSONFile`, `YAMLFile`, `TextFile` or `BinaryFile`, each with a fingerprint.
   (#111)
+- `omphjc.processes.CatalogueFile` reads a catalogue as a file format, whose
+  fingerprint covers its value with the paths as written, so comments, layout
+  and the directory of the file leave it unchanged. (#112)
 
 ### Changed
 

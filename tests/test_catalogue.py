@@ -9,6 +9,7 @@ import yaml
 from omphjc.config_paths import catalogue_path
 from omphjc.processes import (
     CatalogueError,
+    CatalogueFile,
     ProcessSpec,
     get_process,
     process_names,
@@ -339,3 +340,47 @@ def test_a_model_name_that_is_not_plain_is_rejected(
 ) -> None:
     with pytest.raises(ValueError, match="model"):
         replace(specs["HToBB"], model=model)
+
+
+ONE_PROCESS = (
+    "processes:\n  X:\n    label: X\n    description: d\n    model: sm\n"
+    "    processes: ['p p > z']\n"
+)
+
+
+def test_a_catalogue_file_keeps_its_fingerprint_through_comments_and_layout(
+    tmp_path: Path,
+) -> None:
+    def fingerprint(text: str) -> str:
+        path = tmp_path / "catalogue.yaml"
+        path.write_text(text)
+        return CatalogueFile.read(path).fingerprint()
+
+    reflowed = (
+        "# one process\nprocesses:\n"
+        "  X: {label: X, description: d, model: sm, processes: ['p p > z']}\n"
+    )
+    assert fingerprint(ONE_PROCESS) == fingerprint(reflowed)
+    assert fingerprint(ONE_PROCESS) != fingerprint(ONE_PROCESS.replace("z", "w+"))
+    assert fingerprint(ONE_PROCESS).startswith("catalogue-v1:")
+
+
+def test_a_catalogue_file_has_one_fingerprint_in_any_directory(tmp_path: Path) -> None:
+    first = tmp_path / "first" / "catalogue.yaml"
+    second = tmp_path / "second" / "catalogue.yaml"
+    for path in (first, second):
+        path.parent.mkdir()
+        path.write_text(
+            ONE_PROCESS.replace("model: sm", "model: sm\n    madspin_card: a.dat")
+        )
+    assert CatalogueFile.record_file(first).fingerprint == (
+        CatalogueFile.record_file(second).fingerprint
+    )
+    assert CatalogueFile.record_file(first).file_format == "catalogue"
+
+
+def test_a_catalogue_file_defines_the_processes_that_read_catalogue_returns() -> None:
+    catalogue = CatalogueFile.read(catalogue_path())
+    assert catalogue.processes(catalogue_path().parent) == read_catalogue(
+        catalogue_path()
+    )

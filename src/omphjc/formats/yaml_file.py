@@ -2,11 +2,13 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypeVar
 
 import yaml
 
 from omphjc.formats.file_content import FileContent
+
+_YAMLFileT = TypeVar("_YAMLFileT", bound="YAMLFile")
 
 
 class _CanonicalDumper(yaml.SafeDumper):
@@ -38,7 +40,7 @@ class YAMLFile(FileContent):
     value: Any
 
     @classmethod
-    def read(cls, path: Path) -> "YAMLFile":
+    def read(cls: type[_YAMLFileT], path: Path) -> _YAMLFileT:
         """Return the value of the YAML file at `path`, read as UTF-8 text.
 
         Raises
