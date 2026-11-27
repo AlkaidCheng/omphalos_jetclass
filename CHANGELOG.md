@@ -269,6 +269,9 @@
 - `omphjc.data_files` becomes `omphjc.file_content`, with `DataFile` renamed
   `FileContent` and `omphjc.events.EventDataFile` renamed `EventFileContent`.
   (#108)
+- `omphjc.jobs.JobFileError` becomes `RecordFileError`, and `JobFile`, the base
+  class of the JSON files of a job, becomes
+  `omphjc.jobs.record_file.RecordFile`. (#109)
 
 ### Fixed
 

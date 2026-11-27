@@ -13,7 +13,7 @@ runs in a job directory writes the file, and no later task changes it::
     }
 
 ``omphjc_version`` is the version of omphjc that wrote the file.
-:mod:`omphjc.jobs.job_file` describes ``schema``.
+:mod:`omphjc.jobs.record_file` describes ``schema``.
 
 **A task** is identified in its job by its stage, its tool and its tag
 (:class:`TaskIdentity`). A stage can have several tasks, which differ in
@@ -27,12 +27,12 @@ from typing import Any, ClassVar
 
 from omphjc import __version__
 from omphjc.comparison import Difference
-from omphjc.jobs.job_file import JobFile
+from omphjc.jobs.record_file import RecordFile
 from omphjc.safe_paths import require_plain_name
 
 
 @dataclass(frozen=True)
-class JobIdentity(JobFile):
+class JobIdentity(RecordFile):
     """The process, the job number and the seed of one job.
 
     Two identities are equal when these three values are equal. The omphjc

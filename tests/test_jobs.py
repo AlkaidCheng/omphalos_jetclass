@@ -25,9 +25,9 @@ from omphjc.jobs import (
     AcceptedInput,
     InputRecord,
     Job,
-    JobFileError,
     JobIdentity,
     Manifest,
+    RecordFileError,
     ReplacedRunError,
     RunStatus,
     Task,
@@ -1773,7 +1773,8 @@ def test_an_identity_file_that_cannot_be_read_is_refused(
     with pytest.raises(ValueError, match="schema 99; .* reads schema 1"):
         Job(specs["HToBB"], tmp_path, 1)
     job.identity_path.write_text('{"schema": 1, "process": "HToBB"}')
-    with pytest.raises(JobFileError, match="job.json has invalid content") as refusal:
+    invalid_content = "job.json has invalid content"
+    with pytest.raises(RecordFileError, match=invalid_content) as refusal:
         Job(specs["HToBB"], tmp_path, 1)
     assert refusal.value.remedy is None
     job.identity_path.write_text("not json")
