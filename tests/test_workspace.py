@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from omphjc.comparison import Difference
-from omphjc.file_content import Card, FileRecord
+from omphjc.formats.card import Card
+from omphjc.formats.file_record import FileRecord
 from omphjc.programs import ProgramError
 from omphjc.stamps import SET_ASIDE_DIR, StampError, read_stamp, write_stamp
 from omphjc.workspace import LOG_NAME, ProgramWorkspace, Workspace

@@ -16,14 +16,15 @@ import omphjc
 
 PACKAGE_DIR = Path(omphjc.__file__).parent
 
-# Modules any layer may import: they run programs, guard paths, stamp outputs,
-# compare values, validate numbers, read ROOT files and define the base classes of
-# the file formats, and know no catalogue, event format, tool, stage or command.
+# Modules and packages any layer may import: they run programs, guard paths,
+# stamp outputs, compare values, validate numbers, read ROOT files and define the
+# file formats that no tool owns, and know no catalogue, event format, tool, stage
+# or command.
 SHARED_MODULES = (
     "omphjc.comparison",
     "omphjc.config_paths",
-    "omphjc.file_content",
     "omphjc.filetree",
+    "omphjc.formats",
     "omphjc.numeric",
     "omphjc.programs",
     "omphjc.root_files",
@@ -45,7 +46,7 @@ STAGE_LAYERS = ("omphjc.stages", "omphjc.jobs", "omphjc.tasks")
 # The modules omphjc.events may import besides its own: the event-file
 # contracts know no tool, stage or command.
 EVENTS_IMPORTS = (
-    "omphjc.file_content",
+    "omphjc.formats",
     "omphjc.numeric",
     "omphjc.root_files",
     "omphjc.root_io",
@@ -92,6 +93,10 @@ def _omphjc_imports(tree: ast.Module) -> set[str]:
 
 def _within(module: str, package: str) -> bool:
     return module == package or module.startswith(package + ".")
+
+
+def _is_shared(module: str) -> bool:
+    return any(_within(module, shared) for shared in SHARED_MODULES)
 
 
 MODULES = _parsed_modules()
@@ -150,7 +155,7 @@ def test_shared_modules_and_the_catalogue_import_no_tool_stage_or_command() -> N
     importers = [
         name
         for name in IMPORTS
-        if name in SHARED_MODULES or _within(name, "omphjc.processes")
+        if _is_shared(name) or _within(name, "omphjc.processes")
     ]
     reaches = {
         (name, target)
@@ -185,7 +190,8 @@ def test_the_run_contract_modules_import_no_catalogue_tool_stage_or_command() ->
 def test_shared_modules_import_no_catalogue_and_no_event_file() -> None:
     reaches = {
         (name, target)
-        for name in SHARED_MODULES
+        for name in IMPORTS
+        if _is_shared(name)
         for target in IMPORTS[name]
         if _within(target, "omphjc.processes") or _within(target, "omphjc.events")
     }
@@ -198,7 +204,8 @@ def test_the_event_files_import_only_their_own_and_four_shared_modules() -> None
         for name, targets in IMPORTS.items()
         if _within(name, "omphjc.events")
         for target in targets
-        if not _within(target, "omphjc.events") and target not in EVENTS_IMPORTS
+        if not _within(target, "omphjc.events")
+        and not any(_within(target, allowed) for allowed in EVENTS_IMPORTS)
     }
     assert reaches == set()
 

@@ -272,6 +272,9 @@
 - `omphjc.jobs.JobFileError` becomes `RecordFileError`, and `JobFile`, the base
   class of the JSON files of a job, becomes
   `omphjc.jobs.record_file.RecordFile`. (#109)
+- `omphjc.file_content` becomes the package `omphjc.formats`, which exports
+  `FileContent`, `FileRecord` and `Card`, each defined in a module of its own.
+  (#110)
 
 ### Fixed
 

@@ -1,7 +1,7 @@
 """The result of a run of a tool: the record of each file it made or read.
 
 A :class:`RunResult` holds the record of each output and of each card of a run
-(:class:`~omphjc.file_content.FileRecord`), by name, and the metadata of the
+(:class:`~omphjc.formats.file_record.FileRecord`), by name, and the metadata of the
 run. The record of a task keeps the result of its latest run
 (:mod:`omphjc.jobs.task`).
 
@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from omphjc.events.formats import EventFileRecord
-from omphjc.file_content import FileRecord
+from omphjc.formats.file_record import FileRecord
 
 EVENTS_OUTPUT = "events"
 """The name of the output that holds the events of a run, which the next stage reads."""
@@ -50,7 +50,7 @@ class RunResult:
 
         `record` is the result as :func:`dataclasses.asdict` writes it. Each
         file is read back by its record class
-        (:meth:`~omphjc.file_content.FileRecord.from_record`). An output
+        (:meth:`~omphjc.formats.file_record.FileRecord.from_record`). An output
         recorded with a format is an
         :class:`~omphjc.events.formats.EventFileRecord`.
         """

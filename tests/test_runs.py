@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from omphjc.events import EventFileRecord, EventFormat
-from omphjc.file_content import FileRecord
+from omphjc.formats.file_record import FileRecord
 from omphjc.runs import EVENTS_OUTPUT, RunResult
 
 

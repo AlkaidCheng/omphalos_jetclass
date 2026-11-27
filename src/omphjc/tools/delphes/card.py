@@ -43,7 +43,7 @@ from typing import Any, ClassVar
 
 from omphjc.comparison import Difference
 from omphjc.config_paths import delphes_reference_card_path
-from omphjc.file_content import Card
+from omphjc.formats.card import Card
 
 ParameterValue = tuple[str, ...]
 """A Delphes parameter as the list of Tcl elements it evaluates to.
