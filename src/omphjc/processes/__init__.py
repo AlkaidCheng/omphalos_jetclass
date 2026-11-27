@@ -2,6 +2,7 @@
 
 from omphjc.processes.catalogue import (
     CatalogueError,
+    CatalogueFile,
     ProcessSpec,
     RunCardValue,
     SettingValue,
@@ -13,6 +14,7 @@ from omphjc.processes.catalogue import (
 
 __all__ = [
     "CatalogueError",
+    "CatalogueFile",
     "ProcessSpec",
     "RunCardValue",
     "SettingValue",

@@ -14,6 +14,10 @@ classes is ``config/jetclass.yaml``. Each entry records:
 
 A ``common`` block holds the settings shared by every entry and names the
 Delphes card. Paths are absolute or relative to the catalogue file.
+
+A :class:`CatalogueFile` is the content of a catalogue file as a file format:
+its fingerprint covers the YAML value with the paths as written, so a comment
+or a change of layout keeps it, and the directory of the file is outside it.
 """
 
 import re
@@ -21,11 +25,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import yaml
 
 from omphjc.config_paths import catalogue_path
+from omphjc.formats.yaml_file import YAMLFile
 from omphjc.safe_paths import require_plain_name
 
 RunCardValue = bool | int | float | str | dict[int, float]
@@ -245,11 +250,39 @@ def read_catalogue(path: Path) -> Mapping[str, ProcessSpec]:
           ``JetMatching:merge``.
     """
     try:
-        with path.open(encoding="utf-8") as stream:
-            document = yaml.safe_load(stream)
-        return _read_document(document, base_dir=path.parent)
+        return CatalogueFile.read(path).processes(path.parent)
     except (yaml.YAMLError, ValueError) as error:
         raise CatalogueError(f"Catalogue {path}: {error}") from error
+
+
+@dataclass(frozen=True)
+class CatalogueFile(YAMLFile):
+    """The content of a catalogue file: its YAML value, with the paths as written.
+
+    Two catalogue files that differ only in comments or layout have the same
+    fingerprint. The fingerprint holds no directory, so the same file in two
+    directories has one fingerprint.
+    """
+
+    format_name: ClassVar[str] = "catalogue"
+    record_version: ClassVar[int] = 1
+
+    def processes(self, base_dir: Path) -> dict[str, ProcessSpec]:
+        """Return the processes that the catalogue defines, keyed by name.
+
+        Parameters
+        ----------
+        base_dir : Path
+            The directory that a relative path of the catalogue resolves
+            against: the directory that the catalogue file is in.
+
+        Raises
+        ------
+        ValueError
+            If the value is not a catalogue, for the reasons that
+            :func:`read_catalogue` lists.
+        """
+        return _read_document(self.value, base_dir=base_dir)
 
 
 def _read_document(document: Any, *, base_dir: Path) -> dict[str, ProcessSpec]:
