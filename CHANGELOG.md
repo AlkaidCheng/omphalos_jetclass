@@ -84,6 +84,9 @@
 - A job directory holds `job.json` with the job's process, number and seed
   (`omphjc.jobs.JobIdentity`), and no stage runs in the directory of another
   job. (#61)
+- `omphjc.file_content` reads the files that no tool's class reads as
+  `JSONFile`, `YAMLFile`, `TextFile` or `BinaryFile`, each with a fingerprint.
+  (#111)
 
 ### Changed
 
@@ -275,6 +278,8 @@
 - `omphjc.file_content` becomes the package `omphjc.formats`, which exports
   `FileContent`, `FileRecord` and `Card`, each defined in a module of its own.
   (#110)
+- `FileRecord.fingerprint` is always set, and `TaskRecord.read` refuses a
+  `task.json` that records a file without a fingerprint. (#111)
 
 ### Fixed
 

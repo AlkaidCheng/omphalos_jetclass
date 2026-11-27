@@ -172,7 +172,7 @@ class FakeReader(FakeTask):
     upstream: Mapping[str, str] = field(
         default_factory=lambda: {EVENTS_INPUT: "y-events", "pileup": "y-pileup"}
     )
-    given_input_fingerprints: dict[str, str | None] = field(default_factory=dict)
+    given_input_fingerprints: dict[str, str] = field(default_factory=dict)
 
     def upstream_tasks(self) -> dict[str, Task]:
         return {
@@ -316,7 +316,9 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
                     n_events=10,
                 ),
                 "summary": FileRecord(
-                    tmp_path / "x-fake" / "summary.txt", n_bytes=3, fingerprint=None
+                    tmp_path / "x-fake" / "summary.txt",
+                    n_bytes=3,
+                    fingerprint="text-v1:abc",
                 ),
             },
             cards={
@@ -366,7 +368,7 @@ def test_a_task_record_round_trips_through_json(tmp_path: Path) -> None:
             "summary": {
                 "path": "x-fake/summary.txt",
                 "n_bytes": 3,
-                "fingerprint": None,
+                "fingerprint": "text-v1:abc",
             },
         },
         "cards": {
@@ -470,6 +472,32 @@ def test_a_task_record_needs_a_run_and_a_result_that_fits_its_status(
     )
 
 
+def test_a_task_record_whose_file_has_no_fingerprint_is_refused(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "x-fake" / "task.json"
+    path.parent.mkdir()
+    output_path = tmp_path / "x-fake" / "out.txt"
+    TaskRecord(
+        TASK_X,
+        settings={},
+        parameters={},
+        runs=(_run("done"),),
+        result=RunResult(outputs={"out": FileRecord(output_path, 4, "text-v1:abc")}),
+    ).write(path, root_dir=tmp_path)
+    edited = json.loads(path.read_text())
+    edited["result"]["outputs"]["out"]["fingerprint"] = None
+    path.write_text(json.dumps(edited))
+    with pytest.raises(TaskRecordError) as refusal:
+        TaskRecord.read(path, root_dir=tmp_path)
+    assert str(refusal.value) == (
+        f"{path} has invalid content: the record of {output_path} must hold a "
+        'fingerprint such as "lhe-v1:<hash>", got None.\n'
+        "The file was changed after omphjc wrote it, or another version of omphjc "
+        "wrote it. Restore the file, or remove it and run the task again."
+    )
+
+
 def test_a_record_gives_its_outputs_only_when_its_latest_run_is_done(
     tmp_path: Path,
 ) -> None:
@@ -503,12 +531,14 @@ def test_a_task_record_refuses_a_path_outside_its_root_directory(
         parameters={},
         runs=(_run("done"),),
         result=RunResult(
-            outputs={"out": FileRecord(tmp_path / "elsewhere" / "out", 0, None)}
+            outputs={
+                "out": FileRecord(tmp_path / "elsewhere" / "out", 0, "text-v1:abc")
+            }
         ),
     )
     with pytest.raises(ValueError, match="elsewhere"):
         record.write(path, root_dir=tmp_path / "job")
-    card_elsewhere = FileRecord(tmp_path / "elsewhere" / "card.dat", 5, None)
+    card_elsewhere = FileRecord(tmp_path / "elsewhere" / "card.dat", 5, "text-v1:abc")
     record = TaskRecord(
         TASK_X,
         settings={},
@@ -566,7 +596,7 @@ def _make_output(job: Job, identity: TaskIdentity = TASK_X) -> TaskOutcome:
     output.write_text("made")
     return TaskOutcome(
         RunResult(
-            outputs={"out": FileRecord(output, len("made"), None)},
+            outputs={"out": FileRecord(output, len("made"), "text-v1:abc")},
             metadata={"n": 1},
         )
     )
@@ -581,11 +611,11 @@ def test_a_changed_or_deleted_card_leaves_the_task_done(
     def body(overwrite: bool, log_path: Path) -> TaskOutcome:
         outcome = _make_output(job)
         card_path.write_text("as run")
-        cards = {"card": FileRecord(card_path, len("as run"), None)}
+        cards = {"card": FileRecord(card_path, len("as run"), "text-v1:abc")}
         return replace(outcome, result=replace(outcome.result, cards=cards))
 
     record = _run_task(job, TASK_X, {}, body)
-    assert record.cards == {"card": FileRecord(card_path, len("as run"), None)}
+    assert record.cards == {"card": FileRecord(card_path, len("as run"), "text-v1:abc")}
     card_path.write_text("edited since")
     assert _task(job, TASK_X).status is TaskStatus.DONE
     card_path.unlink()
@@ -610,7 +640,9 @@ def test_a_stage_runs_once_and_its_result_is_kept(
     assert record.parameters == {"n_events": 10}
     assert record.inputs == {}
     assert record.result == RunResult(
-        outputs={"out": FileRecord(job.root_dir / "x-fake" / "out.txt", 4, None)},
+        outputs={
+            "out": FileRecord(job.root_dir / "x-fake" / "out.txt", 4, "text-v1:abc")
+        },
         metadata={"n": 1},
     )
     assert _task(job, TASK_X).record == record
@@ -771,7 +803,7 @@ def test_an_output_of_another_size_is_reported_before_a_missing_one(
         outputs = {}
         for name, path in (("first", first_path), ("second", second_path)):
             path.write_text("made")
-            outputs[name] = FileRecord(path, len("made"), None)
+            outputs[name] = FileRecord(path, len("made"), "text-v1:abc")
         return TaskOutcome(RunResult(outputs=outputs))
 
     record = _run_task(job, TASK_X, {}, body)
@@ -1240,14 +1272,16 @@ def test_a_run_whose_record_was_deleted_records_its_end(
 
 
 PARAMETERS = {"n_events": 10}
-INPUT_FINGERPRINTS = {"events": "v1:original", "pileup": "v1:minimum-bias"}
-CHANGED_INPUT_FINGERPRINTS = {**INPUT_FINGERPRINTS, "events": "v1:changed"}
-CHANGED_INPUT = "  fingerprint of events: expected v1:original, got v1:changed\n"
+INPUT_FINGERPRINTS = {"events": "lhe-v1:original", "pileup": "lhe-v1:minimum-bias"}
+CHANGED_INPUT_FINGERPRINTS = {**INPUT_FINGERPRINTS, "events": "lhe-v1:changed"}
+CHANGED_INPUT = (
+    "  fingerprint of events: expected lhe-v1:original, got lhe-v1:changed\n"
+)
 
 
 def _run_on_inputs(
     job: Job,
-    input_fingerprints: dict[str, str | None],
+    input_fingerprints: dict[str, str],
     *,
     parameters: Mapping[str, Any] = PARAMETERS,
     body: TaskBody | None = None,
@@ -1268,19 +1302,6 @@ def _run_on_inputs(
     return task.run(**options)
 
 
-def test_a_task_refuses_an_input_file_recorded_without_a_fingerprint(
-    specs: Mapping[str, ProcessSpec], tmp_path: Path
-) -> None:
-    job = Job(specs["HToBB"], tmp_path, 1)
-    refusal = (
-        "x-reader reads events as its events input, but the file is recorded "
-        "without a fingerprint"
-    )
-    with pytest.raises(ValueError, match=refusal):
-        _run_on_inputs(job, {EVENTS_INPUT: None, "pileup": "pileup-v1:a"})
-    assert not _task(job, TASK_READER).record_path.exists()
-
-
 def _acceptances(record: TaskRecord) -> dict[str, str | None]:
     """Return the fingerprint each input of `record` was accepted for, or ``None``."""
     return {
@@ -1298,16 +1319,16 @@ def test_a_task_records_each_input_apart_from_its_parameters(
     record = _run_on_inputs(job, INPUT_FINGERPRINTS)
     assert record.parameters == PARAMETERS
     assert record.inputs == {
-        "events": InputRecord("y-events", "v1:original"),
-        "pileup": InputRecord("y-pileup", "v1:minimum-bias"),
+        "events": InputRecord("y-events", "lhe-v1:original"),
+        "pileup": InputRecord("y-pileup", "lhe-v1:minimum-bias"),
     }
     assert record.input_fingerprints == INPUT_FINGERPRINTS
     assert _run_on_inputs(job, INPUT_FINGERPRINTS) == record
-    other_pileup = {**INPUT_FINGERPRINTS, "pileup": "v1:other"}
+    other_pileup = {**INPUT_FINGERPRINTS, "pileup": "lhe-v1:other"}
     with pytest.raises(ValueError) as refusal:
         _run_on_inputs(job, other_pileup)
     assert str(refusal.value).splitlines()[1:-1] == [
-        "  fingerprint of pileup: expected v1:minimum-bias, got v1:other"
+        "  fingerprint of pileup: expected lhe-v1:minimum-bias, got lhe-v1:other"
     ]
 
 
@@ -1351,7 +1372,7 @@ def test_an_accepted_input_keeps_a_done_task_without_a_run(
     job = Job(specs["HToBB"], tmp_path, 1)
     done_record = _run_on_inputs(job, INPUT_FINGERPRINTS)
     accepted_record = _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS, accept_input=True)
-    assert _acceptances(accepted_record) == {"events": "v1:changed", "pileup": None}
+    assert _acceptances(accepted_record) == {"events": "lhe-v1:changed", "pileup": None}
     assert accepted_record.is_done
     assert (
         accepted_record.parameters,
@@ -1378,12 +1399,15 @@ def test_each_input_is_accepted_on_its_own(
 ) -> None:
     job = Job(specs["HToBB"], tmp_path, 1)
     _run_on_inputs(job, INPUT_FINGERPRINTS)
-    other_pileup = {**INPUT_FINGERPRINTS, "pileup": "v1:other"}
+    other_pileup = {**INPUT_FINGERPRINTS, "pileup": "lhe-v1:other"}
     pileup_record = _run_on_inputs(job, other_pileup, accept_input=True)
-    assert _acceptances(pileup_record) == {"events": None, "pileup": "v1:other"}
-    both_changed = {**other_pileup, "events": "v1:changed"}
+    assert _acceptances(pileup_record) == {"events": None, "pileup": "lhe-v1:other"}
+    both_changed = {**other_pileup, "events": "lhe-v1:changed"}
     both_record = _run_on_inputs(job, both_changed, accept_input=True)
-    assert _acceptances(both_record) == {"events": "v1:changed", "pileup": "v1:other"}
+    assert _acceptances(both_record) == {
+        "events": "lhe-v1:changed",
+        "pileup": "lhe-v1:other",
+    }
     assert both_record.inputs["pileup"] == pileup_record.inputs["pileup"]
     assert _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS) == both_record
     assert _run_on_inputs(job, other_pileup) == both_record
@@ -1395,9 +1419,9 @@ def test_a_later_acceptance_replaces_the_earlier_one(
     job = Job(specs["HToBB"], tmp_path, 1)
     _run_on_inputs(job, INPUT_FINGERPRINTS)
     _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS, accept_input=True)
-    later_input_fingerprints = {**INPUT_FINGERPRINTS, "events": "v1:later"}
+    later_input_fingerprints = {**INPUT_FINGERPRINTS, "events": "lhe-v1:later"}
     later_record = _run_on_inputs(job, later_input_fingerprints, accept_input=True)
-    assert _acceptances(later_record) == {"events": "v1:later", "pileup": None}
+    assert _acceptances(later_record) == {"events": "lhe-v1:later", "pileup": None}
     assert _run_on_inputs(job, later_input_fingerprints) == later_record
     with pytest.raises(ValueError, match=CHANGED_INPUT):
         _run_on_inputs(job, CHANGED_INPUT_FINGERPRINTS)
@@ -1438,7 +1462,9 @@ def test_accept_input_changes_nothing_for_a_task_that_is_not_done(
 
 
 def test_a_record_holds_an_accepted_input_only_when_its_latest_run_is_done() -> None:
-    accepted = InputRecord("y-events", "v1:original", AcceptedInput("v1:changed", "t"))
+    accepted = InputRecord(
+        "y-events", "lhe-v1:original", AcceptedInput("lhe-v1:changed", "t")
+    )
     acceptance = "so no input should hold an acceptance, but 'events' holds one"
     with pytest.raises(ValueError, match=acceptance):
         TaskRecord(TASK_READER, {}, {}, (_run("failed"),), inputs={"events": accepted})
@@ -2094,7 +2120,7 @@ class FakeSimulation(Task):
         output_path = self.directory / "simulated.txt"
         output_path.write_text(f"{events.path.name} {self.job.seed}")
         log_path.write_text("simulated")
-        output = FileRecord(output_path, output_path.stat().st_size, None)
+        output = FileRecord(output_path, output_path.stat().st_size, "text-v1:abc")
         return TaskOutcome(
             RunResult(
                 outputs={"out": output},
