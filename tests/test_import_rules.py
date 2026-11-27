@@ -22,7 +22,7 @@ PACKAGE_DIR = Path(omphjc.__file__).parent
 SHARED_MODULES = (
     "omphjc.comparison",
     "omphjc.config_paths",
-    "omphjc.data_files",
+    "omphjc.file_content",
     "omphjc.filetree",
     "omphjc.numeric",
     "omphjc.programs",
@@ -45,7 +45,7 @@ STAGE_LAYERS = ("omphjc.stages", "omphjc.jobs", "omphjc.tasks")
 # The modules omphjc.events may import besides its own: the event-file
 # contracts know no tool, stage or command.
 EVENTS_IMPORTS = (
-    "omphjc.data_files",
+    "omphjc.file_content",
     "omphjc.numeric",
     "omphjc.root_files",
     "omphjc.root_io",

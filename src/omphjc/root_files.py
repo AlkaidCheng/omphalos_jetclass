@@ -28,7 +28,7 @@ from typing import Any, ClassVar, TypeVar
 import awkward as ak
 from uproot.interpretation.numerical import Numerical
 
-from omphjc.data_files import DataFile
+from omphjc.file_content import FileContent
 from omphjc.root_io import open_tree
 
 _ROOTFileT = TypeVar("_ROOTFileT", bound="ROOTFile")
@@ -85,7 +85,7 @@ class SampledLeaf:
 
 
 @dataclass(frozen=True)
-class ROOTFile(DataFile):
+class ROOTFile(FileContent):
     """The structure of the tree of a ROOT file and hashes of a sample of it.
 
     A subclass is one file format. It states :attr:`format_name` and

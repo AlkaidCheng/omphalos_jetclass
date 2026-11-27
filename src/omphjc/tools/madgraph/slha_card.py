@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from omphjc.comparison import Difference
-from omphjc.data_files import Card
+from omphjc.file_content import Card
 from omphjc.processes.catalogue import RunCardValue
 from omphjc.tools.madgraph.run_card import parse_value
 

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from omphjc.comparison import Difference
-from omphjc.data_files import Card, FileRecord
+from omphjc.file_content import Card, FileRecord
 
 
 @dataclass(frozen=True)

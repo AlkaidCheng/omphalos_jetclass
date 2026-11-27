@@ -10,7 +10,7 @@ rest is in these modules:
 """
 
 from omphjc.events.formats import (
-    EventDataFile,
+    EventFileContent,
     EventFileRecord,
     EventFormat,
     EventReader,
@@ -18,9 +18,9 @@ from omphjc.events.formats import (
 )
 
 __all__ = [
-    "EventDataFile",
-    "EventSource",
+    "EventFileContent",
     "EventFileRecord",
     "EventFormat",
     "EventReader",
+    "EventSource",
 ]

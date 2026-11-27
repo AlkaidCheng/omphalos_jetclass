@@ -98,7 +98,7 @@ keys are:
 its class gives them. Each output has its ``path``, its size in bytes,
 ``n_bytes``, and the ``fingerprint`` of its content in its format, which is
 ``null`` for a file recorded without being read
-(:class:`~omphjc.data_files.FileRecord`). An event file also has its
+(:class:`~omphjc.file_content.FileRecord`). An event file also has its
 ``format`` and the number of events it holds
 (:class:`~omphjc.events.formats.EventFileRecord`). The next task reads the
 output named ``events``.
@@ -106,7 +106,7 @@ output named ``events``.
 ``cards`` holds the cards of the task, under the names their classes give
 them. A card is a file that steers the task's program, such as a run card or
 a detector card. Each card is recorded as an output is, with the fingerprint
-of its parsed content (:class:`~omphjc.data_files.Card`), so that two cards
+of its parsed content (:class:`~omphjc.file_content.Card`), so that two cards
 that differ only in comments and layout have one fingerprint. The cards are
 a record for the reader: they do not count when the status of the task is
 judged.
@@ -206,8 +206,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, get_args
 
 from omphjc.comparison import Difference
-from omphjc.data_files import FileRecord
 from omphjc.events.formats import EventFileRecord
+from omphjc.file_content import FileRecord
 from omphjc.jobs.identity import TaskIdentity
 from omphjc.jobs.job_file import JobFile, JobFileError
 from omphjc.runs import EVENTS_OUTPUT, RunResult
@@ -768,11 +768,11 @@ class TaskOutput:
     name : str
         The name of the output in the result of a run, such as ``"events"``.
     file_format : str
-        The format of the file: the :attr:`~omphjc.data_files.DataFile.format_name`
+        The format of the file: the :attr:`~omphjc.file_content.FileContent.format_name`
         of the class that reads it, such as ``"lhe"`` or ``"delphes_root"``.
         A task that reads the output knows its parser from it, and the
         fingerprint of the file in a record carries it
-        (:attr:`~omphjc.data_files.FileRecord.file_format`).
+        (:attr:`~omphjc.file_content.FileRecord.file_format`).
     """
 
     name: str
@@ -1443,7 +1443,7 @@ class Task(ABC):
                     f"{self.name} reads {input_file.path} as its {input_name} "
                     "input, but the file is recorded without a fingerprint, so a "
                     "change to it could not be told. Record it with "
-                    "DataFile.record_file, which reads it."
+                    "FileContent.record_file, which reads it."
                 )
             upstream_name = upstream_tasks[input_name].name
             input_records[input_name] = InputRecord(
