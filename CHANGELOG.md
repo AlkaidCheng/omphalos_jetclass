@@ -261,6 +261,9 @@
   `omphjc.tools.delphes.adapter.DelphesSimulator` are removed. (#102)
 - `omphjc.jobs.RunStatus` names how a run ended, in place of the string
   constants `omphjc.jobs.DONE`, `FAILED`, `INTERRUPTED` and `RUNNING`. (#104)
+- `omphjc.processes.input_card.InputCard.differences_from_official` returns
+  the differences of a card from its official card, in place of
+  `checked_differences`. (#106)
 
 ### Fixed
 

@@ -134,7 +134,7 @@ def inside(root_dir: Path, *names: str) -> Path:
 def remove_inside(root_dir: Path, paths: Iterable[Path]) -> None:
     """Delete the files and directory trees in `paths`, all inside `root_dir`.
 
-    Every path is checked before any is removed, so a refused path leaves all
+    Every path is validated before any is removed, so a refused path leaves all
     of them in place. A path that does not exist is skipped. Directory trees
     are removed with :func:`shutil.rmtree`, which deletes the symbolic links
     inside a tree rather than following them.

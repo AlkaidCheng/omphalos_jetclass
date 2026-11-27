@@ -1,8 +1,8 @@
-"""The run lifecycle every driver follows, checked on MadGraph, Pythia and Delphes.
+"""The run lifecycle every driver follows, tested on MadGraph, Pythia and Delphes.
 
 A drive function refuses an occupied output unless asked to overwrite it,
 replaces an earlier run it can confirm, seals what a failed run left, sets
-aside what a run killed before sealing left, and checks a request before it
+aside what a run killed before sealing left, and validates a request before it
 touches an earlier run.
 """
 

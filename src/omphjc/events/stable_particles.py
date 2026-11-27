@@ -192,7 +192,9 @@ class StableParticleDefinition:
             _flat(particles[name])
             for name in ("part_pid", "part_m1", "part_m2", "part_d1", "part_d2")
         )
-        _check_links(particles, counts, part_m1=m1, part_m2=m2, part_d1=d1, part_d2=d2)
+        _validate_links(
+            particles, counts, part_m1=m1, part_m2=m2, part_d1=d1, part_d2=d2
+        )
         event_start = np.repeat(np.cumsum(counts) - counts, counts)
         # The tests narrow the particles step by step: few decayed, and fewer of
         # those are of a long-lived species.
@@ -233,7 +235,7 @@ class StableParticleDefinition:
         raise ValueError("the mother links did not settle")
 
 
-def _check_links(
+def _validate_links(
     particles: "ak.Array", counts: "np.ndarray", **links: "np.ndarray"
 ) -> None:
     """Refuse a mother or daughter index that points outside its event.

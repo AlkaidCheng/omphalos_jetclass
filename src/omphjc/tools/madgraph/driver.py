@@ -193,7 +193,7 @@ def generate_events(
         `workdir`. By default an existing process directory is an error, so a
         run never deletes results by accident.
 
-        The directory is replaced only after every other check has passed. It
+        The directory is replaced only after every other validation has passed. It
         is deleted when the earlier run sealed it and nothing in it has changed
         since. Otherwise it is moved aside (see `MadGraphRun.set_aside`); this
         happens, for example, when the earlier run was killed before it could

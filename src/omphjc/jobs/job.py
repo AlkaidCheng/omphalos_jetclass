@@ -251,7 +251,7 @@ class Job:
         return sorted(removed, key=lambda folder: (folder.created, folder.path))
 
     def record_identity(self) -> None:
-        """Create the job directory with its ``job.json``, or check the one it holds.
+        """Create the job directory with its ``job.json``, or validate the one it holds.
 
         A job reads and compares the file once. A later call does nothing
         while the file is there, and writes it again when it is gone.

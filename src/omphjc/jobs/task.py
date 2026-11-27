@@ -675,7 +675,7 @@ class TaskRecord(JobFile):
         return replace(self, runs=(*self.runs[:-1], run), result=outcome.result)
 
     def current_status(self) -> "tuple[TaskStatus, str]":
-        """Return the status of the task now, with its output files checked.
+        """Return the status of the task now, with its output files validated.
 
         The record says how the latest run ended. The output files may have
         been deleted or changed since, so the status is:
@@ -979,7 +979,7 @@ class Task(ABC):
 
     @property
     def status(self) -> TaskStatus:
-        """Whether the task is done now, with its output files checked.
+        """Whether the task is done now, with its output files validated.
 
         A task without a record is not done. Otherwise the status is the one
         its record gives (:meth:`TaskRecord.current_status`).
@@ -1492,7 +1492,7 @@ class Task(ABC):
         """
         if record is None or not record.is_done:
             return None
-        self._check_parameters(record, parameters)
+        self._validate_parameters(record, parameters)
         status, detail = record.current_status()
         is_intact = status is TaskStatus.DONE
         if input_fingerprints != record.input_fingerprints:
@@ -1516,7 +1516,9 @@ class Task(ABC):
             )
         return None
 
-    def _check_parameters(self, record: TaskRecord, parameters: dict[str, Any]) -> None:
+    def _validate_parameters(
+        self, record: TaskRecord, parameters: dict[str, Any]
+    ) -> None:
         """Refuse `parameters` when the task ran with other ones.
 
         The message names each parameter that differs. A nested parameter

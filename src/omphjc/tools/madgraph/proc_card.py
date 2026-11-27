@@ -171,8 +171,8 @@ class ProcCard(InputCard):
             return []
         return [Difference("commands", " | ".join(expected), " | ".join(record))]
 
-    def checked_differences(self, reference: "ProcCard") -> list[Difference]:
-        """Return the differences from `reference` that a check reports.
+    def differences_from_official(self, official: "ProcCard") -> list[Difference]:
+        """Return the differences of this card from `official`, an official card.
 
         The ``define`` commands are compared by the multiparticles they leave
         (:meth:`multiparticles`), one difference for each multiparticle with
@@ -189,9 +189,10 @@ class ProcCard(InputCard):
         has the same members in both. The other commands are compared from
         the first one after them.
 
-        A reference that loads no model after those commands uses the
-        Standard Model, so it gets the command ``import model sm``. A
-        reference without those commands is compared from its first command.
+        An official card that loads no model after those commands uses the
+        Standard Model, so it gets the command ``import model sm``. An
+        official card without those commands is compared from its first
+        command.
 
         Raises
         ------
@@ -200,16 +201,16 @@ class ProcCard(InputCard):
             model.
         """
         count = len(_PREAMBLE_COMMANDS)
-        preamble, stated = reference.commands[:count], reference.commands[count:]
+        preamble, stated = official.commands[:count], official.commands[count:]
         if preamble != _PREAMBLE_COMMANDS:
-            preamble, stated = (), reference.commands
+            preamble, stated = (), official.commands
         others = ProcCard(commands=stated)._without_definitions().commands
         if not others or not others[0].startswith("import model"):
             others = ("import model sm", *others)
         after_preamble = ProcCard(commands=(*preamble, *self.commands))
         return [
             *self._without_definitions().differences(ProcCard(commands=others)),
-            *after_preamble.multiparticles().differences(reference.multiparticles()),
+            *after_preamble.multiparticles().differences(official.multiparticles()),
         ]
 
     def _without_definitions(self) -> "ProcCard":

@@ -135,7 +135,7 @@ def build_record(columns: Mapping[str, ak.Array], *, downcast: bool) -> ak.Array
 def _cast(field: RecordField, column: ak.Array) -> ak.Array:
     """Return `column` cast to `field`'s dtype.
 
-    A float is cast to another float dtype without a check. A cast of an
+    A float is cast to another float dtype without validation. A cast of an
     integer to a narrower integer dtype is refused when a value lies outside
     the narrower dtype. Any other cast that can change a value, such as a cast
     from a float to an integer, is refused too.

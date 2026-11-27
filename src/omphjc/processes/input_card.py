@@ -61,15 +61,16 @@ class InputCard(Card):
         reference_path = reference_dir / cls.reference_file_name
         return cls.read(reference_path) if reference_path.is_file() else None
 
-    def checked_differences(
-        self: _InputCardT, reference: _InputCardT
+    def differences_from_official(
+        self: _InputCardT, official: _InputCardT
     ) -> list[Difference]:
-        """Return the differences from `reference` that a check reports.
+        """Return the differences of this card from `official`, an official card.
 
-        These are the differences of :meth:`differences`. A class that
-        leaves some of them out of a check overrides this method.
+        By default these are the differences of :meth:`differences`. A class
+        overrides this method when its official cards hold more than the
+        catalogue states, or say the same thing in other commands.
         """
-        return self.differences(reference)
+        return self.differences(official)
 
     @classmethod
     def compare_with_reference(cls, spec: ProcessSpec) -> list[Difference]:
@@ -96,5 +97,5 @@ class InputCard(Card):
             return [Difference("card", None, cls.format_name)]
         return [
             Difference(f"{cls.format_name}.{d.item}", d.expected, d.actual)
-            for d in card.checked_differences(reference)
+            for d in card.differences_from_official(reference)
         ]
