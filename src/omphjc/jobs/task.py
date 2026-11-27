@@ -294,7 +294,7 @@ class TaskRun:
 
     @classmethod
     def started_now(cls) -> "TaskRun":
-        """Return a run that starts now on this host, with a new run ID."""
+        """Record a run that starts now on this host, with a new run ID."""
         start_time = datetime.now(timezone.utc)
         random_digits = secrets.token_hex(_RUN_ID_RANDOM_BYTES)
         return cls(
@@ -302,6 +302,29 @@ class TaskRun:
             status=RunStatus.RUNNING,
             started=start_time.isoformat(timespec="seconds"),
             host=socket.gethostname(),
+        )
+
+    def ended_now(
+        self,
+        status: RunStatus,
+        *,
+        error: str | None = None,
+        usage: dict[str, float] | None = None,
+        set_aside: str | None = None,
+    ) -> "TaskRun":
+        """Record that the run ended now with `status`.
+
+        The run keeps its ID, its start time and its host. `error`, `usage` and
+        `set_aside` hold what the module docstring describes, and each is empty
+        unless it is given.
+        """
+        return replace(
+            self,
+            status=status,
+            finished=timestamp(),
+            error=error,
+            usage={} if usage is None else usage,
+            set_aside=set_aside,
         )
 
 
@@ -577,10 +600,11 @@ class TaskRecord(JobFile):
         so it becomes ``interrupted``. The new run has no result yet, and no
         input holds an acceptance.
         """
-        previous_runs = self.runs
+        earlier_runs = self.runs
         if self.latest_run.status is RunStatus.RUNNING:
-            previous_runs = self._runs_with_latest(status=RunStatus.INTERRUPTED)
-        runs = (*previous_runs, TaskRun.started_now())
+            abandoned_run = replace(self.latest_run, status=RunStatus.INTERRUPTED)
+            earlier_runs = (*self.runs[:-1], abandoned_run)
+        runs = (*earlier_runs, TaskRun.started_now())
         inputs = {
             input_name: replace(input_record, accepted=None)
             for input_name, input_record in self.inputs.items()
@@ -622,17 +646,13 @@ class TaskRecord(JobFile):
 
     def failed(self, *, error: str) -> "TaskRecord":
         """Record that the latest run failed with `error`."""
-        runs = self._runs_with_latest(
-            status=RunStatus.FAILED, finished=timestamp(), error=error
-        )
-        return replace(self, runs=runs)
+        run = self.latest_run.ended_now(RunStatus.FAILED, error=error)
+        return replace(self, runs=(*self.runs[:-1], run))
 
     def interrupted(self, *, error: str) -> "TaskRecord":
         """Record that a signal interrupted the latest run; `error` names it."""
-        runs = self._runs_with_latest(
-            status=RunStatus.INTERRUPTED, finished=timestamp(), error=error
-        )
-        return replace(self, runs=runs)
+        run = self.latest_run.ended_now(RunStatus.INTERRUPTED, error=error)
+        return replace(self, runs=(*self.runs[:-1], run))
 
     def done(
         self, outcome: TaskOutcome, *, wall_seconds: float, root_dir: Path
@@ -643,9 +663,8 @@ class TaskRecord(JobFile):
         folder is made relative to `root_dir`, the job directory.
         """
         set_aside_dir = outcome.set_aside_dir
-        runs = self._runs_with_latest(
-            status=RunStatus.DONE,
-            finished=timestamp(),
+        run = self.latest_run.ended_now(
+            RunStatus.DONE,
             usage={"wall_seconds": round(wall_seconds, 3), **outcome.usage},
             set_aside=(
                 None
@@ -653,7 +672,7 @@ class TaskRecord(JobFile):
                 else set_aside_dir.relative_to(root_dir).as_posix()
             ),
         )
-        return replace(self, runs=runs, result=outcome.result)
+        return replace(self, runs=(*self.runs[:-1], run), result=outcome.result)
 
     def current_status(self) -> "tuple[TaskStatus, str]":
         """Return the status of the task now, with its output files checked.
@@ -691,10 +710,6 @@ class TaskRecord(JobFile):
                 )
                 break
         return status, detail
-
-    def _runs_with_latest(self, **changes: Any) -> tuple[TaskRun, ...]:
-        """Return the runs, the latest with its fields replaced by `changes`."""
-        return (*self.runs[:-1], replace(self.latest_run, **changes))
 
     def _done_result(self) -> RunResult:
         """Return the result of a record whose latest run is done."""
