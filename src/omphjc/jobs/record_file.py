@@ -1,16 +1,16 @@
 """The JSON files in which a job records what it is and what it ran.
 
 Each kind of file has one class, and every such class is a
-:class:`JobFile`. An object of the class holds the content of one file.
+:class:`RecordFile`. An object of the class holds the content of one file.
 The class states how the content is written down as JSON values
-(:meth:`JobFile.as_record`) and how it is built from them
-(:meth:`JobFile.from_record`). Writing and reading are the same for every
+(:meth:`RecordFile.as_record`) and how it is built from them
+(:meth:`RecordFile.from_record`). Writing and reading are the same for every
 kind of file.
 
 Every file holds the field ``schema``, which numbers the layout of the job
 files. A file of another schema is refused.
 
-A file that cannot be read is refused with a :class:`JobFileError`, which
+A file that cannot be read is refused with a :class:`RecordFileError`, which
 names the file and what is wrong with it. A class of file may refuse its files
 with a subclass that also says how to go on.
 """
@@ -24,10 +24,10 @@ from typing import Any, ClassVar, TypeVar
 
 SCHEMA_VERSION = 1
 
-_JobFileT = TypeVar("_JobFileT", bound="JobFile")
+_RecordFileT = TypeVar("_RecordFileT", bound="RecordFile")
 
 
-class JobFileError(ValueError):
+class RecordFileError(ValueError):
     """A file of a job that cannot be read as the content of its class.
 
     The message names the file and says what is wrong with it. When the error
@@ -54,7 +54,7 @@ class JobFileError(ValueError):
         return message if self.remedy is None else f"{message}.\n{self.remedy}"
 
 
-class JobFile(ABC):
+class RecordFile(ABC):
     """The content of one JSON file of a job.
 
     Attributes
@@ -62,12 +62,12 @@ class JobFile(ABC):
     file_name : str
         The name of the file, such as ``"manifest.json"``.
     read_error : type
-        The :class:`JobFileError` class with which :meth:`read` refuses a file
+        The :class:`RecordFileError` class with which :meth:`read` refuses a file
         of this class.
     """
 
     file_name: ClassVar[str]
-    read_error: ClassVar[type[JobFileError]] = JobFileError
+    read_error: ClassVar[type[RecordFileError]] = RecordFileError
 
     @abstractmethod
     def as_record(self) -> dict[str, Any]:
@@ -80,8 +80,8 @@ class JobFile(ABC):
     @classmethod
     @abstractmethod
     def from_record(
-        cls: type[_JobFileT], record: dict[str, Any], root_dir: Path
-    ) -> _JobFileT:
+        cls: type[_RecordFileT], record: dict[str, Any], root_dir: Path
+    ) -> _RecordFileT:
         """Return the content that `record` describes.
 
         Parameters
@@ -134,8 +134,8 @@ class JobFile(ABC):
 
     @classmethod
     def read(
-        cls: type[_JobFileT], path: Path, *, root_dir: Path | None = None
-    ) -> _JobFileT:
+        cls: type[_RecordFileT], path: Path, *, root_dir: Path | None = None
+    ) -> _RecordFileT:
         """Return the content of the file at `path`.
 
         Parameters
@@ -148,7 +148,7 @@ class JobFile(ABC):
 
         Raises
         ------
-        JobFileError
+        RecordFileError
             If the file is not JSON, has no ``schema`` field, was written
             with another schema, or does not hold the fields of this class.
             The error is a :attr:`read_error`.

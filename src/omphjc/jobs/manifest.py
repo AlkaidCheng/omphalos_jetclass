@@ -22,7 +22,7 @@ name of the task::
 The keys:
 
 ``schema``
-    The layout version of the file (:mod:`omphjc.jobs.job_file`).
+    The layout version of the file (:mod:`omphjc.jobs.record_file`).
 ``process``, ``job_id``, ``seed``
     The identity of the job, as in ``job.json``
     (:mod:`omphjc.jobs.identity`).
@@ -48,7 +48,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from omphjc.jobs.identity import JobIdentity
-from omphjc.jobs.job_file import JobFile
+from omphjc.jobs.record_file import RecordFile
 from omphjc.jobs.task import RunStatus
 
 
@@ -75,7 +75,7 @@ class TaskSummary:
 
 
 @dataclass(frozen=True)
-class Manifest(JobFile):
+class Manifest(RecordFile):
     """The manifest of one job.
 
     Parameters

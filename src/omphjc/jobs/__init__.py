@@ -24,8 +24,8 @@ The modules, by what they hold::
                     stage, the tool and the tag of a task
     manifest.py     Manifest, the content of manifest.json, which lists a
                     TaskSummary of each task's record
-    job_file.py     JobFile, the base class of the job's JSON files, and
-                    JobFileError, the refusal of a file that cannot be read
+    record_file.py  RecordFile, the base class of the job's JSON files, and
+                    RecordFileError, the refusal of a file that cannot be read
 
 The classes of the tasks are in :mod:`omphjc.tasks`.
 
@@ -51,8 +51,8 @@ How a task is recorded:
 
 from omphjc.jobs.identity import JobIdentity, TaskIdentity
 from omphjc.jobs.job import Job, exception_on_termination, job_seed
-from omphjc.jobs.job_file import JobFileError
 from omphjc.jobs.manifest import Manifest, TaskSummary
+from omphjc.jobs.record_file import RecordFileError
 from omphjc.jobs.task import (
     EVENTS_INPUT,
     TASK_REGISTRY,
@@ -78,9 +78,9 @@ __all__ = [
     "AcceptedInput",
     "InputRecord",
     "Job",
-    "JobFileError",
     "JobIdentity",
     "Manifest",
+    "RecordFileError",
     "ReplacedRunError",
     "RunStatus",
     "Task",

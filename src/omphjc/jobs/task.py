@@ -69,7 +69,7 @@ Every path in the record is relative to the job directory. The top-level
 keys are:
 
 ``schema``
-    The layout version of the file (:mod:`omphjc.jobs.job_file`).
+    The layout version of the file (:mod:`omphjc.jobs.record_file`).
 ``identity``
     The stage, the tool and the tag of the task
     (:class:`~omphjc.jobs.identity.TaskIdentity`). The directory of the task
@@ -209,7 +209,7 @@ from omphjc.comparison import Difference
 from omphjc.events.formats import EventFileRecord
 from omphjc.file_content import FileRecord
 from omphjc.jobs.identity import TaskIdentity
-from omphjc.jobs.job_file import JobFile, JobFileError
+from omphjc.jobs.record_file import RecordFile, RecordFileError
 from omphjc.runs import EVENTS_OUTPUT, RunResult
 from omphjc.safe_paths import inside, remove_inside
 from omphjc.stages import Stage
@@ -385,7 +385,7 @@ class InputRecord:
         )
 
 
-class TaskRecordError(JobFileError):
+class TaskRecordError(RecordFileError):
     """A ``task.json`` that cannot be read as the record of its task.
 
     Unless the error is given another remedy, the message ends with the likely
@@ -407,7 +407,7 @@ class TaskRecordError(JobFileError):
 
 
 @dataclass(frozen=True)
-class TaskRecord(JobFile):
+class TaskRecord(RecordFile):
     """What one task did; the module docstring describes the fields.
 
     Raises
@@ -419,7 +419,7 @@ class TaskRecord(JobFile):
     """
 
     file_name: ClassVar[str] = "task.json"
-    read_error: ClassVar[type[JobFileError]] = TaskRecordError
+    read_error: ClassVar[type[RecordFileError]] = TaskRecordError
 
     identity: TaskIdentity
     settings: dict[str, Any]
@@ -566,7 +566,7 @@ class TaskRecord(JobFile):
         Raises
         ------
         TaskRecordError
-            If :meth:`omphjc.jobs.job_file.JobFile.read` refuses the file, or
+            If :meth:`omphjc.jobs.record_file.RecordFile.read` refuses the file, or
             if the directory of `path` is not named after the task that the
             record identifies.
         """
