@@ -5,7 +5,7 @@ import shutil
 import signal
 import socket
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar
@@ -29,6 +29,7 @@ from omphjc.jobs import (
     JobIdentity,
     Manifest,
     ReplacedRunError,
+    RunStatus,
     Task,
     TaskIdentity,
     TaskInput,
@@ -233,7 +234,9 @@ def _status_detail_and_record(
 
 def _run(status: str, **fields: Any) -> TaskRun:
     """Return a run with `status`, `fields` and a placeholder ID, start and host."""
-    return TaskRun(run_id="r1", status=status, started="t", host="h", **fields)
+    return TaskRun(
+        run_id="r1", status=RunStatus(status), started="t", host="h", **fields
+    )
 
 
 def test_job_seed_is_the_process_offset_plus_the_job_number() -> None:
@@ -419,8 +422,12 @@ def test_a_task_record_needs_a_run_and_a_result_that_fits_its_status(
         TaskRecord(
             TASK_X, settings={}, parameters={}, runs=(failed,), result=RunResult()
         )
-    with pytest.raises(ValueError, match="unknown run status 'paused'"):
-        _run("paused")
+    unknown_status = (
+        "^the status of a run must be 'running', 'done', 'failed' or 'interrupted', "
+        "got 'paused'$"
+    )
+    with pytest.raises(ValueError, match=unknown_status):
+        TaskRun.from_record({**asdict(done), "status": "paused"})
     path = tmp_path / "x-fake" / "task.json"
     path.parent.mkdir()
     TaskRecord(
@@ -495,8 +502,12 @@ def test_a_manifest_round_trips_through_json(tmp_path: Path) -> None:
     manifest = Manifest(
         JobIdentity(process="HToBB", job_id=1, seed=10000001),
         {
-            "x": TaskSummary("done", "r1", 1, tmp_path / "x-fake" / "task.json"),
-            "y": TaskSummary("running", "r2", 2, tmp_path / "y-fake" / "task.json"),
+            "x": TaskSummary(
+                RunStatus.DONE, "r1", 1, tmp_path / "x-fake" / "task.json"
+            ),
+            "y": TaskSummary(
+                RunStatus.RUNNING, "r2", 2, tmp_path / "y-fake" / "task.json"
+            ),
         },
     )
     path = tmp_path / "manifest.json"
@@ -1078,7 +1089,10 @@ def test_a_dropped_run_whose_id_is_not_a_plain_name_is_refused(
         {},
         (
             TaskRun(
-                run_id="../../../../outside", status="failed", started="t", host="h"
+                run_id="../../../../outside",
+                status=RunStatus.FAILED,
+                started="t",
+                host="h",
             ),
         ),
     )
@@ -1472,10 +1486,16 @@ def test_the_manifest_lists_every_task_and_is_written_again_when_deleted(
         job.identity,
         {
             "x-fake": TaskSummary(
-                "done", x_record.latest_run.run_id, 1, _task(job, TASK_X).record_path
+                RunStatus.DONE,
+                x_record.latest_run.run_id,
+                1,
+                _task(job, TASK_X).record_path,
             ),
             "y-fake": TaskSummary(
-                "failed", y_record.latest_run.run_id, 1, _task(job, TASK_Y).record_path
+                RunStatus.FAILED,
+                y_record.latest_run.run_id,
+                1,
+                _task(job, TASK_Y).record_path,
             ),
         },
     )
@@ -1491,7 +1511,7 @@ def test_the_manifest_lists_every_task_and_is_written_again_when_deleted(
         job, TASK_Z, {}, lambda overwrite, log_path: TaskOutcome(RunResult())
     )
     entry = TaskSummary(
-        "done", z_record.latest_run.run_id, 1, _task(job, TASK_Z).record_path
+        RunStatus.DONE, z_record.latest_run.run_id, 1, _task(job, TASK_Z).record_path
     )
     assert Manifest.read(job.manifest_path) == Manifest(
         job.identity, {**manifest.tasks, "z-fake": entry}

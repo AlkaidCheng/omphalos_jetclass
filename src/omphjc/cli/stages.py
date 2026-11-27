@@ -329,7 +329,7 @@ def _run_stage_command(
         click.echo(line)
     _report_accepted_input(task, record)
     if len(record.runs) > 1:
-        statuses = ", ".join(run.status for run in record.runs)
+        statuses = ", ".join(run.status.value for run in record.runs)
         click.echo(format_row("runs", f"{len(record.runs)} ({statuses})"))
     click.echo(format_row("took", format_usage(record.latest_run.usage)))
     _report_set_aside(job)

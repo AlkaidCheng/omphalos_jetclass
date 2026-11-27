@@ -259,6 +259,8 @@
 - The commands make the task classes and run them, and the stage functions
   `generate`, `shower` and `simulate` of `omphjc.jobs` and
   `omphjc.tools.delphes.adapter.DelphesSimulator` are removed. (#102)
+- `omphjc.jobs.RunStatus` names how a run ended, in place of the string
+  constants `omphjc.jobs.DONE`, `FAILED`, `INTERRUPTED` and `RUNNING`. (#104)
 
 ### Fixed
 

@@ -49,6 +49,7 @@ from typing import Any, ClassVar
 
 from omphjc.jobs.identity import JobIdentity
 from omphjc.jobs.job_file import JobFile
+from omphjc.jobs.task import RunStatus
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,7 @@ class TaskSummary:
 
     Parameters
     ----------
-    status : str
+    status : RunStatus
         The status of the latest run in the task's record.
     latest_run_id : str
         The ID of that run, which begins with its start time.
@@ -67,7 +68,7 @@ class TaskSummary:
         The file that holds the record of the task.
     """
 
-    status: str
+    status: RunStatus
     latest_run_id: str
     n_runs: int
     record_path: Path
@@ -103,7 +104,7 @@ class Manifest(JobFile):
         """
         tasks = {
             name: TaskSummary(
-                status=entry["status"],
+                status=RunStatus(entry["status"]),
                 latest_run_id=entry["latest_run_id"],
                 n_runs=entry["n_runs"],
                 record_path=root_dir / entry["record_path"],

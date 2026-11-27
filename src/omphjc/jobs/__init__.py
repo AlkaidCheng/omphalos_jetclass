@@ -16,9 +16,10 @@ The modules, by what they hold::
     task.py         Task, the base class of a task, which runs the task and
                     writes its record; TaskRegistry and TASK_REGISTRY, the
                     registry of the task classes; TaskRecord, the content
-                    of task.json, with a TaskRun for each run, and
-                    TaskRecordError, the refusal of a task.json that cannot
-                    be read; TaskOutcome, what a run made
+                    of task.json, with a TaskRun for each run and its
+                    RunStatus, and TaskRecordError, the refusal of a
+                    task.json that cannot be read; TaskOutcome, what a run
+                    made
     identity.py     JobIdentity, the content of job.json, and TaskIdentity, the
                     stage, the tool and the tag of a task
     manifest.py     Manifest, the content of manifest.json, which lists a
@@ -53,15 +54,12 @@ from omphjc.jobs.job import Job, exception_on_termination, job_seed
 from omphjc.jobs.job_file import JobFileError
 from omphjc.jobs.manifest import Manifest, TaskSummary
 from omphjc.jobs.task import (
-    DONE,
     EVENTS_INPUT,
-    FAILED,
-    INTERRUPTED,
-    RUNNING,
     TASK_REGISTRY,
     AcceptedInput,
     InputRecord,
     ReplacedRunError,
+    RunStatus,
     Task,
     TaskInput,
     TaskOutcome,
@@ -75,11 +73,7 @@ from omphjc.jobs.task import (
 )
 
 __all__ = [
-    "DONE",
     "EVENTS_INPUT",
-    "FAILED",
-    "INTERRUPTED",
-    "RUNNING",
     "TASK_REGISTRY",
     "AcceptedInput",
     "InputRecord",
@@ -88,6 +82,7 @@ __all__ = [
     "JobIdentity",
     "Manifest",
     "ReplacedRunError",
+    "RunStatus",
     "Task",
     "TaskIdentity",
     "TaskInput",
