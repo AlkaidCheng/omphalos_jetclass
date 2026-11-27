@@ -22,17 +22,35 @@ The package has one module per class:
   on disk by its path, its size and the fingerprint of its content.
 - :mod:`omphjc.formats.card`: :class:`Card`, the base class of a text file with
   settings or commands.
+- :mod:`omphjc.formats.json_file` and :mod:`omphjc.formats.yaml_file`:
+  :class:`JSONFile` and :class:`YAMLFile`, the parsed value of a file, so the
+  layout, the comments and the order of the keys are not part of the content.
+- :mod:`omphjc.formats.text_file`: :class:`TextFile`, the text of a file.
+- :mod:`omphjc.formats.binary_file`: :class:`BinaryFile`, the SHA-256 hash of
+  the bytes of a file in a format that omphjc does not parse, such as Parquet
+  or HDF5.
+
+The generic formats, JSON, YAML, text and binary, read a file that no tool's
+class reads, so every file that a run records has a fingerprint.
 
 The package exports these classes. The format of a tool's file lives with the
 tool, such as :class:`omphjc.tools.madgraph.lhe_file.LHEFile`.
 """
 
+from omphjc.formats.binary_file import BinaryFile
 from omphjc.formats.card import Card
 from omphjc.formats.file_content import FileContent
 from omphjc.formats.file_record import FileRecord
+from omphjc.formats.json_file import JSONFile
+from omphjc.formats.text_file import TextFile
+from omphjc.formats.yaml_file import YAMLFile
 
 __all__ = [
+    "BinaryFile",
     "Card",
     "FileContent",
     "FileRecord",
+    "JSONFile",
+    "TextFile",
+    "YAMLFile",
 ]

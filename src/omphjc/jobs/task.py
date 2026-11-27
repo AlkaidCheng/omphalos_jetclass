@@ -96,8 +96,7 @@ keys are:
 
 **The result.** ``outputs`` holds the files the task made, under the names
 its class gives them. Each output has its ``path``, its size in bytes,
-``n_bytes``, and the ``fingerprint`` of its content in its format, which is
-``null`` for a file recorded without being read
+``n_bytes``, and the ``fingerprint`` of its content in its format
 (:class:`~omphjc.formats.file_record.FileRecord`). An event file also has its
 ``format`` and the number of events it holds
 (:class:`~omphjc.events.formats.EventFileRecord`). The next task reads the
@@ -1201,7 +1200,7 @@ class Task(ABC):
             if input_file.file_format != task_input.file_format:
                 raise ValueError(
                     f"{reads} as a {task_input.file_format} file, but that task "
-                    f"made {_format_phrase(input_file.file_format)}"
+                    f"made a {input_file.file_format} file"
                 )
             input_files[task_input.name] = input_file
         return input_files
@@ -1429,23 +1428,9 @@ class Task(ABC):
         upstream_tasks: Mapping[str, "Task"],
         input_files: Mapping[str, FileRecord],
     ) -> dict[str, InputRecord]:
-        """Name the task that made each file the task reads, and its fingerprint.
-
-        Raises
-        ------
-        ValueError
-            If a file is recorded without a fingerprint, so that a change to
-            it could not be told.
-        """
+        """Name the task that made each file the task reads, and its fingerprint."""
         input_records = {}
         for input_name, input_file in input_files.items():
-            if input_file.fingerprint is None:
-                raise ValueError(
-                    f"{self.name} reads {input_file.path} as its {input_name} "
-                    "input, but the file is recorded without a fingerprint, so a "
-                    "change to it could not be told. Record it with "
-                    "FileContent.record_file, which reads it."
-                )
             upstream_name = upstream_tasks[input_name].name
             input_records[input_name] = InputRecord(
                 upstream_name, input_file.fingerprint
@@ -1464,8 +1449,8 @@ class Task(ABC):
             if output.file_format != declared.file_format:
                 raise ValueError(
                     f"{self.name} declares the output {declared.name} as a "
-                    f"{declared.file_format} file, but its run made "
-                    f"{_format_phrase(output.file_format)}"
+                    f"{declared.file_format} file, but its run made a "
+                    f"{output.file_format} file"
                 )
 
     def _kept_record(
@@ -1623,13 +1608,6 @@ class Task(ABC):
         self.record_path.parent.mkdir(exist_ok=True)
         record.write(self.record_path, root_dir=self.job.root_dir)
         self.job.write_manifest(record)
-
-
-def _format_phrase(file_format: str | None) -> str:
-    """Name a file by its format in a message, or say that it has none."""
-    if file_format is None:
-        return "a file recorded without its format"
-    return f"a {file_format} file"
 
 
 class TaskRegistry:

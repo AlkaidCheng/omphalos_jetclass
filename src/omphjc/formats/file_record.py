@@ -1,9 +1,13 @@
 """FileRecord, what a run notes about each file that it made or read."""
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, TypeVar
+
+# A fingerprint, as FileContent.fingerprint writes it: lhe-v1:<hash>.
+_FINGERPRINT_PATTERN = re.compile(r"[^:]+-v\d+:.+")
 
 _FileRecordT = TypeVar("_FileRecordT", bound="FileRecord")
 
@@ -19,15 +23,30 @@ class FileRecord:
     n_bytes : int
         The size of the file in bytes when it was recorded. A job compares it
         with the file to tell whether the file has changed since.
-    fingerprint : str or None
+    fingerprint : str
         The fingerprint of the file's content in its format
-        (:meth:`FileContent.fingerprint`), or ``None`` for a file recorded
-        without being read.
+        (:meth:`FileContent.fingerprint`).
+
+    Raises
+    ------
+    ValueError
+        If `fingerprint` is not a fingerprint, such as ``None`` in a record
+        that was edited by hand.
     """
 
     path: Path
     n_bytes: int
-    fingerprint: str | None
+    fingerprint: str
+
+    def __post_init__(self) -> None:
+        if not (
+            isinstance(self.fingerprint, str)
+            and _FINGERPRINT_PATTERN.fullmatch(self.fingerprint)
+        ):
+            raise ValueError(
+                f"the record of {self.path} must hold a fingerprint such as "
+                f'"lhe-v1:<hash>", got {self.fingerprint!r}'
+            )
 
     @classmethod
     def from_record(
@@ -43,15 +62,12 @@ class FileRecord:
         return cls(**{**values, "path": root_dir / values["path"]})
 
     @property
-    def file_format(self) -> str | None:
+    def file_format(self) -> str:
         """The format of the file: the name that the fingerprint of its content holds.
 
         It is the :attr:`FileContent.format_name` of the class that read the
-        file, as :meth:`FileContent.fingerprint` writes it, such as ``"lhe"``. It
-        is ``None`` for a file recorded without being read.
+        file, as :meth:`FileContent.fingerprint` writes it, such as ``"lhe"``.
         """
-        if self.fingerprint is None:
-            return None
         head, _, _ = self.fingerprint.partition(":")
-        format_name, separator, version = head.rpartition("-v")
-        return format_name if separator and version.isdigit() else None
+        format_name, _, _ = head.rpartition("-v")
+        return format_name
