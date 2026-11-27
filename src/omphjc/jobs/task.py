@@ -98,7 +98,7 @@ keys are:
 its class gives them. Each output has its ``path``, its size in bytes,
 ``n_bytes``, and the ``fingerprint`` of its content in its format, which is
 ``null`` for a file recorded without being read
-(:class:`~omphjc.file_content.FileRecord`). An event file also has its
+(:class:`~omphjc.formats.file_record.FileRecord`). An event file also has its
 ``format`` and the number of events it holds
 (:class:`~omphjc.events.formats.EventFileRecord`). The next task reads the
 output named ``events``.
@@ -106,7 +106,7 @@ output named ``events``.
 ``cards`` holds the cards of the task, under the names their classes give
 them. A card is a file that steers the task's program, such as a run card or
 a detector card. Each card is recorded as an output is, with the fingerprint
-of its parsed content (:class:`~omphjc.file_content.Card`), so that two cards
+of its parsed content (:class:`~omphjc.formats.card.Card`), so that two cards
 that differ only in comments and layout have one fingerprint. The cards are
 a record for the reader: they do not count when the status of the task is
 judged.
@@ -207,7 +207,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, get_args
 
 from omphjc.comparison import Difference
 from omphjc.events.formats import EventFileRecord
-from omphjc.file_content import FileRecord
+from omphjc.formats.file_record import FileRecord
 from omphjc.jobs.identity import TaskIdentity
 from omphjc.jobs.record_file import RecordFile, RecordFileError
 from omphjc.runs import EVENTS_OUTPUT, RunResult
@@ -768,11 +768,12 @@ class TaskOutput:
     name : str
         The name of the output in the result of a run, such as ``"events"``.
     file_format : str
-        The format of the file: the :attr:`~omphjc.file_content.FileContent.format_name`
-        of the class that reads it, such as ``"lhe"`` or ``"delphes_root"``.
+        The format of the file: the
+        :attr:`~omphjc.formats.file_content.FileContent.format_name` of the
+        class that reads it, such as ``"lhe"`` or ``"delphes_root"``.
         A task that reads the output knows its parser from it, and the
         fingerprint of the file in a record carries it
-        (:attr:`~omphjc.file_content.FileRecord.file_format`).
+        (:attr:`~omphjc.formats.file_record.FileRecord.file_format`).
     """
 
     name: str

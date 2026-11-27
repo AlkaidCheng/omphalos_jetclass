@@ -28,7 +28,7 @@ from typing import Any, ClassVar, TypeVar
 import awkward as ak
 from uproot.interpretation.numerical import Numerical
 
-from omphjc.file_content import FileContent
+from omphjc.formats.file_content import FileContent
 from omphjc.root_io import open_tree
 
 _ROOTFileT = TypeVar("_ROOTFileT", bound="ROOTFile")

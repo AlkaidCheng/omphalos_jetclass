@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
-from omphjc.file_content import FileRecord
+from omphjc.formats.file_record import FileRecord
 from omphjc.jobs.task import EVENTS_INPUT, TASK_REGISTRY, TaskOutcome
 from omphjc.runs import EVENTS_OUTPUT, RunResult
 from omphjc.tasks.families import SimulationTask

@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from omphjc.comparison import Difference
-from omphjc.file_content import Card
+from omphjc.formats.card import Card
 from omphjc.processes.catalogue import ProcessSpec, SettingValue
 
 MATCHING_SCALE_FACTOR = 1.5

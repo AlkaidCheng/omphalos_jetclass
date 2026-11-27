@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from omphjc.events.formats import EventFileRecord
-from omphjc.file_content import FileRecord
+from omphjc.formats.file_record import FileRecord
 from omphjc.jobs.task import EVENTS_INPUT, TASK_REGISTRY, TaskOutcome
 from omphjc.processes.catalogue import SettingValue
 from omphjc.runs import EVENTS_OUTPUT, RunResult

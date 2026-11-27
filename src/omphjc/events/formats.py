@@ -21,7 +21,8 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from omphjc.file_content import FileContent, FileRecord
+from omphjc.formats.file_content import FileContent
+from omphjc.formats.file_record import FileRecord
 
 if TYPE_CHECKING:
     import awkward as ak
