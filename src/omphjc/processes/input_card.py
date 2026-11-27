@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import ClassVar, TypeVar
 
 from omphjc.comparison import Difference
-from omphjc.data_files import Card
+from omphjc.file_content import Card
 from omphjc.processes.catalogue import ProcessSpec
 
 _InputCardT = TypeVar("_InputCardT", bound="InputCard")

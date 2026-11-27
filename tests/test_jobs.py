@@ -16,9 +16,9 @@ from delphes_records import write_delphes_file
 
 from omphjc import __version__
 from omphjc.comparison import Difference
-from omphjc.data_files import FileRecord
 from omphjc.events import EventFileRecord, EventFormat
 from omphjc.events.delphes_root import DelphesROOTFile
+from omphjc.file_content import FileRecord
 from omphjc.jobs import (
     EVENTS_INPUT,
     TASK_REGISTRY,

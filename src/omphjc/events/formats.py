@@ -5,8 +5,8 @@ It does not name the reconstructed collections that the file carries. For
 example, DelphesPythia8's record of the shower and DelphesROOT's output are
 both ``delphes-root`` files.
 
-The content of a file in a format is an :class:`EventDataFile`, whose record
-(:meth:`EventDataFile.record_file`) is an :class:`EventFileRecord`: the
+The content of a file in a format is an :class:`EventFileContent`, whose record
+(:meth:`EventFileContent.record_file`) is an :class:`EventFileRecord`: the
 record of a file with its format and its event count.
 
 :class:`EventReader` is the interface for reading the particle record of a
@@ -21,7 +21,7 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from omphjc.data_files import DataFile, FileRecord
+from omphjc.file_content import FileContent, FileRecord
 
 if TYPE_CHECKING:
     import awkward as ak
@@ -41,7 +41,7 @@ class EventFormat(str, Enum):
 class EventSource:
     """Where events are: a file and its format, which is what a reader needs.
 
-    Its content is an :class:`EventDataFile` and its record an
+    Its content is an :class:`EventFileContent` and its record an
     :class:`EventFileRecord`.
 
     Attributes
@@ -67,7 +67,7 @@ class EventFileRecord(FileRecord):
     n_bytes : int
         The size of the file in bytes when it was recorded.
     fingerprint : str
-        The fingerprint of the events (:meth:`EventDataFile.fingerprint`).
+        The fingerprint of the events (:meth:`EventFileContent.fingerprint`).
         Two files with the same events have the same fingerprint, which the
         next stage compares to tell whether its input has changed.
     format : EventFormat
@@ -93,7 +93,7 @@ class EventFileRecord(FileRecord):
         )
 
 
-class EventDataFile(DataFile):
+class EventFileContent(FileContent):
     """The parsed content of a file that holds events.
 
     A subclass is one event format. It states :attr:`event_format` and gives

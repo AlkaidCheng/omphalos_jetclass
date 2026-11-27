@@ -38,9 +38,9 @@ How a task is recorded:
 2. :meth:`Task.execute` builds a :class:`TaskOutcome` from the run record.
    The outcome holds the result of the run (:class:`omphjc.runs.RunResult`)
    and its usage. The result holds the task's outputs and cards by name, and
-   its metadata. An output is a :class:`~omphjc.data_files.FileRecord`, or an
+   its metadata. An output is a :class:`~omphjc.file_content.FileRecord`, or an
    :class:`~omphjc.events.formats.EventFileRecord` for an event file. A card
-   is a :class:`~omphjc.data_files.FileRecord` that the driver's workspace
+   is a :class:`~omphjc.file_content.FileRecord` that the driver's workspace
    made (:meth:`omphjc.workspace.ProgramWorkspace.card_records`).
 3. :meth:`Task.run` records the run as a :class:`TaskRun`, with its status,
    start and finish times and usage. It writes the identity of the task, its

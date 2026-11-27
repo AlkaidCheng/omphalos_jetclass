@@ -266,6 +266,9 @@
   `checked_differences`. (#106)
 - The `input` row that a stage report prints for an accepted input names each
   fingerprint it shows, as `ran on fingerprint "lhe-v1:3f2a9c1e..."`. (#107)
+- `omphjc.data_files` becomes `omphjc.file_content`, with `DataFile` renamed
+  `FileContent` and `omphjc.events.EventDataFile` renamed `EventFileContent`.
+  (#108)
 
 ### Fixed
 

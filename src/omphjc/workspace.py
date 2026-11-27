@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from omphjc.data_files import Card, FileRecord
+from omphjc.file_content import Card, FileRecord
 from omphjc.programs import ProgramError, ProgramSession, ProgramUsage, find_program
 from omphjc.safe_paths import working_directory
 from omphjc.stamps import clear_artifacts, read_stamp, seal, write_stamp

@@ -17,7 +17,7 @@ from typing import Any, ClassVar
 import awkward as ak
 import numpy as np
 
-from omphjc.events.formats import EventDataFile, EventFormat, EventReader
+from omphjc.events.formats import EventFileContent, EventFormat, EventReader
 from omphjc.events.particles import build_record
 from omphjc.root_files import ROOTFile
 from omphjc.root_io import count_entries, iterate_branches, read_branches
@@ -72,7 +72,7 @@ PARTICLE_BRANCHES = {
 BRANCHES = (*EVENT_BRANCHES.values(), *PARTICLE_BRANCHES.values())
 
 
-class DelphesROOTFile(ROOTFile, EventDataFile):
+class DelphesROOTFile(ROOTFile, EventFileContent):
     """The content of a ROOT file written by Delphes.
 
     The fields ``ReadTime`` and ``ProcTime`` are left out of the content. They
